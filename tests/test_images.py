@@ -736,6 +736,41 @@ class TheWrongCharacterGetsPromoted(unittest.TestCase):
                         f"the promoted character must come first; got {[r.name for r in refs]}")
 
 
+class ASexIsACategoryNotALikeness(unittest.TestCase):
+    """The protagonist was rendered three times as a boy.
+
+    Alyn Tenar's appearance opens "Human female, nineteen". The species reader strips
+    "female" to isolate "Human", then discards it as unremarkable — so her sex reached
+    the prompt nowhere at all, and the model filled the blank with whatever it found
+    likeliest. The critic's words: "a pale, flat-chested masculine build with a squared
+    jaw… a reader would take this for a boy", in scenes with her own sheet attached.
+
+    Same principle as species, arrived at the same way: prose states a category
+    exactly, the model does not take it from a picture, so the prose keeps it."""
+
+    def test_a_human_woman_is_named_as_one(self):
+        spec = {"appearance": "Human female, nineteen, lean and long-limbed.",
+                "age": "19", "costumes": ["sandcloth tunic"]}
+        self.assertIn("woman", illustration._costume_line("Alyn Tenar", spec, 1))
+
+    def test_a_non_human_carries_species_and_sex_together(self):
+        spec = {"appearance": "Togruta female, fifty-five, deep red skin.",
+                "age": "55", "costumes": ["olive robes"]}
+        line = illustration._costume_line("Bela Kiwiiks", spec, 1)
+        self.assertIn("Togruta woman", line)
+
+    def test_an_appearance_that_does_not_say_is_not_guessed(self):
+        self.assertEqual(illustration.sex_of(
+            {"appearance": "A tall figure in layered robes."}), "")
+        self.assertEqual(illustration.sex_of({}), "")
+
+    def test_species_extraction_is_unaffected(self):
+        """The two readers share a convention and must not interfere."""
+        spec = {"appearance": "Kel Dor male, sixty-five, orange skin."}
+        self.assertEqual(illustration.species_of(spec), "Kel Dor")
+        self.assertEqual(illustration.sex_of(spec), "man")
+
+
 class ASignatureMarkingSurvivesTheTrim(unittest.TestCase):
     """An anchored prompt drops the appearance paragraph, because prose and pictures
     disagree about a face and a model handed both averages them into a stranger.
