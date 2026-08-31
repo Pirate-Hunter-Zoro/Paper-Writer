@@ -188,6 +188,17 @@ commits.
 
 Nothing here is blocking. These are judgements already made; revisit only with evidence.
 
+- **First clean evidence for the pass budget, now that restarts stop corrupting it.**
+  Chapter 13 ran `6 -> 3 -> 2 -> 1 -> 2 -> 0` — six passes, the first chapter in the run
+  to reach `EDIT_HARD_MAX_PASSES`, and it did so *across a daemon restart I performed
+  mid-chapter*. Both halves matter. Under the old behaviour that restart would have
+  reset the count and handed it a fresh budget on top of the three passes already
+  spent; instead the ceiling held at six. And passes 4-6 took it from 1 defect to 0
+  (via a bump back to 2), so a two-pass cap would have shipped it holding two — which
+  is the same conclusion §5's withdrawn recommendation reached the hard way.
+  It is also another non-monotonic trajectory: `2 -> 1 -> 2 -> 0`. Four of nine was the
+  earlier count; this is not a loop that walks steadily downhill.
+
 - **`EDIT_MAX_PASSES` stays at 3.** I recommended cutting it to 2 on six chapters, then
   withdrew that: chapter 9 went `3 → 7 → 2 → 1 → 0` and would have shipped holding
   seven defects under a two-pass cap. Pass 2 does most of the work; later passes are
