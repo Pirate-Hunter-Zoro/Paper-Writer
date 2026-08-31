@@ -279,21 +279,30 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
     for ref in refs[:config.IMAGE_MAX_UPLOADS]:
         cmd += ["--ref", ref]
 
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True,
-                              # The driver kills its own Chrome on the way out; this
-                              # is the outer stop for a browser that hung so hard it
-                              # never got there.
-                              timeout=timeout + config.IMAGE_DRIVER_GRACE_SEC,
-                              env=_env(), cwd=str(config.PROJECT_ROOT))
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"the browser did not return within {timeout}s")
-    except FileNotFoundError:
-        raise NotSignedIn(f"node binary not found: {config.NODE_BIN}")
-    finally:
-        prompt_file.unlink(missing_ok=True)
+    result = _run(cmd, timeout, note)
 
-    result = _result(proc)
+    # A REJECTED UPLOAD IS NOT A REJECTED PROMPT, and treating them alike costs a
+    # character their sheet. Gemini refuses some reference pictures outright — a
+    # photoreal 3D promotional render reads to its classifier as a photograph of a
+    # real person, which is how Satele Shan's wiki art was refused three times while
+    # Orgus Din's stylised art went through. The prompt was never the problem, so
+    # simplifying it (the generic ladder's answer) throws away a good composition to
+    # fix something that is not broken.
+    #
+    # So: shed the references and ask again. The result is a prose-anchored render
+    # rather than an anchored one, which is the documented fallback and is "merely
+    # imprecise rather than actively depicting somebody else" — and it is a great deal
+    # better than dropping to an empty-room rung.
+    if refs and (result.get("kind") == "bad_reference"):
+        note(f"Gemini refused {len(refs)} reference picture(s) — likely read as "
+             f"photographs of real people. Redrawing from the description alone; the "
+             f"result is anchored on prose, not on art.")
+        prompt_file.write_text(f"{_instruction(aspect)}\n\n{prompt}", encoding="utf-8")
+        bare = [c for c in cmd if c != "--ref"]
+        bare = [c for c in bare if c not in refs]
+        result = _run(bare, timeout, note)
+        refs = []
+
     if not result.get("ok"):
         _raise_for(result, note)
 
@@ -307,6 +316,23 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
          f"{result.get('mime', 'image')} ({result.get('bytes', 0) // 1024} KB) "
          f"through the browser session"
          + (f", conditioned on {len(refs)} reference picture(s)" if refs else ""))
+    prompt_file.unlink(missing_ok=True)
+
+
+def _run(cmd, timeout, note):
+    """One driver invocation. Returns its parsed result dict."""
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              # The driver kills its own Chrome on the way out; this
+                              # is the outer stop for a browser that hung so hard it
+                              # never got there.
+                              timeout=timeout + config.IMAGE_DRIVER_GRACE_SEC,
+                              env=_env(), cwd=str(config.PROJECT_ROOT))
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"the browser did not return within {timeout}s")
+    except FileNotFoundError:
+        raise NotSignedIn(f"node binary not found: {config.NODE_BIN}")
+    return _result(proc)
 
 
 def _result(proc):

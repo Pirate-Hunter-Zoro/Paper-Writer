@@ -185,6 +185,54 @@ class BackendTests(unittest.TestCase):
             images.generate("x", self.tmp / "q.png", references=None)
         self.assertEqual(calls["n"], 1, "a session limit must not be retried here")
 
+    def test_a_refused_upload_is_retried_without_the_reference(self):
+        """A rejected UPLOAD is not a rejected prompt, and conflating them costs a
+        character their picture.
+
+        Gemini refuses some reference images outright — a photoreal promotional render
+        reads to its classifier as a photograph of a real person. Live, Satele Shan's
+        wiki art was refused three times while Orgus Din's stylised art went straight
+        through. The prompt was never the problem, so simplifying it (what the generic
+        ladder does) discards a good composition to fix something that is not broken.
+
+        The right remedy is to shed the references and ask again: a prose-anchored
+        render is the documented fallback, and it beats dropping to an empty room."""
+        calls = []
+        good = _png()
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            if "--ref" in cmd:
+                return _FakeProc({"ok": False, "kind": "bad_reference",
+                                  "reason": "Sorry I can't help with that image."})
+            out = Path(cmd[cmd.index("--out") + 1])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(good)
+            return _FakeProc({"ok": True, "bytes": len(good),
+                              "width": 1024, "height": 1536})
+        original = image_browser.subprocess.run
+        image_browser.subprocess.run = fake_run
+        self.addCleanup(lambda: setattr(image_browser.subprocess, "run", original))
+
+        sheet = self.tmp / "photoreal.png"
+        sheet.write_bytes(good)
+        out = self.tmp / "retried.png"
+        logged = []
+        images.generate("a jedi master", out, references=[sheet], log_fn=logged.append)
+
+        self.assertEqual(len(calls), 2, "should try with references, then without")
+        self.assertIn("--ref", calls[0])
+        self.assertNotIn("--ref", calls[1], "the retry must drop the reference")
+        self.assertTrue(out.exists())
+        self.assertTrue(any("prose, not on art" in m for m in logged), logged)
+
+    def test_a_refused_upload_with_no_references_is_not_retried_forever(self):
+        """Nothing to shed means nothing to retry — it is a plain failure."""
+        self._driver(_FakeProc({"ok": False, "kind": "bad_reference",
+                                "reason": "can't help with that image"}))
+        with self.assertRaises(RuntimeError):
+            images.generate("x", self.tmp / "none.png", references=None)
+
     def test_a_refusal_is_a_skippable_runtime_error(self):
         """It is about THIS wording, so the simplification ladder has somewhere to
         go — a plainer prompt, then a picture of the empty room."""
