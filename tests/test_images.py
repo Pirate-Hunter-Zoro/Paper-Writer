@@ -34,7 +34,7 @@ from fanfic.engine import illustrating                            # noqa: E402
 from fanfic.infra import budget, journal                          # noqa: E402
 from fanfic.models import images                                  # noqa: E402
 from fanfic.providers import image_browser                        # noqa: E402
-from fanfic.stages import illustration                            # noqa: E402
+from fanfic.stages import illustration, refart                    # noqa: E402
 
 
 def _png(width=1024, height=1536, padding=30000):
@@ -1069,6 +1069,88 @@ def _queue_lines():
         return 0
     return len([l for l in queue.read_text().splitlines() if l.strip()])
 
+
+
+class WikiLookupEarnsTheCharacter(unittest.TestCase):
+    """A wiki search never returns nothing, so the danger is not a miss — it is a
+    confident wrong answer that anchors a character to somebody, or something, else.
+
+    Every case here is from the real Star Wars cast, checked against the live wiki
+    during bring-up and then pinned offline."""
+
+    def setUp(self):
+        self._api = refart._api
+        self.pages = {}      # exact-title lookups
+        self.hits = []       # search results
+
+        def fake_api(host, params):
+            if params.get("action") == "query" and "titles" in params:
+                title = params["titles"]
+                if title in self.pages:
+                    return {"query": {"pages": {"1": {"title": self.pages[title]}}}}
+                return {"query": {"pages": {"-1": {"missing": ""}}}}
+            return {"query": {"search": [{"title": t} for t in self.hits]}}
+        refart._api = fake_api
+
+    def tearDown(self):
+        refart._api = self._api
+
+    def test_a_droid_designation_resolves(self):
+        """`_words` kept only alphabetic runs over two characters, so "T7-O1" reduced
+        to {"T","O"}, both were dropped, and the lookup bailed on an empty set — no
+        anchor for a companion in 48 scenes, and the same for every HK-51 and C2-N2 in
+        the genre."""
+        self.pages = {"T7-O1": "T7-O1"}
+        self.assertEqual(refart.resolve_title("h", "T7-O1"), "T7-O1")
+
+    def test_a_redirect_is_followed_to_the_real_article(self):
+        """"Vitiate" is a redirect to "Tenebrae". A title lookup follows it; search
+        does not, which is why search is no longer asked first."""
+        self.pages = {"Vitiate": "Tenebrae"}
+        self.assertEqual(refart.resolve_title("h", "Vitiate"), "Tenebrae")
+
+    def test_a_page_about_the_character_is_not_the_character(self):
+        """THE live failure. Asked for "Vitiate", search offered "Vitiate's palace" —
+        which shares the word, passes the old overlap rule, and is a building. A
+        character sheet anchored to architecture, with nothing anywhere saying so."""
+        self.hits = ["Vitiate's palace", "Vitiate's throne room"]
+        self.assertIsNone(refart.resolve_title("h", "Vitiate"))
+
+    def test_a_disambiguation_page_is_refused(self):
+        """It matches the name perfectly and carries only navigation icons. A sheet
+        drawn from it is a sheet drawn from nothing, recorded as anchored."""
+        self.pages = {"Tarnis": "Tarnis (disambiguation)"}
+        self.hits = ["Tarnis (disambiguation)"]
+        self.assertIsNone(refart.resolve_title("h", "Tarnis"))
+
+    def test_a_qualified_article_still_wins(self):
+        """"Scourge (Sith)" adds a word but is the article, not a page about him."""
+        self.hits = ["Scourge (Sith)"]
+        self.assertEqual(refart.resolve_title("h", "Lord Scourge"), "Scourge (Sith)")
+
+    def test_the_least_embellished_plausible_hit_wins(self):
+        self.hits = ["Scourge's lightsaber", "Scourge (Sith)"]
+        self.assertEqual(refart.resolve_title("h", "Lord Scourge"), "Scourge (Sith)")
+
+    def test_an_invented_protagonist_has_no_page_and_that_is_correct(self):
+        """The player character is named by the reader, so no wiki has her. Falling
+        back to the locked prose is right; guessing would anchor the book's lead to a
+        stranger.
+
+        Note what this does NOT assert. A hit sharing one word of a multi-word name is
+        accepted — "Scourge (Sith)" is how "Lord Scourge" resolves, and the honorific
+        never appears in the article title. So a page called "Alyn" would match, and
+        deciding whether that is too loose is a separate question from this one. What
+        is pinned here is the case that actually occurs: the wiki has no article and
+        search offers nothing that shares a name word at all."""
+        self.hits = ["Jedi Knight", "Galactic Republic"]
+        self.assertIsNone(refart.resolve_title("h", "Alyn Tenar"))
+
+    def test_an_unrelated_hit_is_refused(self):
+        """The scar this module carries: asked for "Waddles" a wiki answered with the
+        voice actor's page."""
+        self.hits = ["Dee Bradley Baker"]
+        self.assertIsNone(refart.resolve_title("h", "Waddles"))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
