@@ -40,6 +40,8 @@ Query string picks the behaviour, so one fixture covers the whole contract:
     ?scenario=silent        never produces anything, to exercise the timeout
     ?scenario=empty         answers with a completely empty response bubble — the
                             live hang that burned two ten-minute timeouts
+    ?scenario=stuck         claims to be working forever and never produces anything —
+                            the other live hang, "Creating your image" for ten minutes
 
     python3 tests/fixtures/gemini_page.py [port]
 """
@@ -196,6 +198,12 @@ document.getElementById("send").addEventListener("click", async () => {
   await new Promise((r) => setTimeout(r, 300));
 
   if (SCENARIO === "silent") { busy(false); return; }
+
+  if (SCENARIO === "stuck") {
+    // Never stops "working". The driver must not wait this out forever.
+    respond("Creating your image");
+    return;                                    // busy stays on, deliberately
+  }
 
   if (SCENARIO === "empty") {
     // What the live page actually did: a response element containing nothing at all,

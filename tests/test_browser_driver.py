@@ -69,9 +69,11 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
 
-    def run_driver(self, scenario, out, refs=(), timeout=45, prompt="a red fox"):
+    def run_driver(self, scenario, out, refs=(), timeout=45, prompt="a red fox",
+                   env_extra=None):
         """Run the driver against one fixture scenario. Returns its parsed JSON."""
         env = dict(os.environ)
+        env.update(env_extra or {})
         env["GEMINI_PROFILE_DIR"] = str(self.profile)
         env["GEMINI_ART_URL"] = f"http://127.0.0.1:{self.port}/?scenario={scenario}"
         env.pop("GEMINI_ART_HEADFUL", None)
@@ -235,6 +237,20 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertLess(elapsed, 60,
                         f"took {elapsed:.0f}s to conclude nothing was coming")
+
+    def test_a_page_stuck_working_forever_is_given_up_on(self):
+        """The mirror of the empty-reply hang, and the other one seen live: the page
+        says "Creating your image" and simply never stops. A slow render and a stuck
+        one look identical for the first thirty seconds, so the driver waits — but not
+        for the entire ten-minute budget, which it did twice."""
+        import time
+        env_extra = {"GEMINI_ART_WORKING_MAX_MS": "4000"}
+        started = time.monotonic()
+        result = self.run_driver("stuck", self.tmp / "stuck.png", timeout=120,
+                                 env_extra=env_extra)
+        elapsed = time.monotonic() - started
+        self.assertFalse(result["ok"])
+        self.assertLess(elapsed, 60, f"waited {elapsed:.0f}s on a stuck page")
 
     def test_a_thumbnail_is_never_saved_as_the_render(self):
         """Belt and braces: the driver's own 256px floor should reject it before the
