@@ -2273,9 +2273,23 @@ without Chrome should not be failing tests about something it cannot run. That i
 opt-in test is a test that does not run — so `scripts/check-browser.sh` is the documented thing to
 run after touching the driver.
 
-**What they cannot prove** is that the selectors still match Google's markup. That has exactly one
-answer and it is a live render on a signed-in account; the fixture passing is not evidence. Hence
-`--live`, which draws three real pictures — a plain one, one conditioned on a reference to prove the
+**What the fixture cannot prove** is that the selectors still match Google's markup — a fixture
+written alongside the selectors will always agree with them. `tools/probe_selectors.js` asks the
+real page instead, and needs **no account**: gemini.google.com serves signed-out visitors a working
+composer, send button, response container and stop-generating control, so six of the eight selector
+groups are verifiable by anyone. It reports which *arm* of each selector list matched, so a group
+surviving only on its last fallback is visible before the rest rot away. `check-browser.sh` runs it
+after the battery.
+
+> It caught its own bug first, which is the useful kind of story. The probe reported `send` MISSING
+> against an app where the selector was fine — because the send control only renders once the
+> composer has content, and the probe was asking an empty page. A probe that cries wolf gets
+> ignored, so it now puts the page into the state the driver puts it in before asking what is
+> there. The live label, for the record, is `Send message`, and the upload menu is `Upload & tools`.
+
+The two groups a guest cannot reach are the **file input** and a **generated image** — both need an
+account, because guests are served Flash-Lite, which declines every picture. Hence `--live`, which
+draws three real pictures — a plain one, one conditioned on a reference to prove the
 upload path, and one through the Python seam — and then opens them, because whether the *art* is any
 good is the one question no test can ask.
 
