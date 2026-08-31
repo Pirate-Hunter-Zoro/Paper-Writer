@@ -2,8 +2,8 @@
 # ---------------------------------------------------------------------------
 # check-browser.sh -- prove the picture driver still works.
 #
-#   scripts/check-browser.sh          against a local fake Gemini (no account)
-#   scripts/check-browser.sh --live   against the real thing (needs the session)
+#   scripts/check-browser.sh          fixture battery + a live selector probe
+#   scripts/check-browser.sh --live   three real renders (needs the session)
 #
 # Run the first form after touching tools/gemini_art.js. Run the second after
 # `scripts/gemini-login.sh`, and whenever pictures start coming back wrong --
@@ -17,8 +17,15 @@
 #            fallbacks work, the kind->exception contract holds, and the sanity
 #            floor rejects what it should. Everything that is not Google's markup.
 #
-#   live     that the selectors match the app as it exists today. Nothing else
-#            can answer this. The fixture passing is not evidence.
+#   probe    that six of the eight selector groups still match the REAL app --
+#            composer, send, sign-in CTA, upload menu, response container and the
+#            stop-generating control. gemini.google.com serves guests a working
+#            chat, so this needs no account, and it is the only thing here that
+#            can catch Google reshipping the page.
+#
+#   live     the last two groups -- the file input and a generated image -- plus
+#            the only question that matters: is the art any good. Needs the
+#            session. The fixture passing is not evidence for any of this.
 # ---------------------------------------------------------------------------
 set -uo pipefail
 
@@ -34,8 +41,23 @@ node --check tools/gemini_art.js || { echo "gemini_art.js does not parse"; exit 
 if [ "$MODE" != "--live" ]; then
   echo "==> driver battery against the local fixture"
   FANFIC_BROWSER_TESTS=1 "$PYTHON" -m unittest discover -s tests \
-      -p 'test_browser_driver.py' 2>&1 | tail -20
-  exit ${PIPESTATUS[0]}
+      -p 'test_browser_driver.py' 2>&1 | tail -8
+  battery=${PIPESTATUS[0]}
+
+  echo
+  echo "==> selector probe against the real gemini.google.com (no account needed)"
+  # Deliberately a separate throwaway profile: probing must never disturb, and can
+  # never depend on, the signed-in session the fleet draws with.
+  GEMINI_PROFILE_DIR="$(mktemp -d)" node tools/probe_selectors.js --send 2>&1 | tail -24
+  probe=${PIPESTATUS[0]}
+
+  echo
+  if [ "$battery" -eq 0 ] && [ "$probe" -eq 0 ]; then
+    echo "Everything testable without an account passes."
+    echo "Still unverified: the file input and a generated image. Run --live for those."
+  fi
+  [ "$battery" -ne 0 ] && exit "$battery"
+  exit "$probe"
 fi
 
 # --- live -----------------------------------------------------------------
