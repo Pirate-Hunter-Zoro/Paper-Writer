@@ -41,6 +41,8 @@
 //   GEMINI_ART_DIAG_DIR if set, a failing render dumps a screenshot and the page
 //                       text here, because "no image appeared" is unfixable without
 //                       seeing what did.
+//   GEMINI_ART_URL      test-only: point the driver at a local fixture page. Never set
+//                       in production.
 
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -54,7 +56,12 @@ const PROFILE = process.env.GEMINI_PROFILE_DIR ||
   join(homedir(), ".config", "fanfic", "chrome-gemini");
 const HEADFUL = /^(1|true|yes|on)$/i.test(process.env.GEMINI_ART_HEADFUL || "");
 const DIAG_DIR = process.env.GEMINI_ART_DIAG_DIR || "";
-const APP_URL = "https://gemini.google.com/app";
+// The app, overridable ONLY so the test rig can point this at a local fixture that
+// mimics the page's shape. Nothing in production sets it; `tests/fixtures/gemini_page.py`
+// is the reason it exists. Being able to exercise Chrome launch, the CDP plumbing, the
+// state machine, the upload, the three download fallbacks and the JSON contract without
+// a Google account is worth one environment variable.
+const APP_URL = process.env.GEMINI_ART_URL || "https://gemini.google.com/app";
 
 // --- Arguments ---------------------------------------------------------------
 

@@ -2237,9 +2237,9 @@ bible_merge, image); `launchd/` (4 plists, one shared `run.sh`, `startup.sh`); `
 
 ## The test suite
 
-263 tests, stdlib `unittest`, no network, no external binary. Every module also passes run on its
-own, not merely in suite order — `tests/support.py`'s state redirect is a safety interlock, and an
-import placed above it silently points the suite at the real state tree it then deletes from.
+445 fast tests, stdlib `unittest`, no network, no external binary. Every module also passes run on
+its own, not merely in suite order — `tests/support.py`'s state redirect is a safety interlock, and
+an import placed above it silently points the suite at the real state tree it then deletes from.
 Run the whole thing from the repo root:
 
 ```
@@ -2247,6 +2247,43 @@ python3 -m unittest discover -s tests
 ```
 
 Any single file also runs on its own (`python3 tests/test_gates.py`).
+
+**Plus 18 opt-in browser tests**, which spawn a real headless Chrome and take ~70 seconds:
+
+```
+FANFIC_BROWSER_TESTS=1 python3 -m unittest discover -s tests
+scripts/check-browser.sh          # the same battery, with the reason it exists
+scripts/check-browser.sh --live   # three real renders against the signed-in session
+```
+
+The picture driver is the least testable thing in the project by construction: it drives somebody
+else's web app over a session only a human can create. The temptation is to call it untestable and
+ship it on one manual look — which would leave Chrome launch, the CDP plumbing, the
+signed-in/signed-out state machine, prompt insertion, reference upload, the three download
+fallbacks, the `kind`→exception contract and the sanity floor all unverified. **None of that is
+Google-specific. Only the selectors are.** So `tests/fixtures/gemini_page.py` serves a page with the
+same *shape* — same element roles, same account chip, same `model-response` container, same hidden
+file input, same asynchronous think-then-image behaviour — and `GEMINI_ART_URL` points the driver at
+it. `test_browser_driver.py` then runs the whole contract, including one class that goes all the way
+through with **no mocks at all**: `models.images.generate` → the provider → a real Node process → a
+real Chrome → the fixture → a file on disk.
+
+They are opt-in because 70 seconds does not belong in a 5-second suite, and because a machine
+without Chrome should not be failing tests about something it cannot run. That is a real trade — an
+opt-in test is a test that does not run — so `scripts/check-browser.sh` is the documented thing to
+run after touching the driver.
+
+**What they cannot prove** is that the selectors still match Google's markup. That has exactly one
+answer and it is a live render on a signed-in account; the fixture passing is not evidence. Hence
+`--live`, which draws three real pictures — a plain one, one conditioned on a reference to prove the
+upload path, and one through the Python seam — and then opens them, because whether the *art* is any
+good is the one question no test can ask.
+
+> One finding from building it, kept because it is the kind of thing a fixture is for. The first
+> version filled its images with a flat colour, and a flat 1024×1536 PNG compresses to under 8 KB —
+> below the sanity floor. The floor was not wrong; the fixture was easier than reality, and would
+> have passed a test about "does a real render clear the floor" using a file nothing like a real
+> render. The fixture emits noise now (~4.7 MB at full size, which is the right order of magnitude).
 
 | File | Covers |
 |---|---|
@@ -2256,7 +2293,9 @@ Any single file also runs on its own (`python3 tests/test_gates.py`).
 | `test_gates.py` | All three gates, asserting on the failure cases. |
 | `test_memory.py` | The bible merge gatekeeper (every invariant) and the writer's digest. |
 | `test_pipeline.py` | End to end: inbox prompt → delivered `.epub` through the real machine; idempotent re-run; text-only build; the prompt pack's locked identities. |
-| `test_images.py` | The image backend with `urlopen` patched (success, quota, safety block, missing key); the no-give-up promise (quota defers, a failing render parks and the book waits, the ladder resumes at the rung it reached, a raised ceiling finishes the run); and art direction topping up chapters directed under a lower ceiling. |
+| `test_browser_driver.py` | **Opt-in.** The picture driver against a real Chrome and a fake Gemini: the happy path, waiting out generation rather than saving a half-drawn image, picking the biggest candidate, `blob:` download, reference upload, and every failure `kind` — including the guest session that must not be mistaken for a refusal. Plus the whole two-language seam with no mocks. |
+| `tests/fixtures/gemini_page.py` | Not a test: a local page shaped like Gemini's, with a scenario per query string, so everything about the driver that is not Google's markup is testable. |
+| `test_images.py` | The image backend with `subprocess` patched (every `kind`, reference passing, driver noise, the sanity floor); the no-give-up promise (quota defers, a failing render parks and the book waits, the ladder resumes at the rung it reached, a raised ceiling finishes the run); and art direction topping up chapters directed under a lower ceiling. |
 | `test_editing.py` | The editorial loop, and the two properties the rebuild rests on. That repair is **anchored**: the named text changes and nothing else does, the chapter is drafted exactly once however many passes run, polish edits are applied even though they do not block, an unanchorable defect is recorded rather than silently dropped, and nested anchors apply longest-first. That **nothing quits**: a chapter that cannot be repaired still ships and does not stop its book, a repeatedly failing editor ships the draft it already has, a repeatedly failing writer stalls the book instead of failing it, and a journal holding legacy terminal statuses self-heals. Plus loop termination (it stops when it can repair nothing, keeps going while the count falls, and never runs past the hard ceiling), the deterministic gates reaching the editor as anchors, scene surgery refusing to shrink a scene or guess an ambiguous anchor, the revision sweep, the backoff arithmetic, and the interaction ledger end to end. |
 | `test_patching.py` | The pure edit applier: a unique anchor replaced with nothing else moving, a missing anchor rejected rather than guessed, an ambiguous one refused outright, `""` as a deletion, and good edits landing even when a sibling is bad. |
 | `test_revive.py` | Rewind-past-transient, re-drop revival, a parked chapter being un-parked with a fresh budget *and* actually drafting again, documentation in the inbox not being eaten, and `recover_stale` un-wedging a unit abandoned mid-stage. |
