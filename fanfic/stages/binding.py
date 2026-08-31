@@ -21,6 +21,7 @@ from xml.etree import ElementTree as ET
 from .. import paths
 from ..gates import segments
 from ..infra import storage
+from ..models import images
 
 _CSS = ("body{font-family:Georgia,serif;line-height:1.5;margin:5%}"
         "h1{text-align:center}"
@@ -132,12 +133,24 @@ def _rendered_slots(sid, book_num, chapter_num):
     return sorted(found)
 
 
+def _media_type(blob):
+    """What to declare in the manifest for a picture, read from its own header.
+
+    The files are all named `.png` and the pictures are usually JPEG, because that is
+    what Gemini returns. Declaring the extension rather than the content produces an
+    epub that says `image/png` over JPEG bytes — invalid, and refused by strict
+    readers. Falls back to `image/png` only when the header is unrecognisable, which
+    the sanity floor should already have prevented from reaching disk."""
+    return images.mime_of(blob) or "image/png"
+
+
 def _figure(sid, book_num, chapter_num, k, files, manifest):
     """Embed one accepted scene image and return its figure markup."""
     img = paths.scene_image_path(sid, book_num, chapter_num, k)
     rel = f"images/ch{chapter_num:02d}_{k}.png"
-    files[f"OEBPS/{rel}"] = img.read_bytes()
-    manifest.append((f"img-{chapter_num:02d}-{k}", rel, "image/png", ""))
+    blob = img.read_bytes()
+    files[f"OEBPS/{rel}"] = blob
+    manifest.append((f"img-{chapter_num:02d}-{k}", rel, _media_type(blob), ""))
     return (f'\n<figure><img src="../{rel}" '
             f'alt="chapter {chapter_num} scene {k}"/></figure>')
 
@@ -248,8 +261,9 @@ def build_epub(series_rec, book_num, title, author="Fanfiction-Writer"):
     cover_id = None
     if cover.exists():
         cover_id = "cover-img"
-        files["OEBPS/images/cover.png"] = cover.read_bytes()
-        manifest.append((cover_id, "images/cover.png", "image/png",
+        cover_bytes = cover.read_bytes()
+        files["OEBPS/images/cover.png"] = cover_bytes
+        manifest.append((cover_id, "images/cover.png", _media_type(cover_bytes),
                          ' properties="cover-image"'))
         files["OEBPS/text/cover.xhtml"] = _cover_page(title, author).encode("utf-8")
         manifest.append(("cover-page", "text/cover.xhtml",
