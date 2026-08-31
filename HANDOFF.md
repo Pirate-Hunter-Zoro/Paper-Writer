@@ -326,36 +326,50 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   and 400ms after inserting ~2KB into a rich-text composer it often is not enabled yet,
   so the code falls through to Enter — and if Enter does not register either, the
   driver waits out the whole deadline for a reply to a message that was never sent.
-  **Two fixes were tried here and both are REVERTED — and the reason I first gave for
-  reverting was itself wrong.** The driver's send path is back to exactly what it was
-  before this session.
+  **SOLVED, after three wrong explanations. A failed upload disables the send button.**
 
-  Rate of this failure per 10 minutes, by configuration:
+  When a reference upload fails, Gemini marks the attachment chip with an error icon and
+  keeps the send control DISABLED. The prompt sits in the composer and can never go —
+  clicking and Enter both do nothing, because there is nothing enabled to click. The
+  driver waits out the full deadline and reports `no image after Ns; last response text:
+  ""`, which reads as "Gemini said nothing" and means "we were never able to ask".
 
-      original        17:00-17:43   n=5   1.14
-      fix1 (sleeps)   17:43-18:04   n=1   0.49
-      fix2 (polling)  18:04-18:19   n=2   1.35
-      reverted        18:19-18:22   n=1   3.33   <- the original again, highest of all
+  The evidence, and it is a photograph rather than an inference:
+  `state/image-diagnostics/2026-08-31T22-05-18Z-timeout.png` — five reference chips
+  (valis, t7-o1, lord-scourge, ref1, ref2) each carrying an error icon, the prompt below
+  them, the send arrow greyed out. Corroborated by the render counts that evening:
 
-  **Ten events across windows of three to forty-three minutes. Nothing here
-  distinguishes anything.** I read this noise as a result twice in forty minutes, in
-  opposite directions: first calling the sleeps "roughly halved" (progress), then
-  calling the polling "a higher rate than the baseline" (harm) and reverting on that
-  basis. Both readings were the same mistake.
+      hr    with references    without references
+      15         12                    1
+      16         11                    5
+      18         10                    2
+      19          1                    3
+      20          3                    7
+      21          0                    3
 
-  The revert still stands, on the honest reason: nothing showed a benefit, and the
-  simpler code is the better default when the evidence cannot tell two versions apart.
+  Reference-conditioned renders went to zero while reference-free renders kept working.
+  The model selector also read "Pro" at 17:32 and "Flash" at 22:05, so an account limit
+  had probably been hit.
 
-  One genuine caution if you try again, as a mechanism to avoid rather than something
-  observed: in a contenteditable composer **Enter often inserts a NEWLINE instead of
-  submitting**, so a loop that presses it repeatedly can grow the text rather than send
-  it. The untested lead: `querySelector('a, b, c')` returns the first element in
-  DOCUMENT ORDER matching *any* arm, not the first arm's match, so a hidden
-  `textarea[aria-label]` earlier in the DOM would make a composer-length check read an
-  empty element and conclude the send succeeded. Log which arm matched first.
-  **And measure over hours** — at ~1 per 10 minutes, even a full hour is only ~6 events.
+  **Three explanations were tried and all three were wrong**, which is worth knowing
+  because each looked reasonable: a send-timing race (two retry schemes, both reverted —
+  they were retrying a click against a disabled control, so neither could ever have
+  worked); the 180s deadline (reverted, and the failure continued at 420s); and my own
+  `prompt_without_refs` change (ruled out — 44 of 49 occurrences had no reference
+  refusal anywhere near them).
 
-  What is safe to say: the cost per occurrence is capped (180s, down from 600s), and
+  **The fix is obvious and was NOT shipped.** Treat "attachments present and send still
+  disabled" as `bad_reference`: that sheds the references and re-asks with the
+  prose-anchored prompt, which is the path already built for this. I wrote it and backed
+  it out because **`tests/fixtures/gemini_page.py` does not model a failed upload** — its
+  composer keeps its text after a successful send, so the check fired on every render
+  carrying references and broke 13 of the 21 browser tests.
+  **Teach the fixture a failed-upload state first (errored chip, disabled send), then
+  write the check against it.** Do not ship it without that: the failure mode is "every
+  reference is silently discarded", which looks like working software while destroying
+  the visual consistency the reference sheets exist for.
+
+    What is safe to say: the cost per occurrence is capped (180s, down from 600s), and
   attempt 1 of the same slot is often submitted fine — this is intermittent, not a dead
   path. **Measure over hours, not minutes,** before believing any fix here:
   `grep 'no image after' state/illustrator.log | grep -c 'text: \"\"'`.
