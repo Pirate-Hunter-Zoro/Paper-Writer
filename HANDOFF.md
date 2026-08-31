@@ -360,19 +360,30 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   path. **Measure over hours, not minutes,** before believing any fix here:
   `grep 'no image after' state/illustrator.log | grep -c 'text: \"\"'`.
 
-  **The deadline is now 180s, set on measurement.** Once the knob worked (below), it was
-  worth asking what it should be. Across 81 successful renders paired to a confident
-  start line: min 18s, median 29s, p90 41s, **max 51s**, and *nothing at all* between
-  51s and the deadline. A render either finishes inside a minute or it hangs; there is
-  no slow-but-working middle. 180s keeps 3.5x headroom over the observed maximum and
-  1.5x over the "up to two minutes" the config comment expected, while cutting the cost
-  of a hang by 57% — 14 hangs so far had spent 98 minutes of the worker whose
-  throughput decides when the book finishes. Set in `launchd/fleet.env`, so **it needs
-  a daemon restart** (§5). If renders start failing at 180s with "Creating your image"
-  that would have finished, raise it; `scripts/keep-rate.sh` counts hangs separately
-  for exactly that question.
+  **The deadline was cut to 180s and put back to 420s, and the round trip is worth
+  reading.** The case for 180 looked strong: 81 successful renders, median 29s, max 51s,
+  and nothing at all between 51s and the deadline — so a render still going at 180s must
+  be hung. **The flaw was in what got measured.** Those durations were paired from log
+  lines that start when the PAGE begins working; they never included inserting a ~2KB
+  prompt and getting it submitted. A slow send makes the whole driver call long while
+  the render itself is quick.
 
-  **The timeout half was a dead knob, and that is fixed.** `illustration.render` — the
+  Share of all render attempts that ended `no image after Ns` with an empty page:
+
+      hr 07-16   600s, then 420s      0-2%
+      hr 17      420 -> 180          19%
+      hr 18      180s                21%
+      hr 19      180s                54%
+      hr 20      180s                52%
+
+  At 180s that failure was eating about half of every attempt, and attempts per hour
+  FELL from 60 to 27 because each one burns the full deadline. Correlation rather than
+  proof — hour 17 has two at 420s, so the deadline is not the whole story — but it is a
+  change I made, it is free to undo, and every hour at 420s or 600s sits near zero.
+  **If you try a shorter deadline again, measure the FULL driver call (insert, send,
+  wait), not the page's own working time, and watch the share rather than the count.**
+
+    **The timeout half was a dead knob, and that is fixed.** `illustration.render` — the
   only path a scene or sheet render takes — hardcoded `timeout=600`, so
   `FANFIC_IMAGE_RENDER_TIMEOUT_SEC` had never applied to a single render in the run.
   Tuning it, restarting, and watching nothing happen is the same trap as an env change
