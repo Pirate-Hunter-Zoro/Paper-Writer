@@ -222,6 +222,20 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["kind"], "transient")
 
+    def test_an_empty_reply_is_concluded_rather_than_waited_out(self):
+        """Twice live, Gemini finished with a response bubble containing nothing —
+        no picture, no words, no refusal. The wait loop had no exit condition for that
+        state, so it burned the entire ten-minute budget on silence, twice.
+
+        The assertion that matters is the CLOCK: it must give up in seconds."""
+        import time
+        started = time.monotonic()
+        result = self.run_driver("empty", self.tmp / "empty.png", timeout=120)
+        elapsed = time.monotonic() - started
+        self.assertFalse(result["ok"])
+        self.assertLess(elapsed, 60,
+                        f"took {elapsed:.0f}s to conclude nothing was coming")
+
     def test_a_thumbnail_is_never_saved_as_the_render(self):
         """Belt and braces: the driver's own 256px floor should reject it before the
         Python floor ever sees it."""

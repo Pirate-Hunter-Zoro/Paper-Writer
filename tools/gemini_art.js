@@ -250,6 +250,12 @@ const PROBE_BUSY = `(() => {
   return !!stop;
 })()`;
 
+// Whether the model has begun answering at all. Needed to tell "has not started yet"
+// from "finished and produced nothing", which look identical from the text alone and
+// which want opposite responses — keep waiting, versus stop immediately.
+const PROBE_HAS_RESPONSE = `(() => document.querySelectorAll(
+  'model-response, [data-test-id="model-response"]').length > 0)()`;
+
 // The newest response as text, for the two outcomes that are not a picture: a refusal
 // and a usage ceiling.
 //
@@ -526,6 +532,11 @@ async function render(cdp, args, prompt) {
   // be a render, AND the generation actually finished. Grabbing the first arm alone
   // caught progressive placeholders and saved a blurred half-image.
   let lastText = "";
+  // Consecutive polls where the model has answered, is not working, and has produced
+  // neither a picture nor any words. Twice tonight the page settled into exactly that
+  // and the driver waited out the full ten-minute timeout for something that was never
+  // coming. A handful of quiet polls is enough to call it.
+  let settledEmpty = 0;
   const found = await waitFor(async () => {
     const text = String(await cdp.eval(PROBE_TEXT) || "");
     if (text) lastText = text;
@@ -541,11 +552,20 @@ async function render(cdp, args, prompt) {
     const images = JSON.parse(await cdp.eval(PROBE_IMAGES) || "[]");
     if (images.length && !busy && !working) return { images };
 
-    if (busy || working) return null;            // still going; no conclusions yet
-    if (images.length) return null;              // settling around a picture
+    if (busy || working) { settledEmpty = 0; return null; }   // still going
+    if (images.length) { settledEmpty = 0; return null; }      // settling on a picture
 
     const verdict = classifyText(text);
     if (verdict) return { verdict, text };
+
+    // Answered, stopped, and said nothing. Give it a few polls in case the DOM is
+    // mid-swap, then stop rather than burning the whole budget on silence.
+    const answered = await cdp.eval(PROBE_HAS_RESPONSE);
+    settledEmpty = (answered && text.trim().length < 3) ? settledEmpty + 1 : 0;
+    if (settledEmpty >= 6) {
+      return { verdict: "no_image",
+               text: "the reply finished with neither a picture nor any text" };
+    }
     return null;
   }, left(), 1500);
 
