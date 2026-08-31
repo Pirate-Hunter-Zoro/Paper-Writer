@@ -122,8 +122,12 @@ def _obtain_draft(records, series_rec, book_rec, chapter_rec, chapter_outline,
                 raise
             continue
 
+        # `trajectory=[]` because this is NEW prose. The field is restored across a
+        # restart (see `_edit_to_clean`), and a record that kept a redrafted chapter's
+        # old blocking counts would spend its pass budget on a draft they were never
+        # about — and would report a trend belonging to text that no longer exists.
         journal.set_status(records, records[chapter_rec["key"]], states.CH_DRAFTED,
-                           stage_errors=stage_errors)
+                           stage_errors=stage_errors, trajectory=[])
         return prose, stage_errors
 
 
@@ -153,11 +157,33 @@ def _edit_to_clean(records, series_rec, book_num, chapter_rec, chapter_outline, 
     draft_path = paths.draft_path(sid, book_num, n)
     style_guide = store.load(series_rec, book_num).style_guide
 
-    trajectory = []
+    # RESTORED, not started empty. The draft on disk is reused across a restart
+    # (`_obtain_draft`), so the passes already spent on it are part of this chapter's
+    # history — but the trajectory used to live only in this function's frame, and a
+    # restart mid-chapter silently threw it away. Chapter 10 went 5 -> 2 blocking, the
+    # daemons were restarted to deploy a fix, and it was journaled `revisions: 1` and
+    # logged `ACCEPTED (0) — its last pass found no defects`, which reads as a chapter
+    # that was clean on arrival. It was not; it was a chapter three passes deep.
+    #
+    # Three things were wrong with that, in rising order of seriousness. The log line
+    # is untrue. `EDIT_MAX_PASSES` stops being a cap, because a restart hands back a
+    # full budget. And `_still_improving` cannot see a chapter that has stopped
+    # converging, which is the whole mechanism that stops paying for a stalled loop.
+    #
+    # It also quietly corrupts the evidence: §5 of the handoff keeps EDIT_MAX_PASSES at
+    # 3 on the strength of observed trajectories, and every restart resets one to look
+    # cleaner than it was.
+    live = records.get(chapter_rec["key"], chapter_rec)
+    trajectory = [int(c) for c in (live.get("trajectory") or [])]
+    if trajectory:
+        log_fn(f"book {book_num} ch {chapter_rec['chapter_num']}: resuming the "
+               f"editorial trajectory at {' -> '.join(str(c) for c in trajectory)}")
     outstanding = []
     verified = False
     stage_errors = int(chapter_rec.get("stage_errors") or 0)
-    pass_num = 0
+    # Not 0: the passes in the restored trajectory were spent, and numbering them again
+    # from 1 would re-run the budget as well as mislabel the pass in the audit log.
+    pass_num = len(trajectory)
 
     while _may_edit(pass_num, trajectory):
         pass_num += 1
@@ -192,7 +218,8 @@ def _edit_to_clean(records, series_rec, book_num, chapter_rec, chapter_outline, 
             f"words={report['readability']['words']}\n"
             + "\n".join(blocking + report["polish"]))
         journal.set_status(records, records[chapter_rec["key"]], states.CH_EDITING,
-                           revisions=pass_num, readability=report["readability"])
+                           revisions=pass_num, readability=report["readability"],
+                           trajectory=list(trajectory))
 
         if not blocking and not report["issues"] and not report["structural"]:
             log_fn(f"book {book_num} ch {n}: clean after {pass_num} editorial pass(es)")

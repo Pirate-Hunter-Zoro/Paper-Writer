@@ -161,6 +161,27 @@ commits.
     the Imperial side. Orgus Din dies in ch36 and is buried in ch37. I nearly anchored
     the orange wrap twenty chapters early on the strength of a chapter title.
 
+14. `An editorial trajectory has to survive a restart` — and this one is mine: I caused
+    it, watching for it. `trajectory` lived only in `_edit_to_clean`'s frame. The draft
+    on disk is reused across a restart, so the passes already spent on it are part of
+    the chapter's history — but the list was started empty every time. Chapter 10 went
+    `5 -> 2` blocking, I restarted the daemons to deploy fix 13, and it was journaled
+    `revisions: 1` and logged **`ACCEPTED (0) — its last pass found no defects`**, which
+    reads as a chapter that arrived clean. It was three passes deep.
+    Three consequences, in rising order of seriousness: the log line is untrue;
+    `EDIT_MAX_PASSES` stops being a cap, because a restart hands back a full budget; and
+    `_still_improving` cannot see a loop that has stopped converging, which is the whole
+    mechanism that stops paying for a stalled chapter. It also corrupts the evidence §5
+    rests on — the decision to keep `EDIT_MAX_PASSES` at 3 is argued from observed
+    trajectories, and every restart resets one to look cleaner than it was.
+    The trajectory is now journaled as it grows and restored on resume; a *fresh* draft
+    explicitly clears it, so a redrafted chapter cannot inherit counts belonging to
+    prose that no longer exists.
+    **`ch10`'s record is wrong and I left it wrong** — its real trend was `5 -> 2 -> 0`.
+    Rewriting an append-only journal to make my own mistake invisible is worse than the
+    inaccurate row. `ch02` looks like a second instance (12 `ch_editing` records against
+    3 journaled revisions); it predates me.
+
 ---
 
 ## 5. Open items — decided, with reasons
