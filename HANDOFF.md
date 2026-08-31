@@ -557,37 +557,36 @@ something — `grep 'would not use' state/illustrator.log`.
 
 ---
 
-## 6c. A DECISION FOR YOU: empty-room pictures while uploads are broken
+## 6c. The empty-room rung is fine, and I was wrong to call it damage
 
-Not acted on, because it is a quality-versus-progress trade that has already been made
-once deliberately and should not be re-made by me at the end of a long session.
+I raised this as an urgent quality problem, wrote it up as a decision for the owner, and
+then looked at the actual pictures. **They are good.**
 
 **The situation.** A timeout advances the ladder rung; a refusal does not (§4.5). While
-Gemini's uploads are failing (§3), every reference-carrying render times out, so scenes
-walk down the ladder without a single picture ever being drawn or judged. `ch19_6` and
-`ch20_1` reached **rung 3 — a picture of the room with nobody in it** — on compositions
-that were never at fault.
+Gemini's uploads were failing (§3), every reference-carrying render timed out, so
+`ch19_6` and `ch20_1` walked down to **rung 3 — the composition with no named characters
+in it** — on compositions that were never at fault. I described the result as "a
+permanent hole in the book" and "peopleless pictures", repeatedly, without opening one.
 
-**Why the current behaviour is defensible anyway, which I nearly missed.** Rung 3
-attaches no references, so it is the one rung that still *works* when uploads are
-blocked. Descending is what rescues the slot; it ships a degraded picture instead of
-nothing. `test_a_render_failure_still_advances_the_ladder` asserts this on purpose.
+**What rung 3 actually produced:**
 
-**The two options, honestly:**
+  * `ch19_6.png` — a derelict ship interior in near-darkness, a single blue holographic
+    figure standing on a projector table, cables and grime everywhere. Atmospheric and
+    entirely publishable.
+  * `ch20_1.png` — an empty vaulted hall, a throne at the head of a stair, an open book
+    abandoned on the floor. Reads as a deliberate establishing shot.
 
-  * *Leave it.* Scenes affected during an upload outage get peopleless pictures, which
-    are permanent. The book keeps moving.
-  * *Hold the rung on a timeout*, matching the refusal rule — nothing was drawn, so
-    there is no verdict on the composition. Pictures stay correct; affected slots stall
-    on their backoff until uploads recover, and the book waits. This matches the stated
-    philosophy elsewhere ("images are never skipped; what a spent ceiling costs is
-    TIME") but reverses a tested decision.
+Neither is what the scene asked for, and neither is damage. A novel carries
+establishing shots happily. **The ladder's bottom rung degrades gracefully, which is
+what it was designed to do.**
 
-A middle option exists: hold for the first N timeouts, then allow descent — transient
-blocks cost nothing, persistent ones still escape.
+**So the trade is much milder than I claimed, and the current behaviour is right.**
+Descending on a timeout is also the only thing that rescues a slot when uploads are
+blocked, because rung 3 attaches no references and therefore still draws.
+`test_a_render_failure_still_advances_the_ladder` asserts this deliberately. Leave it.
 
-**If you leave it, check `ch19_6` and `ch20_1` when the run finishes** and re-queue them
-if they came back empty: `rm` the image and its `.retry`, and the illustrator redraws.
+If a specific chapter really needs its cast in frame, re-queue after uploads recover:
+delete the image and its `.retry` and the illustrator redraws it from rung 0.
 
 ---
 
