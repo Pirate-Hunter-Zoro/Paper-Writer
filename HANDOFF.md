@@ -345,6 +345,42 @@ Worth reading. The pattern in all of them is the same.
 
 ---
 
+## 6a. The single biggest cause of identity failures was our own prompts saying "no"
+
+**Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
+bangs.** Her locked appearance ended: *"the braided version is fixed for this entire
+book and no side bangs appear at any point."* The most explicitly forbidden feature in
+the whole cast is the one the model drew most often.
+
+It is not mysterious. **An image model has no reliable negation.** "no side bangs" puts
+*side bangs* in the prompt; there is no mechanism that reliably subtracts them, and the
+noun is what gets drawn. The same shape, all over the bible:
+
+    Satele    "no side bangs appear at any point"        -> bangs, 10 times
+    Tarnis    "No robes, no hood, no lightsaber"         -> drawn with a lightsaber
+    Alyn      "and no vibrosword"                        -> a vibrosword appeared,
+                                                            attached to Tarnis
+    T7-O1     "no restraining bolt"                      -> mine, from an hour earlier
+
+Every one is now phrased as a positive statement of the same fact, which is the form a
+renderer can act on — "both braids drawn back tight from a fully exposed hairline,
+forehead and temples clear" rather than "no side bangs". Also fixed in the same pass:
+Rusk's "no back-mounted weapon" and Prell's "no rank flashes". Only Darth Angral keeps
+a "not", deliberately: *"the prosthetic does not change"* is a contrast describing how
+his eyes behave, not an instruction to omit an object, so there is no noun to latch on
+to.
+
+**The critic does not lose anything.** It is handed the same text *and* the reference
+sheet, and the sheet still shows the correct hair — every one of those ten complaints
+cites the sheet, not the prose.
+
+**This is the rule to apply to any new bible: say what is in the picture, never what is
+absent.** It is worth a gate at plan time, in the shape of §4.13's — a locked appearance
+that negates a visible noun is a defect the planner should be made to rephrase. Not
+built yet; the data is repaired and the run is what matters today.
+
+---
+
 ## 6b. Will it finish? — the arithmetic, as of 13:15Z on the 31st
 
 Checked because the refusal climb makes it a fair question. **Budget is not the
