@@ -1,0 +1,17 @@
+# Runtime state: the journal, canon, bibles, chapters, images, staging, logs, locks.
+# Load-bearing but high-churn — the archivist backs it up off-machine, git does not.
+state/
+*.log
+
+# Job prompts are runtime INPUT, not source, and the drop folder now lives in iCloud
+# (<Books>/_inbox) rather than in the repo — so there is normally nothing here to
+# ignore. This rule is insurance for a machine that redirects FANFIC_INBOX_DIR back
+# into the repo: prompts must never become tracked files, because the engine moves a
+# finished one out of the folder and that shows up in git as a deletion.
+/inbox/
+
+__pycache__/
+*.pyc
+.DS_Store
+.claude/
+.codex/
