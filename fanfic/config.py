@@ -282,8 +282,15 @@ IMAGE_HEADFUL = _env_flag("FANFIC_IMAGE_HEADFUL", False)
 
 # Where a failed render dumps a screenshot and the page text. "No image appeared" is
 # unfixable without seeing what did appear, and a headless failure at 3 a.m. leaves no
-# other trace. Set empty to turn it off.
-IMAGE_DIAG_DIR = _env_path("FANFIC_IMAGE_DIAG_DIR", STATE_DIR / "image-diagnostics")
+# other trace at all.
+#
+# Set the variable to an empty string to turn it off — which `_env_path` cannot express,
+# because it treats empty as unset and hands back the default. That distinction matters
+# for exactly one kind of tunable: the ones where "off" is a real choice rather than the
+# absence of one.
+_diag_raw = os.environ.get("FANFIC_IMAGE_DIAG_DIR")
+IMAGE_DIAG_DIR = (STATE_DIR / "image-diagnostics" if _diag_raw is None
+                  else (Path(_diag_raw).expanduser() if _diag_raw.strip() else None))
 
 # How long one render may take, end to end, inside the browser. Generous: a picture
 # through the web app takes anywhere from eight seconds to two minutes depending on

@@ -284,17 +284,18 @@ def billed_render(prompt, out_path, label, series_id, references=None, log_fn=No
                   aspect=None):
     """One render, counted against the picture budget as it happens.
 
-    **Every attempt is billed, including the ones a vision critic then rejects**, and
+    **Every attempt is counted, including the ones a vision critic then rejects**, and
     that is the whole reason this wrapper exists. The count used to be incremented once
     per *slot* by the engine, after up to `IMAGE_MAX_REGENERATIONS` renders had already
-    been paid for inside `render_scene` — so the meter recorded 1 where the vendor had
-    charged for 3, `image_budget_remaining` was over-optimistic by the regeneration
-    factor, and a run with an unlucky vision critic could bill several times
-    `IMAGE_BUDGET_USD` with every counter reading green.
+    happened inside `render_scene` — so the meter recorded 1 where three had been spent,
+    `image_budget_remaining` was over-optimistic by exactly the regeneration factor, and
+    a run with an unlucky vision critic could blow several times through the ceiling with
+    every counter reading green.
 
-    Counted before the call rather than after it: a render that fails mid-flight may
-    still have been charged for, and the safe direction to be wrong about money is
-    over-counting."""
+    The ceiling counts RENDERS now rather than dollars — the pictures come out of a
+    browser session and cost nothing but wall-clock — which changes what over-counting
+    protects and not whether it is right. A render that fails mid-flight still took the
+    time, and the safe direction to be wrong about a runaway stop is over-counting."""
     budget.record_image(series_id, label)
     render(prompt, out_path, references=references, log_fn=log_fn, aspect=aspect)
 
