@@ -651,23 +651,28 @@ before today: 21 real hits, 0 false.
 Checked because the refusal climb makes it a fair question. **Budget is not the
 constraint; wall-clock is.**
 
-    illustrated      9 of 46 chapters, 5.1 scene images each, plus 22 sheets
-    still needed     ~189 pictures
-    budget left      ~1333
+**Refreshed at 21:40Z** (the earlier figures below were taken at 9 illustrated
+chapters and are superseded):
 
-      keep rate   renders needed   margin
-        35%             540          +793
-        26%             727          +606   <- cumulative rate for the run so far
-        20%             945          +388
-        15%           1,260           +73   <- the rate since the 12:42Z baseline
-        14%           1,350           -17   <- goes short
+    illustrated      19 of 46 chapters, 5.5 images each
+    drafted          22 of 46 chapters, ~40 min each
+    still needed     ~148 pictures
+    budget left      ~1802 renders  (needs ~670 at the 22% cumulative keep rate)
 
-**Comfortable at the run's cumulative rate, thin at the rate it is currently running
-at.** I first wrote this off as "comfortable at every plausible keep rate" against a
-22–35% band; the marginal rate then fell to 15% and the honest margin at that rate is
-73 renders, about 6%. It is not short, and 15% rests on only ~47 renders, but the
-direction is the wrong one and the whole band is bounded by the refusal rate rather
-than by anything about picture quality.
+      illustration   ~21 h at the halved post-17:00 rate (~7 pictures/hr)
+                     ~11 h at the earlier rate (~14/hr)
+      drafting       ~16 h for the remaining 24 chapters
+
+**It finishes, and roughly within a day, even at the halved rate.** Illustration and
+drafting are now comparable rather than illustration trailing 2:1 — most of the gap
+closed simply because 19 chapters are already done and the per-chapter count settled at
+5.5. Budget is nowhere near binding: ~670 needed against ~1802 left.
+
+Two earlier readings of this section were wrong in opposite directions and are worth not
+repeating. "Comfortable at every plausible keep rate" was written against a 22-35% band
+before the marginal rate fell to 15%; then "the margin is thin, +73 renders" was written
+at the 1600 ceiling, before it was raised to 2400. **Recompute this from the live
+counts rather than trusting any number in it — it has gone stale twice in a day.**
 
 **DONE — the ceiling was raised 1600 → 2400 at 13:50Z and the daemons restarted.** The
 rate held at 15% across three consecutive checks over 67 renders, which left a margin of
