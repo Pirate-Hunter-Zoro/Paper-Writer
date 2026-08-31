@@ -526,10 +526,32 @@ would report it as stuck. Nothing has behaved that way yet.
   Read that carefully before drawing the obvious conclusion — a refused attempt never
   reaches the vision critic, so this is not "14 renders with no identity failures", it
   is **3 renders that reached the critic and all passed**. n=3.
-- **Chapter trajectories** (`grep ACCEPTED state/scribe.log`). Four of nine reach zero
-  defects; the rest ship with recorded issues and are queued for the REVISION sweep.
-  **That sweep has never run.** It is the mechanism that makes shipping a flawed
-  chapter defensible, and it is still an untested design argument.
+- **Chapter trajectories** (`grep ACCEPTED state/scribe.log`). Roughly half reach zero
+  defects on their last pass; the rest repair what they found and are queued for the
+  REVISION sweep.
+
+  **Two corrections to what this section used to say.** It claimed the sweep "has never
+  run" and is "an untested design argument". Neither is right.
+
+  *It has run, on the previous book.* `engine/revising.py`'s docstring records the
+  measurement: 24 chapters re-read against the finished novel yielded **18 blocking
+  defects, three of them canon violations** — Polly given an impossible age, Eda knowing
+  the Titan origin of glyph magic years before canon reveals it, Bill claiming he has no
+  legs. Every one had survived the per-chapter loop. It also has three unit tests. What
+  is true is narrower and unalarming: it has not run *in this run*, and cannot, because
+  it fires only once every chapter exists.
+
+  *And nothing is shipping with known defects.* At 15 chapters: **0 carry
+  `outstanding_issues`; all 15 are queued for the milder reason**, `unverified_repairs`
+  — their last pass fixed everything it found and nothing re-read the fix. Per
+  `flagged()` that buys one round each, with a second only if the first finds blocking
+  defects (`REVISION_SWEEPS = 2`). So the tail cost is on the order of 46 re-edits at
+  roughly $1.50 apiece, not a rescue operation.
+
+  The stopping rule is worth understanding before anyone tunes it: it is **blocking
+  yield**, never polish. "Sweep until nothing is unread" cannot terminate, because every
+  edit leaves itself unread; "sweep while the editor still finds something" is the
+  critic-who-can-never-be-satisfied trap wearing a new hat.
 - **The four prose-anchored sheets** — `alyn-tenar`, `tarnis`, `captain-vurr`, `prell`.
   No wiki has them (Alyn is a player character; the others are minor). These are the
   weakest anchors and the source of most identity failures. **Alyn is in ~55% of the
