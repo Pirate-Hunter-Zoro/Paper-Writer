@@ -283,27 +283,34 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   and 400ms after inserting ~2KB into a rich-text composer it often is not enabled yet,
   so the code falls through to Enter — and if Enter does not register either, the
   driver waits out the whole deadline for a reply to a message that was never sent.
-  **Two fixes were tried here and BOTH ARE REVERTED.** The driver's send path is back to
-  exactly what it was before this session; the only thing left behind is a comment in
-  `gemini_art.js` recording what was attempted, so nobody rebuilds it from the same
-  reasoning.
+  **Two fixes were tried here and both are REVERTED — and the reason I first gave for
+  reverting was itself wrong.** The driver's send path is back to exactly what it was
+  before this session.
 
-  Attempt one added fixed sleeps (~2.2s) and two retries: rate went 5-in-43min to
-  1-in-15min, which is noise at those counts and which I initially described as
-  "roughly halved" — it was not a result. Attempt two polled for up to 8s, clicking the
-  send control whenever it was enabled and pressing Enter otherwise; it failed twice
-  within seven minutes of going live, a HIGHER rate than the baseline it replaced.
+  Rate of this failure per 10 minutes, by configuration:
 
-  The likely harm from attempt two is worth knowing: **in a contenteditable composer
-  Enter frequently inserts a NEWLINE rather than submitting**, so pressing it ~16 times
-  over 8s grows the text, never empties it, and keeps the loop hammering. A retry loop
-  built on "press the thing again" is the wrong shape here.
+      original        17:00-17:43   n=5   1.14
+      fix1 (sleeps)   17:43-18:04   n=1   0.49
+      fix2 (polling)  18:04-18:19   n=2   1.35
+      reverted        18:19-18:22   n=1   3.33   <- the original again, highest of all
 
-  The untested lead, for whoever picks it up: `querySelector('a, b, c')` returns the
-  first element in DOCUMENT ORDER matching *any* arm, not the first arm's match, so a
-  hidden `textarea[aria-label]` earlier in the DOM would make a composer-length check
-  read an empty element and conclude the send succeeded. Log which arm matched before
-  building on it.
+  **Ten events across windows of three to forty-three minutes. Nothing here
+  distinguishes anything.** I read this noise as a result twice in forty minutes, in
+  opposite directions: first calling the sleeps "roughly halved" (progress), then
+  calling the polling "a higher rate than the baseline" (harm) and reverting on that
+  basis. Both readings were the same mistake.
+
+  The revert still stands, on the honest reason: nothing showed a benefit, and the
+  simpler code is the better default when the evidence cannot tell two versions apart.
+
+  One genuine caution if you try again, as a mechanism to avoid rather than something
+  observed: in a contenteditable composer **Enter often inserts a NEWLINE instead of
+  submitting**, so a loop that presses it repeatedly can grow the text rather than send
+  it. The untested lead: `querySelector('a, b, c')` returns the first element in
+  DOCUMENT ORDER matching *any* arm, not the first arm's match, so a hidden
+  `textarea[aria-label]` earlier in the DOM would make a composer-length check read an
+  empty element and conclude the send succeeded. Log which arm matched first.
+  **And measure over hours** — at ~1 per 10 minutes, even a full hour is only ~6 events.
 
   What is safe to say: the cost per occurrence is capped (180s, down from 600s), and
   attempt 1 of the same slot is often submitted fine — this is intermittent, not a dead

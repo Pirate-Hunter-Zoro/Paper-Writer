@@ -529,27 +529,32 @@ async function render(cdp, args, prompt) {
   }
 
   // A SEND-VERIFICATION RETRY WAS TRIED HERE AND REMOVED. Recorded so nobody rebuilds
-  // it from the same reasoning.
+  // it from the same reasoning — and so nobody believes the reason I first gave.
   //
   // The problem is real: `last response text: ""` means the prompt was never submitted
   // — the page dumps show it still sitting in the composer with no user turn — and the
   // driver then waits out the whole deadline for a reply to a message it never sent.
   //
-  // Two attempts, neither of which worked. Fixed sleeps (~2.2s) took the rate from
-  // 5-in-43min to 1-in-15min, which is noise at those counts. Polling for up to 8s,
-  // clicking whenever the send control was enabled and pressing Enter otherwise, then
-  // failed twice within seven minutes of going live — a HIGHER rate than the baseline.
+  // Two attempts: fixed sleeps (~2.2s), then polling for up to 8s while clicking the
+  // send control and pressing Enter. **Neither could be shown to help, and neither
+  // could be shown to hurt.** Measured per 10 minutes: original 1.14, sleeps 0.49,
+  // polling 1.35, and then the reverted original 3.33 — ten events in total, across
+  // windows of three to forty-three minutes. That is noise, and I twice read it as a
+  // result: first calling the sleeps a partial success, then calling the polling a
+  // regression. It was neither.
   //
-  // The likely harm is the Enter loop: in a contenteditable composer Enter frequently
-  // inserts a NEWLINE rather than submitting, so pressing it ~16 times grows the text,
-  // never empties it, and keeps the loop hammering. Reverted rather than tuned further,
-  // because this is the one file where being wrong stops every picture.
+  // Removed because the simpler code is the better default when nothing distinguishes
+  // them, not because it was proven harmful. One real caution if you try again: in a
+  // contenteditable composer Enter often inserts a NEWLINE instead of submitting, so a
+  // loop that presses it repeatedly can grow the text rather than send it. That is a
+  // mechanism worth avoiding, not something observed here.
   //
-  // If you pick it up: the untested lead is that `querySelector('a, b, c')` returns the
-  // first element in DOCUMENT ORDER matching any arm, not the first arm's match, so a
-  // hidden `textarea[aria-label]` earlier in the DOM would make a length check read an
-  // empty element and conclude the send succeeded. Log which arm matched before
-  // building anything on top of it, and measure over hours.
+  // The untested lead: `querySelector('a, b, c')` returns the first element in DOCUMENT
+  // ORDER matching any arm, not the first arm's match, so a hidden `textarea[aria-label]`
+  // earlier in the DOM would make a composer-length check read an empty element and
+  // conclude the send succeeded. Log which arm matched first. And measure over hours —
+  // this failure runs at roughly one per ten minutes, so an hour is ~6 events and even
+  // that is thin.
 
   // Wait for a picture. Two conditions, and both are needed: an image large enough to
   // be a render, AND the generation actually finished. Grabbing the first arm alone
