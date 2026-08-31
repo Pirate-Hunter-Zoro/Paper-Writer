@@ -297,6 +297,38 @@ Worth reading. The pattern in all of them is the same.
 
 ---
 
+## 6b. Will it finish? — the arithmetic, as of 13:15Z on the 31st
+
+Checked because the refusal climb makes it a fair question. **Budget is not the
+constraint; wall-clock is.**
+
+    illustrated      9 of 46 chapters, 5.1 scene images each, plus 22 sheets
+    still needed     ~189 pictures
+    renders needed   ~540 (at 35% keep) to ~860 (at 22%)
+    budget left      1345
+    verdict          comfortable at every plausible keep rate
+
+**This is also what the 800 → 1600 ceiling was worth, concretely.** Under the 800 cap
+that was still in force until 07:29, the run had 549 renders left against a 675–860
+need. It would have hit the ceiling and held in ILLUSTRATING with the book unfinished.
+That was not a hypothetical stall.
+
+What *is* slow is throughput. At ~12–15 renders an hour against a ~70% refusal rate the
+illustrator lands roughly 3–4 pictures an hour, so ~189 pictures is on the order of two
+days, against roughly one day of drafting for the remaining 36 chapters. Illustration
+trails drafting by about 2x and is the thing that decides when the book is done.
+
+**A permanently-refused slot is not a deadlock, and it is worth knowing why.** A refusal
+holds its ladder rung by design (§4.5), so a slot the classifier keeps declining never
+simplifies and never reaches the empty-room rung — it just retries on a backoff that
+doubles 5m → 10m → 20m → 40m and caps at an hour, forever. That is only survivable
+because refusals are probabilistic rather than deterministic: `ch08_4`, `ch09_2` and
+`ch09_3` all came back off the parked list on a later try. If a slot were ever refused
+*deterministically*, it would hold the book in ILLUSTRATING indefinitely and nothing
+would report it as stuck. Nothing has behaved that way yet.
+
+---
+
 ## 7. Watching the run: what actually matters
 
 - **Keep rate** (`grep 'of renders kept' state/scribe.log | tail -1`). It has ranged
