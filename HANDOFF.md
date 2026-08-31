@@ -61,6 +61,14 @@ Pictures are drawn by driving a **real signed-in Gemini session** in headless Ch
     scripts/check-browser.sh --live   three real renders (needs the session)
     scripts/gemini-login.sh           re-sign the profile in when it expires
 
+**A `send MISSING` line from the probe used to be a false alarm.** In `--send` mode the
+probe sent the message, waited for the reply, and only then measured the selector
+groups — by which point the composer is empty and no enabled send button exists. It
+printed `send MISSING` on every run while the line directly above it said "sent via the
+send button". Fixed by recording the match at click time, the way `busy` already was.
+If you see `send MISSING` now, with `sent via Enter (no send button matched)` above it,
+that is real.
+
 **The session directory IS the credential:** `~/.config/fanfic/chrome-gemini`. If
 renders start failing with "not signed in", that script is the whole fix, and books
 hold in ILLUSTRATING meanwhile — nothing is lost.
@@ -74,6 +82,7 @@ hold in ILLUSTRATING meanwhile — nothing is lost.
 | `Gemini refused N reference picture(s) — likely read as photographs of real people` | An uploaded reference was rejected. Handled: the render retries with references dropped, prose-anchored. | Nothing. Recorded in the `.sources` sidecar. |
 | `[WRONG CHARACTER]` | The vision critic caught an identity failure. **This critic is good** — it catches species errors, missing scars, wrong ages, in background figures. | Read it. It is usually right, and it is usually pointing at a defect in the harness, not the model. |
 | `no image after Ns` / `stayed in a working state` | The page hung. Bounded now. | Nothing. |
+| `no image after Ns` with `last response text: ""` | **Not a hang — the prompt was never submitted.** The dump shows it still in the composer under an idle greeting, with no `You said` on the page. | Nothing; the driver now verifies the send and re-tries. If it becomes frequent again, look at the send/Enter fallback in `gemini_art.js`. |
 
 ### Never do this
 
@@ -236,11 +245,19 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   wording since last night; it was at 07:36 and has not recurred in the five hours
   since, so it is likelier that the text rendered after the last check than that the
   pattern is broken.
-  **The pattern half is not fixed, deliberately:** one occurrence each, and the change
-  is a regex in `tools/gemini_art.js`, the riskiest file here and the one whose tests
-  are opt-in and need Chrome — with the illustrator booted out first, because a Chrome
-  profile opens in one process at a time (§3). Worth doing if it recurs, and then
-  `scripts/check-browser.sh` is the thing to run.
+  **`last response text: ""` does not mean Gemini said nothing. It means we never
+  asked.** Five of these inside half an hour, and the saved page dumps settle it: the
+  prompt is still sitting in the composer under an idle greeting ("Ready when you are",
+  "Where should we start?") with no user turn on the page at all. Look at
+  `state/image-diagnostics/*-timeout.png` before theorising — a dump with no
+  `You said` in it was never submitted.
+  Cause: nothing verified the send. The button selector requires `:not([disabled])`,
+  and 400ms after inserting ~2KB into a rich-text composer it often is not enabled yet,
+  so the code falls through to Enter — and if Enter does not register either, the
+  driver waits out the whole deadline for a reply to a message that was never sent.
+  `gemini_art.js` now checks that the composer emptied and re-sends up to twice if it
+  did not. If the composer cannot be found it does NOT block, because that is either a
+  successful send or a markup change and neither is helped by refusing to wait.
 
   **The deadline is now 180s, set on measurement.** Once the knob worked (below), it was
   worth asking what it should be. Across 81 successful renders paired to a confident

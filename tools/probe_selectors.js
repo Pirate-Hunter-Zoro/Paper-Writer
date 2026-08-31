@@ -211,6 +211,15 @@ async function main() {
         }
       }
       console.log(clicked ? "sent via the send button" : "sent via Enter (no send button matched)");
+      // Remember it MATCHED, because by the time the groups are probed it will not.
+      // The send control only exists while the composer has content, and this path
+      // deliberately empties the composer before it measures anything. Reporting the
+      // group from that snapshot printed `send MISSING` on every --send run, against
+      // an app where the button had just been found and clicked one line earlier —
+      // which is the exact false alarm the comment above `TYPE BEFORE PROBING` says
+      // this script was fixed once to avoid. Same shape as `sawBusy` below: a control
+      // that is only alive for part of the flow has to be recorded when it is alive.
+      const sawSend = clicked;
 
       // Catch `busy` while it is up: it only exists during generation.
       let sawBusy = false;
@@ -225,7 +234,7 @@ async function main() {
       }, 60000, 400);
 
       report = JSON.parse(await cdp.eval(probeExpr(GROUPS)));
-      render(report, sawBusy);
+      render(report, sawBusy, sawSend);
 
       const reply = await cdp.eval(
         `(() => { const s = document.querySelectorAll('model-response, message-content');
@@ -239,13 +248,15 @@ async function main() {
   }
 }
 
-function render(report, sawBusy) {
+function render(report, sawBusy, sawSend) {
   const pad = (s, n) => String(s).padEnd(n);
   console.log(pad("GROUP", 14) + pad("STATUS", 10) + pad("N", 4) + "MATCHED ARM");
   console.log("-".repeat(96));
   for (const g of GROUPS) {
     const r = report[g.key] || {};
-    const found = (r.count || 0) > 0 || (g.key === "busy" && sawBusy);
+    const found = (r.count || 0) > 0
+                  || (g.key === "busy" && sawBusy)
+                  || (g.key === "send" && sawSend);
     let status;
     if (found) status = "OK";
     else if (g.needs === "signed-in") status = "n/a";
