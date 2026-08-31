@@ -241,19 +241,34 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   **median of 22s and a p90 of 51s**, so 420 is still eight times the p90 while 600 was
   spending ten minutes to discover that a hung page was hung.
 
-- **T7-O1 wears a restraining bolt for the whole book, and I left it that way.** Same
-  defect as (13) from the other side: `costume_for_chapter` takes the base look to be
-  the FIRST undated entry, and T7's is `"Captive: grey chassis with the red Flesh Raider
-  restraining bolt on the chest (first scene only)"`. So every chapter but 46 is drawn
-  from a first-scene prop, and the parenthetical is an instruction no renderer can act
-  on. It has already set: his **locked reference sheet was drawn with the bolt**, and
-  the vision critic now enforces it book-wide — `ch06_1` was rejected in part for
-  showing "no restraining bolt — a different, instantly recognisable droid".
-  Reordering his wardrobe is a two-line data fix, but it invalidates that sheet, and
-  that sheet cost 4+ refusals to win. Re-rendering it is the coupled half I could not
-  verify without spending renders on a running book, so I stopped at documenting it.
-  **If you take it on, do the data fix and the sheet re-render together, or the prompts
-  and the sheet will disagree and the critic will reject on the difference.**
+- **T7-O1's restraining bolt is FIXED — and my reason for deferring it was wrong.**
+  I first left this alone believing the data fix was coupled to re-rendering his sheet,
+  which had cost 4+ refusals to win. That was wrong, and the code says so plainly:
+  `spec_text = identity` — **"the critic is handed exactly what the generator was
+  handed."** The vision critic judges against the same per-chapter costume line the
+  prompt is built from, so correcting the costume corrects both at once. The ch06
+  rejection for a *missing* bolt was the critic faithfully enforcing the stale text it
+  had been given, not a sheet mismatch.
+  What made it urgent was `ch11_1`, rejected `[WRONG CHARACTER]` for a glowing RED
+  sensor eye against a sheet that gives him a BLUE one. His whole prompt line read
+  `T7-O1 (200): grey chassis with the red Flesh Raider restraining bolt on the chest
+  (first scene only).` — the **only colour word in it was "red"**, attached to a prop
+  he lost in chapter 3, and nothing anywhere said blue. Two fixes:
+  *Data.* His costumes now resolve properly: captive with the bolt through ch3 (he is
+  found bolted to a cache floor in ch3 and Alyn pulls it in that same chapter), no bolt
+  from ch4, and the Defender-class utility harness from ch18 where the corvette is
+  assigned. The bogus `from_chapter: 46` entry — p.4's itinerary stamped at the chapter
+  that *delivered* the progression rather than where the look changes — is gone, and the
+  §4.13 guard stops a re-outline putting it back.
+  *Code.* A droid's sensor eye is now a signature mark. Human eye colour stays out, and
+  a test pins that — it is fine detail a reference carries well, and a bare `"eye"` in
+  the marker list would drag it back into every anchored prompt. A droid's single eye is
+  the opposite: the whole face, and a broad flat colour the model defaults.
+  **Residual risk, small and known:** his locked sheet still *shows* the bolt, so from
+  ch4 the sheet and the costume text disagree about it. The critic follows the text it
+  is given — that is exactly what the ch06 rejection demonstrated — so this should be
+  right, but if bolt complaints reappear after chapter 4, re-render his sheet.
+
 - **The painterly-sheet experiment is aimed at the wrong failure mode.** The theory
   was that photoreal source art trips the "real people" classifier, to be tried if
   refusals stayed high. Refusals did stay high — they roughly doubled across the

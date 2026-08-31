@@ -1832,3 +1832,46 @@ class TheRenderTimeoutIsTheConfiguredOne(unittest.TestCase):
             lambda: setattr(config, "IMAGE_RENDER_TIMEOUT_SEC", original))
         self.assertEqual(self._timeout_used(), 137,
                          "the seam is ignoring config and using its own number")
+
+
+class ADroidsSensorEyeIsItsFace(unittest.TestCase):
+    """Eye colour is kept out of an anchored prompt on purpose — it is fine facial
+    detail a reference carries well. A droid's single sensor eye is the opposite of
+    that: it is the whole face, the one recognisable feature, and a broad flat area of
+    colour the model picks by default.
+
+    T7-O1 was rendered with a large glowing RED eye against a sheet giving him a single
+    BLUE one — "a red-eyed grey astromech reads to a reader as a different, hostile
+    droid". Nothing in his prompt had ever said blue."""
+
+    T7 = {"appearance": "T7-series astromech, cylindrical body on three legs. Plating "
+                        "is grey and scratched back to bare metal at every edge. A "
+                        "single blue sensor eye in the dome.",
+          "age": "200", "costumes": ["grey chassis, no bolt"]}
+
+    def test_the_sensor_eye_reaches_the_prompt(self):
+        self.assertIn("A single blue sensor eye in the dome",
+                      illustration.signature_marks(self.T7))
+
+    def test_it_reaches_the_costume_line(self):
+        line = illustration._costume_line("T7-O1", self.T7, 11)
+        self.assertIn("blue sensor eye", line)
+
+    def test_a_humans_eye_colour_still_stays_out(self):
+        """The rule that this narrows without breaking. A bare "eye" in the marker list
+        would drag human eye colour back into every anchored prompt, which is the
+        averaging the doctrine exists to prevent."""
+        human = {"appearance": "Human female, nineteen. Warm brown skin, grey-green "
+                               "eyes, dark brown hair cropped to the jaw.",
+                 "age": "19", "costumes": ["tunic"]}
+        line = illustration._costume_line("Alyn", human, 11)
+        self.assertNotIn("grey-green eyes", line)
+        self.assertNotIn("eyes", line)
+
+    def test_other_optic_wordings_are_recognised(self):
+        for phrase in ("A single red photoreceptor above the grille",
+                       "One amber optical sensor set in the faceplate",
+                       "A cracked green sensor lens on the left"):
+            spec = {"appearance": f"Protocol droid. {phrase}."}
+            self.assertTrue(illustration.signature_marks(spec),
+                            f"not recognised as a marking: {phrase}")

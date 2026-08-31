@@ -885,6 +885,19 @@ _SIGNATURE_MARKERS = (
     "prosthetic", "cybernetic", "implant", "eyepatch", "patch over",
     "buzz cut", "shaved", "bald", "braid", "topknot", "dreadlock",
     "missing", "blind", "horn", "tusk", "cravat", "monocle", "spectacles",
+    # A DROID'S EYE IS NOT A HUMAN'S EYE, and the distinction is why these are spelled
+    # out instead of adding a bare "eye". Eye colour is deliberately excluded from an
+    # anchored prompt — it is fine facial detail a reference picture carries well, and
+    # `colouring_of` says so at length. A droid's single sensor eye is the opposite: it
+    # is the whole face, the one recognisable feature, and a broad flat area of colour
+    # the model picks by default rather than reads off the sheet.
+    #
+    # T7-O1 came back with a large glowing RED eye against a sheet that gives him a
+    # single BLUE one. The critic's words: "a red-eyed grey astromech reads to a reader
+    # as a different, hostile droid". It had help — the only colour word anywhere in his
+    # prompt was the "red" of a restraining bolt he should not have been wearing since
+    # chapter 3 — but nothing in the prompt ever said blue.
+    "sensor eye", "photoreceptor", "optical sensor", "sensor lens", "optic",
 )
 
 # How many of them reach the prompt. Two, because the point is a silhouette cue, not a
