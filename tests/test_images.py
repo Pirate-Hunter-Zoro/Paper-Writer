@@ -598,6 +598,48 @@ class EverybodyInFrameKeepsTheirAnchor(unittest.TestCase):
             f"the first {config.IMAGE_MAX_UPLOADS} sent were {kept}")
 
 
+class TheTopUpDoesNotChaseWorkTheCapForbids(unittest.TestCase):
+    """A chapter is "short of pictures" only if the enqueuer could actually add one.
+
+    The shortfall test measured against the static `IMAGES_PER_CHAPTER` ceiling while
+    the enqueuer applies the budget-derived cap. A six-segment chapter holding five
+    pictures under a derived cap of five was therefore reported short, handed over, and
+    refused — every cycle, forever. No model calls, so no cost beyond three confident
+    log lines every thirty seconds about work that could never happen."""
+
+    def setUp(self):
+        support.wipe_state()
+        support.stub_model_seams()
+
+    def test_a_chapter_at_the_derived_cap_is_not_reported_short(self):
+        from fanfic.engine import illustrating
+        real = illustrating.images_per_chapter
+        illustrating.images_per_chapter = lambda *a, **k: 5
+        self.addCleanup(lambda: setattr(illustrating, "images_per_chapter", real))
+
+        from fanfic import paths
+        from fanfic.infra import storage
+        sid = "capped"
+        # A chapter of six segments, already holding five queued pictures.
+        prose = "\n\n* * *\n\n".join(f"Scene {i} happened." for i in range(1, 7))
+        p = paths.chapter_path(sid, 1, 1)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(prose, encoding="utf-8")
+        storage.save_json({"chapters": [{"number": 1, "title": "t", "beats": "b"}]},
+                          paths.outline_path(sid, 1))
+        q = paths.img_queue()
+        q.parent.mkdir(parents=True, exist_ok=True)
+        with q.open("a", encoding="utf-8") as fh:
+            for k in range(1, 6):
+                fh.write(json.dumps({"series_id": sid, "book_num": 1,
+                                     "chapter_num": 1, "k": k, "scene": "x",
+                                     "characters": []}) + "\n")
+
+        short = illustrating.chapters_short_of_cap({"series_id": sid}, 1)
+        self.assertEqual(short, [],
+                         "a chapter at the cap the enqueuer will apply is not short")
+
+
 class SpeciesIsNotAFace(unittest.TestCase):
     """An anchored prompt drops the appearance paragraph, because prose and pictures
     disagree about a face and a model handed both averages them. That is right about
