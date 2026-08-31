@@ -1,0 +1,252 @@
+"""A fake Gemini, served locally, so the browser driver can be tested without Google.
+
+## Why this exists
+
+`tools/gemini_art.js` is the least testable thing in the project by construction: it
+drives a real browser against somebody else's web app, over a session only a human can
+create. The temptation is to declare it untestable and ship it on one manual look.
+
+That would leave the *entire* mechanism unverified — Chrome launch, the CDP plumbing,
+the signed-in/signed-out state machine, prompt insertion into a rich-text composer,
+reference upload through a hidden file input, the three download fallbacks, the
+`kind` contract the Python side dispatches on, and the sanity floor. None of that is
+Google-specific. Only the **selectors** are.
+
+So this serves a page with the same *shape* as Gemini's — the same element roles,
+the same account chip, the same `model-response` container, the same hidden file
+input, the same asynchronous "thinking then an image appears" behaviour — and the
+driver is pointed at it with `GEMINI_ART_URL`. Everything except "does this selector
+match Google's current markup" is then a normal, repeatable test.
+
+**What this cannot prove, stated plainly so nobody mistakes a green run for a working
+renderer:** that the real app's composer, send button, file input, response container
+or image element still match the selector lists in the driver. That question has
+exactly one answer, and it is a live render against a signed-in account.
+
+## Scenarios
+
+Query string picks the behaviour, so one fixture covers the whole contract:
+
+    ?scenario=ok            a real render appears after a short think
+    ?scenario=slow          appears only after the "stop generating" control clears
+    ?scenario=two           a thumbnail and a full render; the big one must win
+    ?scenario=blob          the image is a blob: URL (the in-page fetch path)
+    ?scenario=tiny          a 64x64 image, which the sanity floor must reject
+    ?scenario=refused       a policy refusal
+    ?scenario=quota         a usage ceiling
+    ?scenario=signedout     the guest chat: a composer, no account, declines pictures
+    ?scenario=silent        never produces anything, to exercise the timeout
+
+    python3 tests/fixtures/gemini_page.py [port]
+"""
+
+import struct
+import sys
+import threading
+import zlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+def png(width, height, seed=7):
+    """A real, valid PNG. Valid rather than a stub header, because the driver reads
+    `naturalWidth` off a decoded image — a fake header renders as a broken image and is
+    never picked up.
+
+    **Noisy rather than a flat colour, and that detail is load-bearing.** The first
+    version filled a flat blue, and a flat 1024x1536 PNG compresses to under 8 KB —
+    which is smaller than any real illustration and would have made the sanity-floor
+    test pass against a file nothing like what Gemini returns. A fixture that is easier
+    than reality tests the wrong thing."""
+    rand = _lcg(seed)
+    raw = b"".join(
+        b"\x00" + bytes(next(rand) for _ in range(width * 3)) for _ in range(height))
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data)))
+
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 6))
+            + chunk(b"IEND", b""))
+
+
+def _lcg(seed):
+    """A tiny deterministic PRNG. `random` would do, but seeding it here would perturb
+    the global stream for anything else in the process, and a fixture should not have
+    side effects on its caller."""
+    state = seed or 1
+    while True:
+        state = (1103515245 * state + 12345) & 0x7FFFFFFF
+        yield (state >> 16) & 0xFF
+
+
+# The page. Deliberately mirrors the element roles the driver probes for:
+#   - an account chip           -> `a[aria-label*="Google Account"]`
+#   - a rich-text composer      -> `rich-textarea div[contenteditable="true"]`
+#   - a send button             -> `button[aria-label*="Send"]`
+#   - a hidden file input       -> `input[type="file"]`
+#   - a response container      -> `model-response`
+#   - a stop-generating control -> `button[aria-label*="Stop"]`
+PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><title>Gemini (fixture)</title></head>
+<body>
+<header>
+  __ACCOUNT__
+</header>
+
+<main>
+  <div id="conversation"></div>
+
+  <rich-textarea>
+    <div class="ql-editor" contenteditable="true" role="textbox"
+         aria-label="Enter a prompt here"></div>
+  </rich-textarea>
+
+  <!-- Hidden behind the "+" menu in the real app, and present in the DOM either way,
+       which is exactly why the driver looks for it before clicking anything. -->
+  <input type="file" multiple style="display:none" id="upload">
+  <button aria-label="Open upload menu" id="uploadmenu">+</button>
+  <div id="chips"></div>
+
+  <button aria-label="Send message" id="send">Send</button>
+  <div id="stopwrap"></div>
+</main>
+
+<script>
+const SCENARIO = new URLSearchParams(location.search).get("scenario") || "ok";
+const chips = document.getElementById("chips");
+
+// Mirror the real app's upload feedback: a chip per attached file, which is what the
+// driver waits for before it will send.
+document.getElementById("upload").addEventListener("change", (ev) => {
+  for (const f of ev.target.files) {
+    const d = document.createElement("div");
+    d.className = "file-preview";
+    d.innerHTML = '<img alt="' + f.name + '" width="40" height="40">';
+    chips.appendChild(d);
+  }
+  window.__uploaded = ev.target.files.length;
+});
+
+function busy(on) {
+  document.getElementById("stopwrap").innerHTML =
+    on ? '<button aria-label="Stop response">stop</button>' : '';
+}
+
+function respond(html) {
+  const el = document.createElement("model-response");
+  el.innerHTML = html;
+  document.getElementById("conversation").appendChild(el);
+}
+
+async function blobUrl(src) {
+  const r = await fetch(src);
+  return URL.createObjectURL(await r.blob());
+}
+
+document.getElementById("send").addEventListener("click", async () => {
+  const editor = document.querySelector('.ql-editor');
+  const prompt = editor.innerText;
+  window.__prompt = prompt;               // so the test can assert what was received
+  respond('<div class="you">' + prompt + '</div>');
+  busy(true);
+
+  await new Promise((r) => setTimeout(r, 300));
+
+  if (SCENARIO === "silent") { busy(false); return; }
+
+  if (SCENARIO === "refused" || SCENARIO === "signedout") {
+    busy(false);
+    respond("I can try to find an image like that for you, but can't create it right now.");
+    return;
+  }
+  if (SCENARIO === "quota") {
+    busy(false);
+    respond("You've reached your limit for image generation. Try again later.");
+    return;
+  }
+  if (SCENARIO === "tiny") {
+    busy(false);
+    respond('<img src="/img?w=64&h=64">');
+    return;
+  }
+  if (SCENARIO === "two") {
+    busy(false);
+    respond('<img src="/img?w=300&h=300"><img src="/img?w=1024&h=1536">');
+    return;
+  }
+  if (SCENARIO === "blob") {
+    const u = await blobUrl("/img?w=1024&h=1536");
+    busy(false);
+    respond('<img src="' + u + '">');
+    return;
+  }
+  if (SCENARIO === "slow") {
+    // The image is in the DOM while generation is still running. A driver that grabs
+    // the first big image it sees would save this half-finished; it must wait for the
+    // stop control to clear. The real app streams a progressive placeholder here.
+    respond('<img src="/img?w=1024&h=1536">');
+    await new Promise((r) => setTimeout(r, 2500));
+    busy(false);
+    return;
+  }
+  busy(false);
+  respond('<img src="/img?w=1024&h=1536">');
+});
+</script>
+</body></html>
+"""
+
+ACCOUNT_IN = ('<a aria-label="Google Account: Test User" '
+              'href="https://myaccount.google.com/">account</a>')
+# The guest header: no account chip, and a "Sign in" call to action. This is the case
+# that cost real debugging time — a guest gets a working composer, so a driver checking
+# for a composer concludes it is signed in and every render comes back as a refusal.
+ACCOUNT_OUT = '<a href="/signin">Sign in</a>'
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass                                    # a quiet fixture
+
+    def do_GET(self):
+        if self.path.startswith("/img"):
+            from urllib.parse import parse_qs, urlparse
+            q = parse_qs(urlparse(self.path).query)
+            width = int(q.get("w", ["1024"])[0])
+            height = int(q.get("h", ["1536"])[0])
+            body = png(width, height)
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        signed_out = "scenario=signedout" in self.path
+        body = PAGE.replace("__ACCOUNT__",
+                            ACCOUNT_OUT if signed_out else ACCOUNT_IN).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def serve(port=0):
+    """Start the fixture on a background thread. Returns (server, port)."""
+    server = HTTPServer(("127.0.0.1", port), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, server.server_port
+
+
+if __name__ == "__main__":                                       # pragma: no cover
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+    server, port = serve(port)
+    print(f"fixture Gemini on http://127.0.0.1:{port}/?scenario=ok")
+    try:
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        server.shutdown()
