@@ -30,6 +30,8 @@ Query string picks the behaviour, so one fixture covers the whole contract:
     ?scenario=ok            a real render appears after a short think
     ?scenario=slow          appears only after the "stop generating" control clears
     ?scenario=two           a thumbnail and a full render; the big one must win
+    ?scenario=decoy         an uploaded reference of the SAME size as the render, in
+                            the real app's containers. The render must still win.
     ?scenario=blob          the image is a blob: URL (the in-page fetch path)
     ?scenario=tiny          a 64x64 image, which the sanity floor must reject
     ?scenario=refused       a policy refusal
@@ -127,6 +129,23 @@ document.getElementById("upload").addEventListener("change", (ev) => {
     chips.appendChild(d);
   }
   window.__uploaded = ev.target.files.length;
+
+  // Reproduce the real app's attachment markup, because it is the source of the
+  // nastiest bug this driver has had. gemini.google.com renders an uploaded
+  // reference at FULL SIZE inside `user-query-file-preview`, and answers a portrait
+  // reference with a portrait render -- so the attachment and the render are
+  // routinely the same dimensions, and a "biggest wins" rule picks between them at
+  // random. Losing that flip writes the reference back to disk as the render, which
+  // in a book means every scene is silently the character sheet again.
+  const uq = document.createElement("user-query");
+  uq.innerHTML =
+    '<user-query-file-carousel class="query-file-carousel">' +
+    '<div class="file-preview-container">' +
+    '<user-query-file-preview class="query-file-preview">' +
+    '<button class="preview-image-button">' +
+    '<img class="preview-image" alt="Uploaded image preview" src="/img?w=1024&h=1536">' +
+    '</button></user-query-file-preview></div></user-query-file-carousel>';
+  document.getElementById("conversation").appendChild(uq);
 });
 
 function busy(on) {
@@ -139,6 +158,26 @@ function respond(html) {
   el.innerHTML = html;
   document.getElementById("conversation").appendChild(el);
 }
+
+// The generated picture, in the containers the real app actually uses.
+function generated(w, h) {
+  return '<response-element><generated-image class="luminous-layout">' +
+         '<single-image class="generated-image"><div class="image-container">' +
+         '<button class="image-button">' +
+         '<img class="image" alt=", AI generated" src="/img?seed=42&w=' + w + '&h=' + h + '">' +
+         '</button></div></single-image></generated-image></response-element>';
+}
+
+// `message-content` wraps the WHOLE conversation, user query included. It was in the
+// driver's scope list, which is how an attachment became a render candidate.
+function wrapConversation() {
+  const conv = document.getElementById("conversation");
+  if (conv.closest("message-content")) return;
+  const mc = document.createElement("message-content");
+  conv.parentNode.insertBefore(mc, conv);
+  mc.appendChild(conv);
+}
+wrapConversation();
 
 async function blobUrl(src) {
   const r = await fetch(src);
@@ -171,6 +210,12 @@ document.getElementById("send").addEventListener("click", async () => {
     respond('<img src="/img?w=64&h=64">');
     return;
   }
+  if (SCENARIO === "decoy") {
+    // Same dimensions as the attachment above, deliberately.
+    busy(false);
+    respond(generated(1024, 1536));
+    return;
+  }
   if (SCENARIO === "two") {
     busy(false);
     respond('<img src="/img?w=300&h=300"><img src="/img?w=1024&h=1536">');
@@ -192,7 +237,7 @@ document.getElementById("send").addEventListener("click", async () => {
     return;
   }
   busy(false);
-  respond('<img src="/img?w=1024&h=1536">');
+  respond(generated(1024, 1536));
 });
 </script>
 </body></html>
@@ -216,7 +261,12 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(urlparse(self.path).query)
             width = int(q.get("w", ["1024"])[0])
             height = int(q.get("h", ["1536"])[0])
-            body = png(width, height)
+            # A seed, so the render and the uploaded reference can be the same SIZE
+            # (which is the trap) while still being different IMAGES (so a test can
+            # tell which one got saved). Without it they are byte-identical and the
+            # decoy assertion cannot fail even when the driver is wrong.
+            seed = int(q.get("seed", ["7"])[0])
+            body = png(width, height, seed=seed)
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
             self.send_header("Content-Length", str(len(body)))

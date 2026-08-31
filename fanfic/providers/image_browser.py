@@ -181,6 +181,29 @@ def dimensions(blob):
     return None
 
 
+def mime_of(blob):
+    """An image's media type from its MAGIC BYTES, never from its filename.
+
+    Load-bearing rather than tidy. Every path in this project is named `.png` — the
+    filenames are computed in `paths.py` and the epub is assembled from them — but
+    **Gemini returns JPEG**, so a `.png` on disk routinely holds JPEG bytes. The epub
+    manifest has to declare what a file actually *is*, and a manifest that says
+    `image/png` over JPEG data is an invalid EPUB that a strict reader may refuse.
+
+    Renaming the files was the alternative and it is worse: the path helpers, the
+    binder's glob, the retry sidecars and the vision critic all agree on `.png` today,
+    and a filename is not what EPUB validates against anyway."""
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if blob[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return "image/webp"
+    if blob[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return None
+
+
 def looks_like_art(path):
     """Whether the downloaded file is worth keeping, or a sentence saying why not.
 

@@ -194,20 +194,48 @@ const PROBE_SIGNED_OUT = `(() => {
   return signInCta && !signedIn;
 })()`;
 
-// Every candidate picture in the newest model response, with the numbers that decide
-// whether it is a real render or a 40px avatar.
+// The generated picture in the newest model response — and, just as importantly, NOT
+// the reference we uploaded a moment ago.
+//
+// THE TRAP, caught on the first live reference render and worth the detail: an
+// uploaded reference sits in the page at full size, and Gemini tends to answer a
+// portrait reference with a portrait render, so the two are frequently the SAME
+// DIMENSIONS. A "biggest candidate wins" rule is then a coin flip between them.
+// Losing that flip writes the reference back to disk as though it were the render —
+// which means every scene in a book would silently be the character sheet again, and
+// it would look exactly like a working pipeline. The `.md5` of two consecutive
+// renders being equal was the only symptom.
+//
+// So this does not rely on size to tell them apart. Three independent discriminators,
+// because any one of them is a class name Google can change:
+//
+//   * scope to the last `model-response` and nothing else. `message-content` was in
+//     this list and is the wrapper around the WHOLE conversation, user query included,
+//     which is what let the upload into the candidate set at all.
+//   * reject anything inside a user-query or file-preview container.
+//   * reject the upload by its alt text, and prefer the render by its own.
 const PROBE_IMAGES = `(() => {
-  const scopes = document.querySelectorAll(
-    'model-response, message-content, [data-test-id="model-response"]');
-  const scope = scopes.length ? scopes[scopes.length - 1] : document.body;
+  const responses = document.querySelectorAll('model-response, [data-test-id="model-response"]');
+  const scope = responses.length ? responses[responses.length - 1] : null;
+  if (!scope) return JSON.stringify([]);
+
+  const REJECT_ANCESTOR =
+    'user-query, user-query-content, user-query-file-preview, user-query-file-carousel, ' +
+    '.file-preview-container, [data-test-id="user-query"]';
+  const PREFER =
+    'single-image img, generated-image img, .generated-image img, img[alt*="AI generated" i]';
+
   const out = [];
   for (const img of scope.querySelectorAll('img')) {
     const src = img.currentSrc || img.src || '';
     if (!src || src.startsWith('data:image/gif')) continue;
     if (!img.complete) continue;
     const w = img.naturalWidth, h = img.naturalHeight;
-    if (w < 256 || h < 256) continue;          // avatars, icons, spinners
-    out.push({ src, width: w, height: h });
+    if (w < 256 || h < 256) continue;                    // avatars, icons, spinners
+    if (img.closest(REJECT_ANCESTOR)) continue;          // an attachment, not a render
+    const alt = img.getAttribute('alt') || '';
+    if (/upload/i.test(alt)) continue;                   // "Uploaded image preview"
+    out.push({ src, width: w, height: h, generated: img.matches(PREFER) });
   }
   return JSON.stringify(out);
 })()`;
@@ -224,10 +252,16 @@ const PROBE_BUSY = `(() => {
 
 // The newest response as text, for the two outcomes that are not a picture: a refusal
 // and a usage ceiling.
+//
+// Scoped to `model-response` and NOT `message-content`, for the same reason the image
+// probe is: `message-content` wraps the whole conversation including the prompt we
+// just sent. A scene description mentioning what a character "can't create" would
+// then read back as the model refusing, and the slot would drop a rung down the
+// ladder for a sentence we wrote ourselves.
 const PROBE_TEXT = `(() => {
-  const scopes = document.querySelectorAll('model-response, message-content');
-  const scope = scopes.length ? scopes[scopes.length - 1] : document.body;
-  return (scope.innerText || '').slice(0, 1200);
+  const scopes = document.querySelectorAll('model-response, [data-test-id="model-response"]');
+  if (!scopes.length) return '';
+  return (scopes[scopes.length - 1].innerText || '').slice(0, 1200);
 })()`;
 
 const LIMIT_PATTERNS = [
@@ -261,24 +295,17 @@ function classifyText(text) {
 // that we could not save is the most annoying possible failure, so this tries hard.
 
 async function imageBytes(cdp, src, frameId) {
-  // 1. In-page fetch. Works for blob: URLs and anything same-origin, and inherits the
-  //    session's cookies for free.
-  try {
-    const b64 = await cdp.eval(`(async () => {
-      const r = await fetch(${JSON.stringify(src)});
-      if (!r.ok) return "";
-      const buf = new Uint8Array(await r.arrayBuffer());
-      let s = "";
-      for (let i = 0; i < buf.length; i += 0x8000) {
-        s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-      }
-      return btoa(s);
-    })()`);
-    if (b64) return Buffer.from(b64, "base64");
-  } catch { /* fall through */ }
-
-  // 2. The renderer already downloaded it to display it, so ask Chrome for its copy.
-  //    This is the arm that survives a cross-origin CDN with no CORS header.
+  // 1. Chrome's own copy of the resource. Best arm by a distance: it is the ORIGINAL
+  //    bytes, at the original compression, with no re-encode — and it works on a
+  //    revoked blob, which is the normal case here.
+  //
+  //    This arm silently did nothing for a while. `Page.getFrameTree` returns a Frame
+  //    whose property is `id`; the code destructured `{ frameId }` off it, passed
+  //    undefined, and fell through to arms that cannot serve a blob. The symptom was
+  //    "found a 572x1024 image but could not download it (no bytes)" — a picture
+  //    visibly on screen that we could not save, which is the most annoying failure
+  //    this driver has. Every fallback below it was working as designed; the bug was
+  //    that the good arm never ran.
   try {
     const r = await cdp.send("Page.getResourceContent", { frameId, url: src });
     if (r?.content) {
@@ -286,18 +313,67 @@ async function imageBytes(cdp, src, frameId) {
     }
   } catch { /* fall through */ }
 
-  // 3. Plain fetch from Node with the session's cookies attached.
+  // 2. In-page fetch. Works for a blob that has not been revoked and for anything
+  //    same-origin, and inherits the session's cookies for free.
   try {
-    const { cookies } = await cdp.send("Network.getAllCookies");
-    const jar = cookies
-      .filter((c) => /google|gstatic|googleusercontent/.test(c.domain))
-      .map((c) => `${c.name}=${c.value}`).join("; ");
-    const r = await fetch(src, { headers: { cookie: jar } });
-    if (r.ok) return Buffer.from(await r.arrayBuffer());
+    const b64 = await cdp.eval(`(async () => {
+      try {
+        const r = await fetch(${JSON.stringify(src)});
+        if (!r.ok) return "";
+        const buf = new Uint8Array(await r.arrayBuffer());
+        let s = "";
+        for (let i = 0; i < buf.length; i += 0x8000) {
+          s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+        }
+        return btoa(s);
+      } catch (e) { return ""; }
+    })()`);
+    if (b64) return Buffer.from(b64, "base64");
+  } catch { /* fall through */ }
+
+  // 3. Re-encode what the renderer already decoded. The picture is on screen, so the
+  //    bitmap exists whatever happened to the URL that delivered it — this arm works
+  //    on a revoked blob and needs no network at all. It is third rather than first
+  //    because it is a re-encode: a lossless PNG of the decoded image, which is
+  //    correct but several times the size of the JPEG it came from.
+  //
+  //    Only possible because the blob is same-origin, so the canvas is not tainted.
+  //    A cross-origin CDN image without CORS headers would throw here, which is
+  //    exactly why this is not the only fallback.
+  try {
+    const dataUrl = await cdp.eval(`(() => {
+      try {
+        const imgs = [...document.querySelectorAll('img')];
+        const img = imgs.find((i) => (i.currentSrc || i.src) === ${JSON.stringify(src)});
+        if (!img || !img.naturalWidth) return "";
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        return c.toDataURL('image/png');
+      } catch (e) { return ""; }
+    })()`);
+    const comma = (dataUrl || "").indexOf(",");
+    if (comma > 0) return Buffer.from(dataUrl.slice(comma + 1), "base64");
+  } catch { /* fall through */ }
+
+  // 4. Plain fetch from Node with the session's cookies attached. Cannot serve a
+  //    blob: URL at all, and exists for the day Gemini goes back to serving plain
+  //    https image URLs off a CDN.
+  try {
+    if (/^https?:/.test(src)) {
+      const { cookies } = await cdp.send("Network.getAllCookies");
+      const jar = cookies
+        .filter((c) => /google|gstatic|googleusercontent/.test(c.domain))
+        .map((c) => `${c.name}=${c.value}`).join("; ");
+      const r = await fetch(src, { headers: { cookie: jar } });
+      if (r.ok) return Buffer.from(await r.arrayBuffer());
+    }
   } catch { /* fall through */ }
 
   return null;
 }
+
 
 function sniff(buf) {
   if (!buf || buf.length < 12) return null;
@@ -358,7 +434,9 @@ async function render(cdp, args, prompt) {
              reason: notSignedInMessage(`page state: ${state || "never loaded"}`) };
   }
 
-  const { frameId } = (await cdp.send("Page.getFrameTree")).frameTree.frame;
+  // `.id`, NOT `.frameId` — a Frame's identifier is `id`, and getting this wrong
+  // disables the best download arm without raising anything. See `imageBytes`.
+  const frameId = (await cdp.send("Page.getFrameTree")).frameTree.frame.id;
 
   // Attach the reference pictures. These are the locked character sheets and the
   // source art off each character's own wiki, and they are the entire answer to
@@ -436,9 +514,12 @@ async function render(cdp, args, prompt) {
              reason: found.text.replace(/\s+/g, " ").slice(0, 300) };
   }
 
-  // Biggest candidate: when Gemini shows a thumbnail strip alongside the full render,
-  // the one worth keeping is the one with the most pixels in it.
-  const best = found.images.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+  // An image the page positively identifies as generated always beats one that is
+  // merely large; size only breaks ties within a class. Size alone was what let an
+  // uploaded reference win.
+  const best = found.images.sort((a, b) =>
+    (b.generated ? 1 : 0) - (a.generated ? 1 : 0) ||
+    b.width * b.height - a.width * a.height)[0];
   const buf = await imageBytes(cdp, best.src, frameId);
   const mime = sniff(buf);
   if (!buf || !mime) {

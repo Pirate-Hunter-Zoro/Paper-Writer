@@ -147,6 +147,35 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
         self.assertTrue(out.exists())
         self.assertEqual(image_browser.dimensions(out.read_bytes()), (1024, 1536))
 
+    def test_an_uploaded_reference_is_never_saved_as_the_render(self):
+        """The nastiest bug this driver has had, pinned so it cannot come back.
+
+        The real app renders an uploaded reference at full size inside
+        `user-query-file-preview`, and answers a portrait reference with a portrait
+        render — so the attachment and the render are routinely THE SAME DIMENSIONS,
+        and the old "biggest candidate wins" rule chose between them at random. It lost
+        the coin flip on the first live reference render and wrote the reference back
+        to disk as though it were the picture.
+
+        What makes it worth a dedicated test is that it is invisible: every scene in a
+        book would silently be the character sheet again, `ok:true` every time, the
+        sanity floor satisfied, and the vision critic would even PASS it for identity —
+        it is, after all, exactly the right character. Two renders having the same md5
+        was the only symptom."""
+        sheet = self.tmp / "decoy-sheet.png"
+        sheet.write_bytes(_fixture_png(1024, 1536))
+        out = self.tmp / "decoy.png"
+        result = self.run_driver("decoy", out, refs=[sheet])
+        self.assertTrue(result["ok"], result)
+        # Digests, not raw bytes: these are multi-megabyte images and a failed
+        # assertEqual on the bytes themselves buries the run in 25 MB of repr.
+        import hashlib
+        saved = hashlib.md5(out.read_bytes()).hexdigest()
+        uploaded = hashlib.md5(sheet.read_bytes()).hexdigest()
+        self.assertEqual((result["width"], result["height"]), (1024, 1536))
+        self.assertNotEqual(saved, uploaded,
+                            "the driver saved the uploaded reference, not the render")
+
     def test_reference_pictures_are_uploaded(self):
         """The load-bearing half of visual consistency: the locked character sheets are
         attached to the chat so the render is conditioned on the real faces. A render

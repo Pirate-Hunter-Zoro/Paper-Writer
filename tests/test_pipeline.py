@@ -196,6 +196,28 @@ class PromptPackTests(unittest.TestCase):
         self.assertNotIn("crowd behind", less)
 
 
+
+class TheEpubDeclaresWhatThePicturesActuallyAre(unittest.TestCase):
+    """Gemini returns JPEG, and every path in this project is named `.png`.
+
+    So a `.png` on disk routinely holds JPEG bytes, and the manifest has to declare the
+    content rather than the filename. An epub saying `image/png` over JPEG data is
+    invalid and a strict reader may refuse it — while building, validating and opening
+    fine everywhere anyone would casually check, which is what makes it worth a test."""
+
+    def test_a_jpeg_is_declared_as_a_jpeg(self):
+        jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+        self.assertEqual(binding._media_type(jpeg), "image/jpeg")
+
+    def test_a_png_is_declared_as_a_png(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        self.assertEqual(binding._media_type(png), "image/png")
+
+    def test_an_unreadable_header_falls_back_rather_than_failing_the_book(self):
+        """The sanity floor should stop this reaching disk. If it ever does, a book
+        that binds with one questionable declaration beats a book that does not bind."""
+        self.assertEqual(binding._media_type(b"not an image at all"), "image/png")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
@@ -239,6 +261,28 @@ class ChapterHeadingTests(unittest.TestCase):
         self.assertIn("The Ruined City", page)
         self.assertIn("The Ruined City", nav)
 
+
+
+class TheEpubDeclaresWhatThePicturesActuallyAre(unittest.TestCase):
+    """Gemini returns JPEG, and every path in this project is named `.png`.
+
+    So a `.png` on disk routinely holds JPEG bytes, and the manifest has to declare the
+    content rather than the filename. An epub saying `image/png` over JPEG data is
+    invalid and a strict reader may refuse it — while building, validating and opening
+    fine everywhere anyone would casually check, which is what makes it worth a test."""
+
+    def test_a_jpeg_is_declared_as_a_jpeg(self):
+        jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+        self.assertEqual(binding._media_type(jpeg), "image/jpeg")
+
+    def test_a_png_is_declared_as_a_png(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        self.assertEqual(binding._media_type(png), "image/png")
+
+    def test_an_unreadable_header_falls_back_rather_than_failing_the_book(self):
+        """The sanity floor should stop this reaching disk. If it ever does, a book
+        that binds with one questionable declaration beats a book that does not bind."""
+        self.assertEqual(binding._media_type(b"not an image at all"), "image/png")
 
 if __name__ == "__main__":
     unittest.main()
