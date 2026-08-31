@@ -736,6 +736,47 @@ class TheWrongCharacterGetsPromoted(unittest.TestCase):
                         f"the promoted character must come first; got {[r.name for r in refs]}")
 
 
+class TrimmingTheCastMustTrimTheDescription(unittest.TestCase):
+    """Rung 2 keeps one character and drops the rest — but the staging line is a
+    sentence about several people, and a model handed that plus a one-name cast draws
+    the others anyway, now with no sheet, no species and no reference because they are
+    no longer in the list. The rung meant to fix an identity failure manufactures a
+    worse one.
+
+    Rung 3 has countermanded its description since the crossover book; rung 2 never
+    did, which was an inconsistency rather than a decision. Seen repeatedly here: at
+    rung 2 a background Kel Dor came back as an elderly human, a Togruta as a woman in
+    a headwrap, and the protagonist as a boy — each a character the trim had just
+    dropped."""
+
+    def _cast(self):
+        return [("Alyn Tenar", {"appearance": "Human female, nineteen",
+                                "age": "19", "costumes": ["tunic"]}),
+                ("Master Tol Braga", {"appearance": "Kel Dor male, sixty-five",
+                                      "age": "65", "costumes": ["robes"]})]
+
+    def test_rung_two_forbids_the_dropped_character(self):
+        prompt = illustration.build_scene_prompt(
+            "Alyn kneels while Tol Braga speaks", self._cast(), simplify=2,
+            anchored=True)
+        self.assertIn("ONLY person", prompt)
+        self.assertIn("Master Tol Braga", prompt)
+        self.assertIn("must NOT appear", prompt)
+
+    def test_a_single_hander_needs_no_countermand(self):
+        """Nobody was dropped, so there is nothing to forbid — and an instruction
+        about absent people is noise in a prompt that is already long."""
+        prompt = illustration.build_scene_prompt(
+            "Alyn kneels alone", self._cast()[:1], simplify=2, anchored=True)
+        self.assertNotIn("must NOT appear", prompt)
+
+    def test_rung_three_still_empties_the_room(self):
+        """The existing rung is unchanged."""
+        prompt = illustration.build_scene_prompt(
+            "Alyn kneels while Tol Braga speaks", self._cast(), simplify=3)
+        self.assertIn("EMPTY room", prompt)
+
+
 class ASexIsACategoryNotALikeness(unittest.TestCase):
     """The protagonist was rendered three times as a boy.
 
