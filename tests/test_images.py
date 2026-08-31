@@ -1268,13 +1268,41 @@ class TheLadderCarriesOnAcrossVisits(unittest.TestCase):
         self.assertEqual(illustration.attempts_so_far(dest), 3)
         self.assertFalse(illustration.due(dest))
 
-    def test_the_wait_doubles_and_is_capped(self):
+    def test_the_wait_doubles_per_visit_and_is_capped(self):
+        """The backoff counts VISITS, not rungs.
+
+        It used to be driven by the same number as the ladder, which was fine while
+        every failed attempt cost a rung. Once a refusal stopped costing one, that
+        number stopped growing for a slot the vendor simply refuses — and the backoff
+        stopped growing with it, so the slot was retried every five minutes forever
+        instead of easing off. `defer` now counts its own visits."""
         dest = paths.scene_image_path("ladder", 1, 1, 2)
-        waits = [illustration.defer(dest, "no", n) for n in (3, 4, 5, 40)]
-        self.assertEqual(waits[0], config.IMAGE_RETRY_BACKOFF_BASE_SEC)
-        self.assertEqual(waits[1], config.IMAGE_RETRY_BACKOFF_BASE_SEC * 2)
-        self.assertEqual(waits[2], config.IMAGE_RETRY_BACKOFF_BASE_SEC * 4)
-        self.assertEqual(waits[3], config.IMAGE_RETRY_BACKOFF_MAX_SEC)
+        base = config.IMAGE_RETRY_BACKOFF_BASE_SEC
+        # The rung stays at 0 throughout, exactly as it would for a refused slot.
+        waits = [illustration.defer(dest, "refused", 0) for _ in range(6)]
+        self.assertEqual(waits[0], base)
+        self.assertEqual(waits[1], base * 2)
+        self.assertEqual(waits[2], base * 4)
+        self.assertEqual(waits[-1], config.IMAGE_RETRY_BACKOFF_MAX_SEC)
+
+    def test_a_refused_slot_keeps_its_rung_across_visits(self):
+        """The bug this pair of numbers was split to fix: `defer` floored its argument
+        at 1, so a slot parked at rung 0 came back at rung 1 and crept a rung per visit
+        despite never once being rejected."""
+        dest = paths.scene_image_path("ladder", 1, 1, 3)
+        for _ in range(3):
+            illustration.defer(dest, "refused", 0)
+            self.assertEqual(illustration.attempts_so_far(dest), 0)
+
+    def test_an_old_sidecar_is_read_as_a_rung(self):
+        """Sidecars written before the split stored one number meaning both. Reading it
+        as a rung is what the ladder used it for."""
+        import json as _json
+        dest = paths.scene_image_path("ladder", 1, 1, 4)
+        marker = illustration.retry_marker(dest)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(_json.dumps({"attempts": 2, "next_at": 0}))
+        self.assertEqual(illustration.attempts_so_far(dest), 2)
 
     def test_a_reference_backed_prompt_drops_the_appearance_and_keeps_the_costume(self):
         """Prose and pictures always disagree, and a model handed both averages them.
