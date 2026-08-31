@@ -261,6 +261,49 @@ def keep_rate(series_id):
     return min(1.0, max(0.05, kept / billed))
 
 
+def _scene_references(sid, book_num, names):
+    """The pictures attached to one scene render, in priority order.
+
+    SHEETS FIRST, FOR EVERYONE, THEN SOURCE ART FOR THE LEADS. Order is load-bearing
+    because the list is truncated at `IMAGE_MAX_UPLOADS`, and truncation takes the
+    front. Interleaved per character — lead's art, lead's sheet, second's art,
+    second's sheet — a four-hander builds a list of eight and the cap of six silently
+    removes the LAST characters' sheets. Those characters then arrive with no
+    reference at all, which is the case the design says must never happen: everyone
+    outside the lead is anchored by their locked sheet alone.
+
+    It showed up as a background figure rendered as a completely different person — a
+    leathery sixty-year-old with untidy grey hair came back as a clean-shaven man of
+    forty-five — while the log reported eight references attached.
+
+    A function rather than inline, because `render_scene` rebuilds this mid-loop when
+    the critic names somebody as wrong and that person is promoted to the front."""
+    lead = max(1, config.IMAGE_REFERENCE_CHARACTERS)
+    sheets, extra_art = [], []
+    for position, name in enumerate(names):
+        sheet = paths.sheet_path(sid, book_num, name)
+        if sheet.exists():
+            sheets.append(sheet)
+        if position < lead:
+            extra_art += refart.for_character(
+                sid, book_num, name)[:config.REF_IMAGES_PER_RENDER]
+    return sheets + extra_art
+
+
+def flagged_wrong(verdict, known_names):
+    """Which of this scene's characters the critic says came out wrong.
+
+    Reads `wrong_who` when the critic supplies it, and falls back to scanning the
+    issue text for the scene's own cast names — older verdicts on disk predate the
+    field, and a critic occasionally forgets it. Matching only against names already
+    in this scene is what keeps the fallback safe: it cannot invent a character."""
+    named = [n for n in (verdict.get("wrong_who") or []) if n in known_names]
+    if named:
+        return named
+    blob = " ".join(str(i) for i in (verdict.get("issues") or []))
+    return [n for n in known_names if n and n in blob]
+
+
 def _locked_place(series_id, name):
     """One location's locked description out of the series bible."""
     bible = storage.load_json(paths.series_bible_path(series_id), {})
@@ -361,7 +404,8 @@ def vision_verdict(image_path, spec_text, references=(), log_fn=None):
         prompts.template("vision"), facts, out_path,
         role="vision",
         artifact="your verdict as strict JSON",
-        shape='{"passed": bool, "wrong_character": bool, "issues": [str, ...]}',
+        shape='{"passed": bool, "wrong_character": bool, '
+              '"wrong_who": [str, ...], "issues": [str, ...]}',
         log_fn=log_fn)
 
 
@@ -792,6 +836,61 @@ def species_of(spec):
     return label if len(label.split()) <= 3 else ""
 
 
+# Markings a reader identifies somebody by, which a model demonstrably does not read
+# off a reference picture. Deliberately a short, concrete list: these are discrete
+# FACTS about a face, not descriptions OF a face, and the difference is the whole
+# reason it is safe to put them back in the prompt.
+_SIGNATURE_MARKERS = (
+    "scar", "tattoo", "birthmark", "brand", "burn",
+    "prosthetic", "cybernetic", "implant", "eyepatch", "patch over",
+    "buzz cut", "shaved", "bald", "braid", "topknot", "dreadlock",
+    "missing", "blind", "horn", "tusk", "cravat", "monocle", "spectacles",
+)
+
+# How many of them reach the prompt. Two, because the point is a silhouette cue, not a
+# second appearance paragraph — and the paragraph is exactly what a reference render
+# must not be given back.
+_SIGNATURE_LIMIT = 2
+
+
+def signature_marks(spec):
+    """One or two discrete identifying markings from a locked appearance.
+
+    THIS DELIBERATELY BENDS "where a reference exists, the words stop describing the
+    face", and the bend is narrow. That rule is right about descriptions: prose and
+    pictures disagree about a jaw, and a model handed both averages them into a
+    stranger. It is wrong about a discrete marking, which prose states exactly and
+    which the model has repeatedly failed to take from the picture.
+
+    Jaric Kaedan is the case. His sheet shows a tight dark buzz cut and a pale vertical
+    scar through the left eyebrow — "the first thing anyone notices about his face" —
+    and across chapters 6, 7 and 8 he was rendered with soft swept hair and no scar, at
+    every rung including the one with every reference attached. Three attempts, three
+    rejections, one slot lost to an empty room.
+
+    A scar is not a likeness. Two of them at most, so this stays a silhouette cue."""
+    text = str((spec or {}).get("appearance") or "")
+    out = []
+    # Em-dashes separate clauses here as often as commas do — the locked appearances
+    # are written with them — and a clause that runs past ~110 characters has stopped
+    # being a marking and started being a description again.
+    for clause in re.split(r"[;,.—–]", text):
+        c = " ".join(clause.split()).strip(" -")
+        # Clauses inherit the conjunction that joined them ("and very short dark hair"),
+        # which reads as a fragment in a list of facts.
+        for lead in ("and ", "with ", "plus ", "but "):
+            if c.lower().startswith(lead):
+                c = c[len(lead):]
+        c = c[:1].upper() + c[1:] if c else c
+        if not c or len(c) > 110:
+            continue
+        if any(m in c.lower() for m in _SIGNATURE_MARKERS):
+            out.append(c.rstrip("."))
+        if len(out) >= _SIGNATURE_LIMIT:
+            break
+    return out
+
+
 def _costume_line(name, spec, chapter_num=None):
     """Name and this chapter's costume, and nothing else.
 
@@ -819,7 +918,11 @@ def _costume_line(name, spec, chapter_num=None):
     species = species_of(spec)
     bits = [b for b in (species, age) if b]
     who = f"{name} ({', '.join(bits)})" if bits else name
-    return f"{who}: {costume}." if costume else f"{who}: as in the reference."
+    line = f"{who}: {costume}." if costume else f"{who}: as in the reference."
+    marks = signature_marks(spec)
+    if marks:
+        line += f" Always: {'; '.join(marks)}."
+    return line
 
 
 def identity_block(cast_specs, chapter_num=None):
@@ -1377,33 +1480,7 @@ def render_scene(entry, log_fn=None):
     # or two people in front and the rest staged behind; this is the renderer agreeing
     # with it. The people in front are identified by looking like people, and the ones
     # behind are identified by being where the scene says they are.
-    lead = max(1, config.IMAGE_REFERENCE_CHARACTERS)
-    # SHEETS FIRST, FOR EVERYONE, THEN SOURCE ART FOR THE LEADS.
-    #
-    # Order is load-bearing because the list is truncated at `IMAGE_MAX_UPLOADS`
-    # further down, and truncation takes the front. Interleaved per character — lead's
-    # art, lead's sheet, second's art, second's sheet — a four-hander builds a list of
-    # eight and the cap of six silently removes the LAST characters' sheets. Those
-    # characters then arrive with no reference at all, which is precisely the case the
-    # design says must never happen: "everyone else is anchored by their locked sheet
-    # alone."
-    #
-    # It showed up as a background figure rendered as a completely different person —
-    # a leathery sixty-year-old with untidy grey hair came back as a clean-shaven man
-    # of forty-five — while the log cheerfully reported eight references attached.
-    #
-    # Every character's sheet is one picture and is the whole of their identity budget;
-    # source art is a top-up for the one or two the composition puts in front. So the
-    # sheets go first and the top-ups compete for whatever room is left.
-    sheets, extra_art = [], []
-    for position, name in enumerate(names):
-        sheet = paths.sheet_path(sid, book_num, name)
-        if sheet.exists():
-            sheets.append(sheet)
-        if position < lead:
-            extra_art += refart.for_character(
-                sid, book_num, name)[:config.REF_IMAGES_PER_RENDER]
-    references = sheets + extra_art
+    references = _scene_references(sid, book_num, names)
     orientation = entry.get("orientation", "portrait")
     aspect = _aspect_for(orientation)
     # Identity ground truth for the critic. Stored at enqueue time; rebuilt from the
@@ -1491,6 +1568,29 @@ def render_scene(entry, log_fn=None):
             log_fn(f"scene {dest.name} rejected (attempt {attempt}, "
                    f"simplify={rung})"
                    + (" [WRONG CHARACTER]" if wrong_character else "") + f": {last}")
+
+        # PROMOTE WHOEVER CAME OUT WRONG, rather than simply asking for less.
+        #
+        # The ladder's answer to any failure is a plainer composition, and at rung 2
+        # that means keeping only the FIRST character — whoever the art director
+        # happened to list first. When the failure is "this specific person is not
+        # himself", that is the wrong lever: it drops the person who needs the
+        # reference pictures most and keeps someone who was already fine.
+        #
+        # Measured on Jaric Kaedan, who failed identity across chapters 6, 7 and 8 —
+        # each time a non-lead, each time losing his sheet to the cast truncation, each
+        # time drifting further until the slot landed on an empty room. Moving him to
+        # the front gives him the full reference set and lets him survive the next
+        # rung's trim.
+        if wrong_character:
+            culprits = flagged_wrong(verdict, names)
+            if culprits:
+                names = culprits + [n for n in names if n not in culprits]
+                references = _scene_references(sid, book_num, names)
+                if log_fn:
+                    log_fn(f"scene {dest.name}: {', '.join(culprits)} came out wrong, "
+                           f"so the next attempt puts them first and gives them the "
+                           f"reference pictures")
         rung += 1
 
     # Out of attempts for this visit with a rendered image in hand. Keep it — UNLESS

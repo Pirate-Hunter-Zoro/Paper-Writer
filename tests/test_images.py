@@ -640,6 +640,96 @@ class TheTopUpDoesNotChaseWorkTheCapForbids(unittest.TestCase):
                          "a chapter at the cap the enqueuer will apply is not short")
 
 
+class TheWrongCharacterGetsPromoted(unittest.TestCase):
+    """The ladder's answer to any failure is a plainer composition, and at rung 2 that
+    means keeping only the FIRST character — whoever the art director listed first.
+
+    When the failure is "this specific person is not himself", that drops the person
+    who needs the reference pictures most and keeps one who was already fine. Jaric
+    Kaedan failed identity across chapters 6, 7 and 8, a non-lead every time, losing
+    his sheet to the cast truncation and drifting further each attempt until the slot
+    landed on an empty room."""
+
+    def test_the_critic_naming_someone_moves_them_to_the_front(self):
+        names = ["Alyn Tenar", "Kira Carsen", "Master Jaric Kaedan"]
+        verdict = {"wrong_character": True, "wrong_who": ["Master Jaric Kaedan"],
+                   "issues": ["the scar is absent"]}
+        self.assertEqual(illustration.flagged_wrong(verdict, names),
+                         ["Master Jaric Kaedan"])
+
+    def test_an_older_verdict_without_the_field_still_works(self):
+        """Verdicts already on disk predate `wrong_who`, and a critic occasionally
+        forgets it. The issue text names the character, so scan that instead."""
+        names = ["Alyn Tenar", "Master Jaric Kaedan"]
+        verdict = {"wrong_character": True,
+                   "issues": ["Master Jaric Kaedan: the signature scar is absent."]}
+        self.assertEqual(illustration.flagged_wrong(verdict, names),
+                         ["Master Jaric Kaedan"])
+
+    def test_it_cannot_invent_a_character_who_is_not_in_the_scene(self):
+        """The fallback matches only against this scene's own cast, so a critic
+        mentioning somebody absent cannot promote a stranger into the frame."""
+        names = ["Alyn Tenar"]
+        verdict = {"wrong_character": True, "wrong_who": ["Darth Vader"],
+                   "issues": ["Darth Vader is wrong"]}
+        self.assertEqual(illustration.flagged_wrong(verdict, names), [])
+
+    def test_a_promoted_character_keeps_their_references_after_the_trim(self):
+        """The point of promoting: at the next rung the cast is cut to the first
+        entry, and the flagged character has to be the one that survives."""
+        from fanfic import paths
+        names = ["A Adams", "B Brown", "C Clark"]
+        for n in names:
+            sheet = paths.sheet_path("s", 1, n)
+            sheet.parent.mkdir(parents=True, exist_ok=True)
+            sheet.write_bytes(support.PNG)
+        promoted = ["C Clark"] + [n for n in names if n != "C Clark"]
+        refs = illustration._scene_references("s", 1, promoted)
+        self.assertTrue(refs[0].name.startswith("c-clark"),
+                        f"the promoted character must come first; got {[r.name for r in refs]}")
+
+
+class ASignatureMarkingSurvivesTheTrim(unittest.TestCase):
+    """An anchored prompt drops the appearance paragraph, because prose and pictures
+    disagree about a face and a model handed both averages them into a stranger.
+
+    That is right about DESCRIPTIONS and wrong about discrete MARKINGS. A scar is not
+    a likeness — prose states it exactly, and the model repeatedly failed to take it
+    from the picture. Kaedan's own locked design calls his scar "the first thing
+    anyone notices about his face", and he was rendered without it three times with
+    every reference attached."""
+
+    def test_a_scar_survives_into_an_anchored_prompt(self):
+        spec = {"appearance": "Human male, forty-five, brown eyes. A pale vertical "
+                              "scar cuts through his left eyebrow.",
+                "age": "45", "costumes": ["charcoal robes"]}
+        line = illustration._costume_line("Jaric Kaedan", spec, 1)
+        self.assertIn("scar", line.lower())
+        self.assertIn("Always:", line)
+
+    def test_an_unremarkable_face_adds_nothing(self):
+        """The guard against this becoming the appearance paragraph again."""
+        spec = {"appearance": "Human female, nineteen, lean and long-limbed.",
+                "age": "19", "costumes": ["tan robes"]}
+        line = illustration._costume_line("Alyn Tenar", spec, 1)
+        self.assertNotIn("Always:", line)
+
+    def test_it_stays_short(self):
+        """Two markings at most: a silhouette cue, not a second description."""
+        spec = {"appearance": "Human male, scar on the brow, tattoo on the neck, "
+                              "shaved scalp, prosthetic hand, burn across the jaw.",
+                "age": "40", "costumes": ["robes"]}
+        marks = illustration.signature_marks(spec)
+        self.assertLessEqual(len(marks), 2)
+
+    def test_a_long_clause_is_not_a_marking(self):
+        """A sentence about a face is a description; the rule is discrete facts."""
+        spec = {"appearance": "Human male. He has the sort of scarred and weathered "
+                              "look that comes from a lifetime spent outdoors in "
+                              "places nobody sensible would choose to be stationed."}
+        self.assertEqual(illustration.signature_marks(spec), [])
+
+
 class SpeciesIsNotAFace(unittest.TestCase):
     """An anchored prompt drops the appearance paragraph, because prose and pictures
     disagree about a face and a model handed both averages them. That is right about

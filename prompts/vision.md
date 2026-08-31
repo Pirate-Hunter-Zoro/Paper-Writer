@@ -100,7 +100,14 @@ the reference in front of you.
 
 ## Output
 
-Strict JSON: `{"passed": bool, "wrong_character": bool, "issues": [str, ...]}`.
+Strict JSON: `{"passed": bool, "wrong_character": bool, "wrong_who": [str, ...], "issues": [str, ...]}`.
+
+`wrong_who` lists the EXACT names, spelled as they were given to you above, of every
+character who is not recognisably themselves. Leave it `[]` when `wrong_character` is
+false. It is not decoration: the harness uses it to decide who gets the reference
+pictures on the next attempt, so a character you name here is one the next render will
+try harder to get right. Naming nobody when somebody is wrong means the next attempt
+makes the same mistake.
 
 `passed` is false only if you found something in the two questions above. Each issue
 names the specific identity or craft failure, and for an identity failure, say what the
