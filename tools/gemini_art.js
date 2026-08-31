@@ -537,6 +537,12 @@ async function render(cdp, args, prompt) {
   // and the driver waited out the full ten-minute timeout for something that was never
   // coming. A handful of quiet polls is enough to call it.
   let settledEmpty = 0;
+  // When the page FIRST claimed to be working, so an endless "Creating your image"
+  // can be told from a slow one. Observed renders finish in 20-40s; twice now the
+  // page has sat in that state for the entire ten-minute budget and produced nothing.
+  // Four minutes is generous headroom over anything real and saves six of those ten.
+  let workingSince = 0;
+  const WORKING_MAX_MS = Number(process.env.GEMINI_ART_WORKING_MAX_MS) || 240000;
   const found = await waitFor(async () => {
     const text = String(await cdp.eval(PROBE_TEXT) || "");
     if (text) lastText = text;
@@ -552,7 +558,18 @@ async function render(cdp, args, prompt) {
     const images = JSON.parse(await cdp.eval(PROBE_IMAGES) || "[]");
     if (images.length && !busy && !working) return { images };
 
-    if (busy || working) { settledEmpty = 0; return null; }   // still going
+    if (busy || working) {
+      settledEmpty = 0;
+      if (!workingSince) workingSince = Date.now();
+      if (Date.now() - workingSince > WORKING_MAX_MS) {
+        return { verdict: "no_image",
+                 text: `the page stayed in a working state for ` +
+                       `${Math.round(WORKING_MAX_MS / 1000)}s without producing an ` +
+                       `image (last said: ${JSON.stringify(text.slice(0, 80))})` };
+      }
+      return null;                                             // still going
+    }
+    workingSince = 0;                                          // it stopped working
     if (images.length) { settledEmpty = 0; return null; }      // settling on a picture
 
     const verdict = classifyText(text);
