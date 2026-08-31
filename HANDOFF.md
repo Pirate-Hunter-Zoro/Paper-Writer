@@ -358,6 +358,26 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   `prompt_without_refs` change (ruled out — 44 of 49 occurrences had no reference
   refusal anywhere near them).
 
+  **What the outage looks like while it lasts, so you can recognise it:** each slot
+  spends 3 attempts x 420s per ladder rung timing out, reaches rung 3 in about an hour,
+  and then renders fine — rung 3 attaches no references, so nothing blocks the send. The
+  result is an atmospheric establishing shot instead of the scene's cast (§6c: these are
+  good pictures, just not the ones asked for). So the book keeps moving at roughly one
+  picture per slot per hour, and the ~35 pending slots would all come out as
+  establishing shots if this never clears.
+
+  **A mitigation exists and I deliberately did not apply it.** Setting
+  `FANFIC_IMAGE_MAX_UPLOADS=0` would skip attachment entirely and let renders through at
+  once; it needs one correct-anyway code change alongside it, because `anchored` is
+  currently `rung < 3` and would trim the appearance paragraph out of a prompt that has
+  no pictures to carry the face (the Kira failure, §6z). Done properly it yields
+  prose-anchored renders WITH the cast, which is strictly better than empty rooms.
+  The reason not to: **nobody is here to turn it back on.** A temporary mitigation that
+  is never reverted silently disables the whole reference-sheet apparatus — the answer
+  to hard problem 3 — for the rest of the book. An hour-per-slot slowdown is
+  recoverable; a book quietly finished without visual consistency is not. If you apply
+  it, set a reminder to remove it.
+
   **The exact gap is one line in `attachRefs` (`tools/gemini_art.js`), and the machinery
   to handle it already exists.** That function waits until the number of preview chips
   reaches `refs.length` and then returns `true`. **A chip that APPEARED is not a chip
