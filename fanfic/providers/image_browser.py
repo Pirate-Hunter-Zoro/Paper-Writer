@@ -259,7 +259,7 @@ def _instruction(aspect):
 
 
 def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
-             aspect=None):
+             aspect=None, prompt_without_refs=None):
     """Draw one image by driving the browser, and write it to `out_path`.
 
     Raises `NotSignedIn` (a `RuntimeError`) when the profile needs a human,
@@ -306,7 +306,7 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
 
     try:
         _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout,
-                           note)
+                           note, prompt_without_refs=prompt_without_refs)
     finally:
         # Scratch, and it must go whatever happened. Splitting the driver call out of
         # this function once moved the cleanup into the success path alone, and a
@@ -316,7 +316,7 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
 
 
 def _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout,
-                       note):
+                       note, prompt_without_refs=None):
     """One render, with the one retry that is worth making automatically."""
     result = _run(cmd, timeout, note)
 
@@ -347,7 +347,21 @@ def _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout
              + (f", saying: {why[:160]}" if why else " and did not say why")
              + ". Redrawing from the description alone; the result is anchored on "
                "prose, not on art.")
-        prompt_file.write_text(f"{_instruction(aspect)}\n\n{prompt}", encoding="utf-8")
+        # THE PROMPT CHANGES TOO, and for a while it did not, which is the whole
+        # defect. `build_scene_prompt(anchored=True)` DROPS the appearance paragraph
+        # because pictures carry a face better than prose can — that is right, while
+        # the pictures are attached. Here they have just been refused, so the render is
+        # about to happen with no reference at all AND with the prose that would have
+        # anchored it already stripped out.
+        #
+        # Kira Carsen is the case. Her locked design is dark red hair, "the single
+        # feature a reader recognises her by"; her prompt says nothing about hair,
+        # deliberately, because her sheet was supposed to be attached. Gemini refused
+        # all six references and she was drawn as a golden blonde three times running.
+        # This fallback fires on ~40% of this book's renders, so the trimmed prose was
+        # doing the anchoring far more often than the doctrine assumes.
+        text = prompt_without_refs or prompt
+        prompt_file.write_text(f"{_instruction(aspect)}\n\n{text}", encoding="utf-8")
         bare = [c for c in cmd if c != "--ref"]
         bare = [c for c in bare if c not in refs]
         result = _run(bare, timeout, note)

@@ -297,7 +297,8 @@ def stub_model_seams():
         return {}                       # no bible changes; the merge is a valid no-op
     bible_update.propose_updates = updates
 
-    def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+    def render(prompt, out_path, references=None, log_fn=None, aspect=None,
+               prompt_without_refs=None):
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(PNG)
     illustration.render = render

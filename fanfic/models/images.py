@@ -35,7 +35,7 @@ def unconfigured_reason():
 
 
 def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
-             aspect=None):
+             aspect=None, prompt_without_refs=None):
     """Draw one image and write it to `out_path`.
 
     `references` are the locked reference-sheet paths and the source art that keep
@@ -44,4 +44,4 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
     render exactly as they did over the API."""
     return providers.image().generate(
         prompt, out_path, references=references, timeout=timeout, log_fn=log_fn,
-        aspect=aspect)
+        aspect=aspect, prompt_without_refs=prompt_without_refs)

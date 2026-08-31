@@ -575,10 +575,9 @@ class APromptMayNotSayWhatIsAbsent(unittest.TestCase):
     exact words. Tarnis, described as having "no lightsaber anywhere on him", was drawn
     holding one.
 
-    It misleads the vision critic too, which is worse because it is invisible. Jaric
-    Kaedan's appearance said "dark throughout this entire book, never blonde and never
-    grey"; the first verdict on him reported "the design states blonde throughout this
-    entire book" and rejected the render for not being blonde."""
+    (A claim that it also misleads the vision critic was withdrawn: the Kaedan verdict
+    that seemed to show it was reporting a locked design that really was blonde at the
+    time.)"""""
 
     def test_the_satele_case(self):
         self.assertEqual(bible.forbids_a_visible_thing(
