@@ -212,24 +212,46 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   the loop through the bad passes that follow it — ch16 went 1, then 3, then 4, and
   shipped the 4; ch17 went 2, then 5, and shipped the 5.
 
-  The obvious fix is to snapshot the prose each pass and ship the best-measured one.
-  **The reason not to is that the metric is noisy, and ch18 is the clearest proof:
-  `1 -> 7 -> 1`.** Up six and back down six, ending exactly where it started. Reading
-  that as real defects requires believing one pass introduced six and the next repaired
-  precisely those six. Across 54 consecutive-pass comparisons the count ROSE 12 times
-  (22%), with jumps of +6, +4, +3 and +2; and ch12 went `7 -> 0 -> 2 -> 0` — the same
-  judge finding nothing, then two defects, then nothing again, on text changed only by
-  craft edits. A "best pass" selected from a signal that swings like this is often just
-  the luckiest read. Selecting the minimum of a noisy signal buys some genuine improvements
-  and some lucky reads, and it changes *what text ships*, which is the most consequential
-  thing in the pipeline. Chapters that ship holding defects are also already queued for
-  the REVISION sweep, which re-reads them against the finished book.
+  **I ran the experiment this section used to ask for, and it settles the size of the
+  problem without settling the fix.** The editor was run three times over the same
+  unchanged accepted chapter — no edits between reads, so any variation is the judge:
 
-  **Revisit with:** a measurement of how often the judge's count is reproducible on
-  UNCHANGED text — run the editor twice over one accepted chapter and compare. If it is
-  stable to within ~1 defect, "keep the best" becomes clearly right. At a 21% rise rate
-  it is not, and this is the single largest known quality leak in the pipeline, so the
-  measurement is worth making properly.
+      ch18 (near-clean)    [0, 1, 1]   spread 1
+      ch17 (shipped 5)     [2, 3, 1]   spread 2
+
+  **The judge is stable to about +-2, and it is not inventing defects.** All three ch17
+  reads named the same core continuity error (Angral's "three more of these"); the
+  rite's-clock contradiction appeared in two of three, and "the Empire has disowned him"
+  in one. The variance is detection *sensitivity* on weaker defects, not disagreement
+  about what is wrong.
+
+  That kills the argument this section used to make. I had cited ch18's `1 -> 7 -> 1` as
+  proof the judge was unreliable — **it is not, because those three passes each read
+  DIFFERENT text.** Every pass edits what it reads. Pass 1 really did introduce about six
+  defects and pass 2 really did repair them.
+
+  Testing the shipped-worse cases against the measured +-2 floor:
+
+      ch4    1 -> 4   gap 3   real degradation
+      ch16   1 -> 4   gap 3   real degradation
+      ch17   2 -> 5   gap 3   real degradation
+      ch6    1 -> 2   gap 1   within noise
+      ch15   3 -> 4   gap 1   within noise
+      ch19   2 -> 4   gap 2   within noise
+
+  So of 19 chapters, **3 lost roughly 9 real blocking defects** to later passes; the
+  other three "losses" are measurement noise. Half the leak I was reporting is not there.
+
+  **Still not implemented, and now for a reason the data cannot resolve.** Shipping an
+  earlier snapshot means discarding every later pass's *craft* edits along with its
+  damage, and nothing measures whether that trade is worth it — blocking count is not
+  the only axis the prose is judged on. A defensible rule would be "ship the earlier
+  version only when it measured at least 3 better", which fires on exactly those three
+  chapters, but it needs prose snapshotted per pass and it changes what text ships,
+  which is the most consequential change available in this pipeline.
+  **What would decide it:** take ch17's best snapshot and its shipped text and have the
+  editor judge them against each other on craft as well as continuity. If the earlier
+  text is not worse to read, the rule is safe.
 
   (Parsing note for anyone recomputing this: `ACCEPTED holding 1 issue(s)` puts a paren
   in the line, so match the LAST parenthesised run of digits and arrows, not the first.)
