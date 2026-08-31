@@ -20,6 +20,8 @@ named **Alyn Tenar** — a light-side Jedi Knight, nineteen, female.
     state       state/series/swtor-jedi-knight/
     outline     46 chapters
     at handoff  9 chapters accepted (~44k words), 22 reference sheets, 39 scene images
+                (ch10 was mid-edit when the daemons were restarted on the morning of
+                 the 31st to deploy fix 13; it resumes from the draft on disk)
     allowance   ~$179 of list-price-equivalent usage (a meter, not a bill)
 
 Three launchd units are loaded and running: `scribe`, `illustrator`, `binder`.
@@ -137,6 +139,28 @@ commits.
     It had invented a Sith Lord outranking Darth Angral. Declared with
     `Original characters: none.` in the prompt.
 
+**Found on the morning of the 31st, monitoring the run:**
+
+13. `A costume is one outfit, not an itinerary` — the protagonist wore three outfits at
+    once for thirty-four chapters and nothing noticed. A progression's `costume` is
+    stamped by the outliner at the ONE chapter that delivers it, and
+    `costume_for_chapter` then hands it verbatim to every later chapter. Alyn's `p.1`
+    was a whole arc in one paragraph — "From the Forge onward a blue-bladed
+    lightsaber ...; from Carrick Station onward ... Guardian robes; from Orgus Din's
+    funeral onward ... burnt orange cloth" — whose three changes land in chapters 9, 18
+    and 37, *not in that order*. The lot was stamped at chapter 9, so from chapter 9 to
+    42 every render was told about robes and a forearm wrap she does not own yet, with
+    her reference sheet attached. Three parts: `bible.describes_multiple_transitions`
+    names the shape, the plan gate rejects it at source so new runs cannot produce one,
+    and `_lock_costume_variants` refuses to stamp one that already exists on disk (which
+    also stops a re-outline undoing the repair). Alyn's bible entry was split by hand
+    into the three correct dated entries; the only change to `series_bible.json` is her
+    `costumes` list, verified by diffing against a pre-repair copy.
+
+    Watch out for `ch17 "Six Hours After the Funeral"` — that is **Tarnis's** funeral on
+    the Imperial side. Orgus Din dies in ch36 and is buried in ch37. I nearly anchored
+    the orange wrap twenty chapters early on the strength of a chapter title.
+
 ---
 
 ## 5. Open items — decided, with reasons
@@ -150,6 +174,19 @@ Nothing here is blocking. These are judgements already made; revisit only with e
 - **Render ceiling raised 800 → 1600.** The book runs at ~3 renders per kept picture,
   not the assumed 2. Hitting the ceiling stops the book dead until a person notices,
   and pictures cost nothing but wall-clock.
+- **T7-O1 wears a restraining bolt for the whole book, and I left it that way.** Same
+  defect as (13) from the other side: `costume_for_chapter` takes the base look to be
+  the FIRST undated entry, and T7's is `"Captive: grey chassis with the red Flesh Raider
+  restraining bolt on the chest (first scene only)"`. So every chapter but 46 is drawn
+  from a first-scene prop, and the parenthetical is an instruction no renderer can act
+  on. It has already set: his **locked reference sheet was drawn with the bolt**, and
+  the vision critic now enforces it book-wide — `ch06_1` was rejected in part for
+  showing "no restraining bolt — a different, instantly recognisable droid".
+  Reordering his wardrobe is a two-line data fix, but it invalidates that sheet, and
+  that sheet cost 4+ refusals to win. Re-rendering it is the coupled half I could not
+  verify without spending renders on a running book, so I stopped at documenting it.
+  **If you take it on, do the data fix and the sheet re-render together, or the prompts
+  and the sheet will disagree and the critic will reject on the difference.**
 - **Not done, and deliberately:** sending only the painterly sheet to scene renders
   instead of photoreal source art. The theory is that the photoreal art is what trips
   the "real people" classifier. It is plausible and untested — if refusals stay high,
@@ -184,6 +221,13 @@ Worth reading. The pattern in all of them is the same.
 
 - **Keep rate** (`grep 'of renders kept' state/scribe.log | tail -1`). It has ranged
   31–42%. Below ~30% and sustained means something regressed in identity or refusals.
+  **Read the timestamps before you conclude anything from it.** It fell 42 → 38 → 37 →
+  32% across the morning of the 31st, which looks like a regression and is not one I
+  can attribute: every render in that window was drawn by code that predates the last
+  two fixes of the night (`cd99b84` 07:07 and `d027835` 07:16), and the illustrator only
+  picked those up when it restarted at 07:16:29. The number is a lagging average over
+  mostly-old renders. Let a few hundred accumulate on current code before reading it as
+  a trend — this is exactly the small-sample trap of §6.
 - **Chapter trajectories** (`grep ACCEPTED state/scribe.log`). Four of nine reach zero
   defects; the rest ship with recorded issues and are queued for the REVISION sweep.
   **That sweep has never run.** It is the mechanism that makes shipping a flawed

@@ -14,6 +14,7 @@ import unittest
 import support                                                   # noqa: F401
 from fanfic import paths
 from fanfic.gates import structure
+from fanfic.memory import bible
 from fanfic.infra import storage
 from fanfic.stages import illustration, outlining, planning, refart
 
@@ -454,3 +455,112 @@ class ACharacterIsLookedUpOnTheirOwnWiki(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ACostumeIsOneOutfitNotAnItinerary(unittest.TestCase):
+    """The protagonist of the live SWTOR run wore three outfits at once for
+    thirty-four chapters, and nothing noticed.
+
+    Her p.1 read: "From the Forge onward a blue-bladed lightsaber hangs at her left
+    hip ...; from Carrick Station onward the sandcloth Padawan tunic is replaced by
+    ... Guardian robes; from Orgus Din's funeral onward a band of burnt orange cloth
+    ...". Three changes, landing in chapters 9, 18 and 17 — not even in that order.
+    The whole paragraph was stamped at chapter 9, and `costume_for_chapter` then handed
+    it verbatim to every chapter from 9 to 42, so each render was told about robes and
+    a forearm wrap she does not own yet while her reference sheet was attached.
+
+    Nothing downstream looks for this. The picture just quietly shows wrong clothes,
+    which is the same silent failure the dated-costume machinery exists to prevent."""
+
+    ITINERARY = ("From the Forge onward a blue-bladed lightsaber hangs at her left hip "
+                 "and the vibrosword is gone; from Carrick Station onward the sandcloth "
+                 "Padawan tunic is replaced by layered brown and bone Guardian robes; "
+                 "from Orgus Din's funeral onward a band of burnt orange cloth is "
+                 "wrapped around her left forearm.")
+    ONE_OUTFIT = ("From his surrender onward the head-covering bodysuit and crimson "
+                  "lightsaber are gone, replaced by plain undyed Jedi robes.")
+
+    def test_the_live_failure_is_recognised(self):
+        self.assertTrue(bible.describes_multiple_transitions(self.ITINERARY))
+
+    def test_the_normal_shape_is_left_alone(self):
+        """One transition marker is the CORRECT shape and by far the commonest. A rule
+        that fired on it would reject thirteen of the fifteen real progressions."""
+        self.assertFalse(bible.describes_multiple_transitions(self.ONE_OUTFIT))
+        self.assertFalse(bible.describes_multiple_transitions(
+            "After the Knighting ceremony her Padawan armour is replaced by darker "
+            "crimson-and-charcoal Knight's light armour with a half-cape."))
+        self.assertFalse(bible.describes_multiple_transitions(
+            "From the day he joins the crew, the blue-grey field coat is worn over a "
+            "Republic-issue medic's rig with a hard shoulder plate."))
+
+    def test_an_absent_or_empty_costume_is_not_an_itinerary(self):
+        for value in (None, "", "   "):
+            self.assertFalse(bible.describes_multiple_transitions(value))
+
+    def test_the_plan_gate_rejects_it_at_source(self):
+        plan = {"characters": [{"name": "Alyn"}],
+                "progressions": [{"id": "p.1", "who": "Alyn", "starts": "a padawan",
+                                  "ends": "a knight", "costume": self.ITINERARY}]}
+        errors = planning._validate_progressions(plan)
+        self.assertTrue(any("more than one change of look" in e for e in errors),
+                        f"no error about the itinerary in {errors}")
+
+    def test_the_plan_gate_passes_a_single_outfit(self):
+        plan = {"characters": [{"name": "Alyn"}],
+                "progressions": [{"id": "p.1", "who": "Alyn", "starts": "a padawan",
+                                  "ends": "a knight", "costume": self.ONE_OUTFIT}]}
+        self.assertEqual(planning._validate_progressions(plan), [])
+
+
+class AnItineraryIsNeverStampedAsAnAnchor(unittest.TestCase):
+    """The gate above stops new plans producing one. This stops the stamper writing an
+    anchor from one that already exists on disk — which is what the live run had, and
+    what a re-outline would otherwise put straight back after it was repaired."""
+
+    def setUp(self):
+        support.wipe_state()
+        self.sid = "itinerary-series"
+        storage.save_json(
+            {"characters": {"Alyn": {"name": "Alyn", "costumes": ["sandcloth tunic"]}}},
+            paths.series_bible_path(self.sid))
+        self.progressions = [
+            {"id": "p.1", "who": "Alyn", "starts": "a", "ends": "b",
+             "costume": ACostumeIsOneOutfitNotAnItinerary.ITINERARY}]
+        self.outline = {"chapters": [{"number": 9, "delivers_progression": ["p.1"]}]}
+
+    def _costumes(self):
+        bible_doc = storage.load_json(paths.series_bible_path(self.sid), {})
+        return bible_doc["characters"]["Alyn"]["costumes"]
+
+    def test_no_dated_entry_is_written(self):
+        outlining._lock_costume_variants(self.sid, self.outline, self.progressions)
+        self.assertEqual(self._costumes(), ["sandcloth tunic"])
+
+    def test_the_refusal_is_logged_loudly(self):
+        said = []
+        outlining._lock_costume_variants(self.sid, self.outline, self.progressions,
+                                         log_fn=said.append)
+        self.assertTrue(any("more than one change of look" in m for m in said),
+                        f"the refusal was silent: {said}")
+
+    def test_a_repaired_wardrobe_survives_a_re_outline(self):
+        """The exact regression: the live bible was repaired by hand into correct dated
+        entries, and a re-outline must not append the itinerary alongside them."""
+        path = paths.series_bible_path(self.sid)
+        doc = storage.load_json(path, {})
+        doc["characters"]["Alyn"]["costumes"] = [
+            "sandcloth tunic",
+            {"from_chapter": 9, "text": "sandcloth tunic, blue saber at the left hip",
+             "because": "p.1"}]
+        storage.save_json(doc, path)
+        outlining._lock_costume_variants(self.sid, self.outline, self.progressions)
+        self.assertEqual(len(self._costumes()), 2)
+        self.assertEqual(illustration.costume_for_chapter(
+            {"costumes": self._costumes()}, 12),
+            "sandcloth tunic, blue saber at the left hip")
+
+    def test_a_single_outfit_progression_is_still_stamped(self):
+        self.progressions[0]["costume"] = ACostumeIsOneOutfitNotAnItinerary.ONE_OUTFIT
+        outlining._lock_costume_variants(self.sid, self.outline, self.progressions)
+        self.assertEqual(len(self._costumes()), 2)

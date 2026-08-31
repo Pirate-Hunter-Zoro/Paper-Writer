@@ -13,6 +13,7 @@ A standalone novel is just a one-book series, so this one path covers both.
 from .. import config, jobspec, paths
 from . import anchoring, correction_brief
 from ..infra import storage
+from ..memory import bible as bible_rules
 from ..memory.bible import (new_canon, new_character, new_series_bible,
                             validate_series_bible)
 from ..models import prompts, text
@@ -300,6 +301,18 @@ def _validate_progressions(plan):
                     f"plan: progression {pid or i} has no `{field}`. Both ends are "
                     f"required — without the starting point it is an assertion about "
                     f"a character rather than a change the book has to earn.")
+        # A progression's costume becomes a DATED anchor: the outliner stamps it at
+        # the one chapter that delivers the progression, and every later chapter is
+        # drawn from it verbatim. So it has to be one outfit, not an itinerary.
+        costume = entry.get("costume")
+        if costume and bible_rules.describes_multiple_transitions(costume):
+            errors.append(
+                f"plan: progression {pid or i} ({who}) has a `costume` describing more "
+                f"than one change of look. A costume is stamped at the single chapter "
+                f"that delivers its progression and is then drawn verbatim in every "
+                f"later chapter, so it must name ONE outfit that is in force from that "
+                f"point — not a sequence. Split it into a separate progression per "
+                f"change, each with its own costume.")
     missing = sorted(names - covered)
     if missing:
         errors.append(

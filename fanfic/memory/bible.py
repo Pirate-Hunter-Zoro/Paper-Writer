@@ -19,6 +19,41 @@ place, so a rejected merge leaves the committed bible untouched.
 """
 
 import copy
+import re
+
+
+# --- What a costume entry may say --------------------------------------------
+
+# Each of these introduces a point in time from which something is in force. A dated
+# costume entry is allowed exactly one of them, because it means "this is what they
+# wear from chapter N" — one state, one start.
+_TRANSITION = re.compile(r"\bonwards?\b|\bafter (?:the|his|her|their|its)\b", re.I)
+
+
+def describes_multiple_transitions(text):
+    """True when a costume names more than one point at which the look changes.
+
+    A costume attached to a progression is stamped by the outliner as the wardrobe in
+    force **from a single chapter** — `illustration.costume_for_chapter` picks the
+    latest dated entry that has started and returns it whole. So a costume that
+    describes a whole arc cannot be satisfied by that machinery: whichever chapter it
+    is stamped at, every later chapter is handed a description of several outfits at
+    once and left to choose.
+
+    Alyn Tenar is the case, and she is the protagonist, in roughly half the book. Her
+    p.1 read "From the Forge onward a blue-bladed lightsaber ...; from Carrick Station
+    onward the sandcloth Padawan tunic is replaced by ... Guardian robes; from Orgus
+    Din's funeral onward a band of burnt orange cloth ...". Those three changes land in
+    chapters 9, 18 and 17 — not even in that order — and the whole paragraph was
+    stamped at chapter 9. Every render from chapter 9 to 42 was then told about robes
+    and a forearm wrap she does not own yet, with her reference sheet attached.
+
+    The rule is deliberately narrow: ONE transition marker is the normal, correct shape
+    ("From his surrender onward, plain undyed Jedi robes"), so only two or more are
+    refused. Measured against the twenty-one progressions of the live SWTOR plan it
+    fires on exactly two, p.1 and T7-O1's p.4, and both are genuinely multi-transition;
+    the other thirteen costume-bearing progressions score zero or one."""
+    return len(_TRANSITION.findall(str(text or ""))) >= 2
 
 
 # --- Canon -------------------------------------------------------------------

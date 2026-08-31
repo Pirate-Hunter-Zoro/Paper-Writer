@@ -17,6 +17,7 @@ from . import correction_brief, metaplan
 from ..gates import structure
 from ..infra import storage
 from ..memory import store
+from ..memory import bible as bible_rules
 from ..memory.bible import canon_fact_ids, new_canon
 from ..models import prompts, text
 
@@ -168,6 +169,21 @@ def _lock_costume_variants(sid, outline, progressions, log_fn=None):
         costume = (entry.get("costume") or "").strip()
         who = entry.get("who")
         if not costume or who not in characters:
+            continue
+        # A dated entry means "this is what they wear from chapter N", and
+        # `illustration.costume_for_chapter` hands it to every later chapter whole. A
+        # costume describing several changes cannot mean that at any chapter, so it is
+        # refused rather than stamped: the character keeps their base wardrobe, which is
+        # at least a single coherent outfit, and the plan gate now rejects the shape at
+        # source so new runs never reach here. Loud, because the anchor it would have
+        # written is wrong in a way no later gate looks for — the picture just quietly
+        # shows the wrong clothes.
+        if bible_rules.describes_multiple_transitions(costume):
+            if log_fn:
+                log_fn(f"{who}: NOT stamping the chapter-{chapter_num} costume from "
+                       f"{pid} — it describes more than one change of look, so it "
+                       f"cannot be what they wear from any single chapter. Keeping the "
+                       f"base wardrobe; split {pid} into one progression per change.")
             continue
         variants = characters[who].setdefault("costumes", [])
         if any(isinstance(v, dict) and v.get("from_chapter") == chapter_num
