@@ -893,3 +893,66 @@ class TheInteractionLedger(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheTrajectorySurvivesARestart(LoopHarness):
+    """A restart mid-chapter used to throw the editorial history away.
+
+    Chapter 10 of the live SWTOR run went 5 -> 2 blocking, the daemons were restarted
+    to deploy an unrelated fix, and it was journaled `revisions: 1` and logged
+    `ACCEPTED (0) — its last pass found no defects`. That reads as a chapter that
+    arrived clean. It was a chapter three passes deep.
+
+    The draft on disk is reused across a restart, so those passes are part of this
+    chapter's history. Losing them made the log untrue, handed the chapter a fresh
+    `EDIT_MAX_PASSES` budget, and blinded `_still_improving` to a stalled loop."""
+
+    def _resume_mid_edit(self, trajectory):
+        """The state a restart leaves behind: a draft on disk, status CH_EDITING, and
+        the passes already spent recorded against the chapter."""
+        paths.draft_path(self.sid, 1, 1).parent.mkdir(parents=True, exist_ok=True)
+        paths.draft_path(self.sid, 1, 1).write_text(CHAPTER, encoding="utf-8")
+        records = journal.load_records()
+        journal.set_status(records, records[self.chapter["key"]], states.CH_EDITING,
+                           trajectory=list(trajectory))
+
+    def test_the_earlier_passes_are_counted(self):
+        self._resume_mid_edit([5, 2])
+        self.script({"issues": [], "structural": []})
+        rec = self.run_chapter()
+        self.assertEqual(rec["revisions"], 3,
+                         "the two passes spent before the restart were forgotten")
+        self.assertEqual(rec["trajectory"], [5, 2, 0])
+
+    def test_the_draft_is_not_rewritten(self):
+        """Guards the premise: this is a resume, so the drafter is never called."""
+        self._resume_mid_edit([5, 2])
+        self.script({"issues": [], "structural": []})
+        self.run_chapter()
+        self.assertEqual(self.drafted, 0)
+
+    def test_a_restart_does_not_refresh_the_pass_budget(self):
+        """`EDIT_MAX_PASSES` is 3 and `_still_improving` compares the last two passes
+        against the best before them. Resuming at [4, 4, 4] is a loop that has stopped
+        converging and has already spent the soft cap, so it gets no further pass."""
+        self._resume_mid_edit([4, 4, 4])
+        self.script({"issues": [{"find": "nope", "replace": "nope",
+                                 "why": "x", "blocking": True}], "structural": []})
+        rec = self.run_chapter()
+        self.assertEqual(self.reviews, 0,
+                         "a restart handed the chapter a fresh editorial budget")
+        self.assertEqual(rec["status"], states.BIBLE_MERGED,
+                         "it must still ship rather than stall")
+
+    def test_a_fresh_draft_starts_a_fresh_trajectory(self):
+        """The other half. A redrafted chapter must not inherit blocking counts
+        belonging to prose that no longer exists — that would spend its budget on a
+        draft they were never about."""
+        records = journal.load_records()
+        journal.set_status(records, records[self.chapter["key"]], states.PENDING,
+                           trajectory=[9, 9, 9])
+        self.script({"issues": [], "structural": []})
+        rec = self.run_chapter()
+        self.assertEqual(self.drafted, 1, "this should be a fresh draft")
+        self.assertEqual(rec["trajectory"], [0])
+        self.assertEqual(rec["revisions"], 1)
