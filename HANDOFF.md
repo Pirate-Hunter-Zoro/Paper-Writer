@@ -208,6 +208,30 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   the deploy for *code*, because `run.sh` pulls; it is not the deploy for `fleet.env`
   of a process already running. Check `grep 'picture budget allows' state/scribe.log |
   tail -1` against the cap you think is live.
+- **Timeouts cost ~9% of illustrator wall-clock, and some of that is avoidable.**
+  Seven `no image after 600s` in the run's first seven hours — 70 minutes of a worker
+  whose throughput is what decides when the book finishes. What the page had actually
+  said, in each case:
+
+      3x  "Creating your image"          genuinely still working; a real timeout
+      1x  "I encountered an error doing what you asked. Could you try again?"
+      1x  "...can't depict some public figures..."
+      2x  empty, or the bare "Gemini said" label
+
+  Only the first three earn their 600 seconds. The error message is a plain gap:
+  nothing in `classifyText` matches it, so the driver waits ten minutes to learn
+  something the page said at once — and the message literally asks us to try again.
+  The public-figures one is stranger, because `REFUSAL_PATTERNS` has matched that
+  wording since last night; it was at 07:36 and has not recurred in the five hours
+  since, so it is likelier that the text rendered after the last check than that the
+  pattern is broken.
+  **Not fixed, deliberately:** one occurrence each. The change is a regex in
+  `tools/gemini_art.js`, which is the riskiest file in the project and the one whose
+  tests are opt-in and need Chrome — and the illustrator has to be booted out first,
+  because a Chrome profile opens in one process at a time (§3). Worth doing if it
+  recurs, and then `scripts/check-browser.sh` is the thing to run. Not worth doing on
+  n=1 while the run is healthy.
+
 - **T7-O1 wears a restraining bolt for the whole book, and I left it that way.** Same
   defect as (13) from the other side: `costume_for_chapter` takes the base look to be
   the FIRST undated entry, and T7's is `"Captive: grey chassis with the red Flesh Raider
