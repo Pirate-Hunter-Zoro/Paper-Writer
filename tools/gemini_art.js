@@ -274,6 +274,15 @@ const LIMIT_PATTERNS = [
   /upgrade to (continue|keep)/i,
 ];
 
+// The page says things mid-flight that read exactly like a verdict. "Creating your
+// image" is the obvious one; the refusal text below can also appear transiently BEFORE
+// the image starts, which is not a refusal, it is the app changing its mind out loud.
+const WORKING_PATTERNS = [
+  /creating your image/i,
+  /generating/i,
+  /working on it/i,
+];
+
 const REFUSAL_PATTERNS = [
   /can'?t (help with|create|generate|make)/i,
   /unable to (create|generate)/i,
@@ -438,6 +447,10 @@ async function render(cdp, args, prompt) {
   // disables the best download arm without raising anything. See `imageBytes`.
   const frameId = (await cdp.send("Page.getFrameTree")).frameTree.frame.id;
 
+  // The composer existing is not the same as the toolbar being wired up. A short
+  // settle costs a second and removes a whole class of "the button did nothing".
+  await sleep(1200);
+
   // Attach the reference pictures. These are the locked character sheets and the
   // source art off each character's own wiki, and they are the entire answer to
   // visual drift across a series: the words cannot carry a face, so the faces are
@@ -485,13 +498,24 @@ async function render(cdp, args, prompt) {
   const found = await waitFor(async () => {
     const text = String(await cdp.eval(PROBE_TEXT) || "");
     if (text) lastText = text;
-    const verdict = classifyText(text);
-    if (verdict) return { verdict, text };
+
+    // ORDER MATTERS HERE, and getting it wrong cost a render that was already on its
+    // way. Gemini emitted "I'm just a language model and can't help with that" and
+    // then began generating anyway — so a text verdict read before the page has
+    // settled is not a verdict, it is a snapshot of the app mid-decision. Judge the
+    // words only once nothing is still moving.
+    const busy = await cdp.eval(PROBE_BUSY);
+    const working = WORKING_PATTERNS.some((re) => re.test(text));
 
     const images = JSON.parse(await cdp.eval(PROBE_IMAGES) || "[]");
-    if (!images.length) return null;
-    if (await cdp.eval(PROBE_BUSY)) return null;      // still drawing
-    return { images };
+    if (images.length && !busy && !working) return { images };
+
+    if (busy || working) return null;            // still going; no conclusions yet
+    if (images.length) return null;              // settling around a picture
+
+    const verdict = classifyText(text);
+    if (verdict) return { verdict, text };
+    return null;
   }, left(), 1500);
 
   if (!found) {
@@ -536,50 +560,79 @@ async function render(cdp, args, prompt) {
 }
 
 // Attach reference images to the composer. Returns true, or a string saying why not.
+//
+// This is the load-bearing half of visual consistency — the locked character sheets
+// are how a face survives forty-six chapters — so it is deliberately patient and
+// deliberately picky, and it fails loudly rather than rendering without them.
+//
+// What the live page actually does, measured rather than assumed:
+//
+//   * there is NO file input until the "Upload & tools" menu is opened. The first
+//     version checked once, clicked once, slept 600ms and gave up — which is how the
+//     first real sheet with references failed with "no file input in the page".
+//   * once opened, TWO inputs appear. One of them is Drive. `querySelector` takes
+//     whichever comes first in the DOM, which is a coin flip on the one that matters.
 async function attachRefs(cdp, refs, budgetMs) {
-  // The file input is usually already in the DOM, hidden behind the "+" menu. Open
-  // the menu only if it is not, because opening it when it is already open closes it.
-  let handle = await fileInput(cdp);
-  if (!handle) {
+  const deadline = Date.now() + Math.min(90000, budgetMs);
+
+  // Open the menu if the input is not already there, and keep trying while there is
+  // budget: a freshly navigated page may not have wired the button up yet.
+  let handles = await fileInputs(cdp);
+  for (let attempt = 0; !handles.length && Date.now() < deadline && attempt < 4;
+       attempt++) {
     await cdp.eval(`(() => {
       const b = document.querySelector(
         'button[aria-label*="upload" i], button[aria-label*="add file" i], ' +
-        'button[aria-label*="Open upload" i], button[aria-label*="attach" i], ' +
-        'uploader button, button.upload-card-button');
+        'button[aria-label*="attach" i], uploader button, button.upload-card-button');
       if (b) b.click();
       return !!b;
     })()`);
-    await sleep(600);
-    handle = await fileInput(cdp);
+    // Poll rather than sleep a fixed amount — it lands in ~300ms on a warm page and
+    // takes noticeably longer on a cold one.
+    handles = await waitFor(async () => {
+      const found = await fileInputs(cdp);
+      return found.length ? found : null;
+    }, 4000, 250) || [];
   }
-  if (!handle) return "no file input in the page";
+  if (!handles.length) return "no file input in the page";
 
-  try {
-    await cdp.send("DOM.setFileInputFiles", { files: refs, objectId: handle });
-  } catch (e) {
-    return `setFileInputFiles: ${e.message}`;
+  // Try each input until one takes the files. The Drive picker is also an
+  // `input[type=file]` and silently accepts nothing useful, so "the first one" is not
+  // good enough — the test is whether a preview chip appears afterwards.
+  let lastError = "";
+  for (const objectId of handles) {
+    try {
+      await cdp.send("DOM.setFileInputFiles", { files: refs, objectId });
+    } catch (e) {
+      lastError = e.message;
+      continue;
+    }
+    const ready = await waitFor(async () => {
+      const n = await cdp.eval(`(() => document.querySelectorAll(
+        'user-query-file-preview, .file-preview, .attachment-container img, ' +
+        '[data-test-id="file-chip"], uploader-file-preview, .uploaded-file-chip'
+        ).length)()`);
+      return Number(n) >= refs.length ? true : null;
+    }, Math.max(4000, Math.min(60000, deadline - Date.now())), 500);
+    if (ready) return true;
+    lastError = "files were set but no attachment preview appeared";
   }
-
-  // Wait until every attachment has finished uploading. A prompt sent while a
-  // thumbnail is still spinning is answered without it.
-  const ready = await waitFor(async () => {
-    const n = await cdp.eval(`(() => document.querySelectorAll(
-      '.file-preview img, .attachment-container img, [data-test-id="file-chip"], ' +
-      'uploader-file-preview, .uploaded-file-chip').length)()`);
-    return Number(n) >= refs.length ? true : null;
-  }, Math.min(90000, budgetMs), 800);
-
-  // Not fatal if the chips are unrecognisable — the upload may well have landed under
-  // markup we do not know. Give it a moment and go; the vision critic catches a render
-  // drawn without its references, which is the backstop this whole loop already has.
-  if (!ready) await sleep(3000);
-  return true;
+  return lastError || "no file input accepted the references";
 }
 
-async function fileInput(cdp) {
-  const r = await cdp.eval(
-    `document.querySelector('input[type="file"]')`, { byValue: false });
-  return r?.objectId || null;
+
+// Every file input on the page, as CDP object ids. Plural because the upload menu
+// exposes more than one and only some of them take a local file.
+async function fileInputs(cdp) {
+  const count = await cdp.eval(
+    `document.querySelectorAll('input[type="file"]').length`);
+  const out = [];
+  for (let i = 0; i < Number(count || 0); i++) {
+    const r = await cdp.eval(
+      `document.querySelectorAll('input[type="file"]')[${i}]`, { byValue: false });
+    if (r?.objectId) out.push(r.objectId);
+  }
+  return out;
 }
 
 // --- Entry point -------------------------------------------------------------
