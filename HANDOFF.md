@@ -242,6 +242,18 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   profile opens in one process at a time (§3). Worth doing if it recurs, and then
   `scripts/check-browser.sh` is the thing to run.
 
+  **The deadline is now 180s, set on measurement.** Once the knob worked (below), it was
+  worth asking what it should be. Across 81 successful renders paired to a confident
+  start line: min 18s, median 29s, p90 41s, **max 51s**, and *nothing at all* between
+  51s and the deadline. A render either finishes inside a minute or it hangs; there is
+  no slow-but-working middle. 180s keeps 3.5x headroom over the observed maximum and
+  1.5x over the "up to two minutes" the config comment expected, while cutting the cost
+  of a hang by 57% — 14 hangs so far had spent 98 minutes of the worker whose
+  throughput decides when the book finishes. Set in `launchd/fleet.env`, so **it needs
+  a daemon restart** (§5). If renders start failing at 180s with "Creating your image"
+  that would have finished, raise it; `scripts/keep-rate.sh` counts hangs separately
+  for exactly that question.
+
   **The timeout half was a dead knob, and that is fixed.** `illustration.render` — the
   only path a scene or sheet render takes — hardcoded `timeout=600`, so
   `FANFIC_IMAGE_RENDER_TIMEOUT_SEC` had never applied to a single render in the run.
