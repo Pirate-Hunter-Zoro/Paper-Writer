@@ -293,12 +293,23 @@ Worth reading. The pattern in all of them is the same.
 
 ## 8. Deliverables the owner is watching
 
-- **epub preview in iCloud:** `Books/Star Wars The Old Republic/Tempered/`. Rebuild it
-  as chapters land — build against a *snapshot copy* with a trimmed outline, because
-  `build_epub` refuses a book with missing chapters and that check should not be
-  weakened. There is a worked recipe in the session history; the essentials are: copy
-  `state/series` to a temp dir, trim `outline.json` to chapters that have prose, point
-  `FANFIC_STATE_DIR` at it, call `binding.build_epub`, copy the result into Books.
+- **epub preview in iCloud:** `Books/Star Wars The Old Republic/Tempered/`.
+  **`scripts/preview-epub.sh` now does this** — run it whenever you want the preview
+  caught up; it takes the series id and book number, defaulting to the only series and
+  book 1. The recipe used to live only in a session transcript, which is a bad place
+  for something meant to run repeatedly.
+  It does what the recipe did: snapshot `state/series` to a temp dir, trim the
+  snapshot's `outline.json` to the chapters that actually have prose, point
+  `FANFIC_STATE_DIR` at it, build, and place one .epub in Books. **It does not weaken
+  `build_epub`'s refusal to bind a book with missing chapters** — that check is what
+  stops a half-written novel being delivered as finished; the snapshot is simply
+  complete on its own terms. Nothing it does touches the live run.
+  Two details worth keeping: the outline is trimmed to a *contiguous* run from
+  chapter 1, because a preview with a hole in it is confusing; and the filename uses
+  the short book name (`Tempered`), not the full title, whose colon Finder renders as
+  a slash. Last built at chapters 1-10 — validated as a real epub, not just a
+  zero exit code: zip intact, `mimetype` stored first, 10 chapters, 45 images, nav
+  present, no manifest entry without a file. No cover yet; none has been rendered.
 - **Review artifact** (chapters + art, refreshed as it grows):
   https://claude.ai/code/artifact/805255cd-2494-47aa-bdde-1ddc7cfb913f
 - **The 13-book programme plan:**
