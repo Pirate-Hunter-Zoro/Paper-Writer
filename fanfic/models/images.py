@@ -18,6 +18,7 @@ Three outcomes, and each means something different to the book:
 from .. import providers
 from ..providers.image_browser import NotSignedIn  # noqa: F401  (re-exported)
 from ..providers.image_browser import mime_of      # noqa: F401  (re-exported)
+from ..providers.image_browser import Refused      # noqa: F401  (re-exported)
 
 
 def is_configured():

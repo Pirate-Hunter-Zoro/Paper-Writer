@@ -543,6 +543,61 @@ class EveryoneInFrameGetsADesign(unittest.TestCase):
         self.assertIn("Camila Noceda", scenes[0]["characters"])
 
 
+class ARefusalDoesNotCostARung(unittest.TestCase):
+    """The ladder asks for LESS after each failure, and that is right for a rejection
+    and wrong for a refusal.
+
+    A rejection means the picture came out and the critic judged it wrong, so the
+    composition is the thing to give ground on. A refusal means no picture came out at
+    all — a classifier fired — and it is not even stable: Lord Praven's sheet was
+    refused twice and then drawn from the identical prompt on the third try.
+
+    Conflating them cost real pictures on the first live book. Two scene slots burned
+    all three rungs on refusals alone and landed on the empty-room rung, so chapters
+    with fights got pictures of empty yards, and nothing about those compositions was
+    ever wrong."""
+
+    def setUp(self):
+        support.wipe_state()
+        support.stub_model_seams()
+        self.rungs = []
+
+    def _watch_rungs(self, fail_with):
+        """Record the simplify level each render is asked at."""
+        def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+            # The empty-room rungs are recognisable from the prompt itself.
+            if "EMPTY room" in prompt or "nobody in it" in prompt:
+                self.rungs.append(3)
+            elif "a single clear portrait" in prompt:
+                self.rungs.append(2)
+            else:
+                self.rungs.append(0 if "The setting:" in prompt or True else 1)
+            raise fail_with
+        illustration.render = render
+
+    def test_a_refusal_keeps_asking_for_the_same_composition(self):
+        self._watch_rungs(images.Refused("Gemini declined to draw this prompt: nope"))
+        entry = {"series_id": "s", "book_num": 1, "chapter_num": 1, "k": 1,
+                 "scene": "Ruby stands on a cliff at dusk", "characters": [],
+                 "orientation": "portrait"}
+        illustration.render_scene(entry, log_fn=lambda _m: None)
+        self.assertEqual(self.rungs, [0, 0, 0],
+                         f"a refusal must not advance the ladder; got {self.rungs}")
+
+    def test_a_render_failure_still_advances_the_ladder(self):
+        """The original behaviour, unchanged, for the failure it was designed for."""
+        self._watch_rungs(RuntimeError("the browser did not return within 400s"))
+        entry = {"series_id": "s", "book_num": 1, "chapter_num": 1, "k": 2,
+                 "scene": "Ruby stands on a cliff at dusk", "characters": [],
+                 "orientation": "portrait"}
+        illustration.render_scene(entry, log_fn=lambda _m: None)
+        self.assertNotEqual(self.rungs, [0, 0, 0],
+                            "a genuine render failure should still simplify")
+
+    def test_refused_is_a_runtime_error_so_nothing_downstream_leaks_it(self):
+        self.assertTrue(issubclass(images.Refused, RuntimeError))
+
+
 class SheetsCarryNoText(unittest.TestCase):
     """A sheet is a reference IMAGE on every scene the character appears in, so
     anything drawn on it conditions ~74 renders. The first pass produced sheets with
