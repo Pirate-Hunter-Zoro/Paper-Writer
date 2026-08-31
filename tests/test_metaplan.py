@@ -10,10 +10,10 @@ import unittest
 from itertools import combinations
 
 import support                                                   # noqa: F401
-from fanfic import config, paths
+from fanfic import config, paths, jobspec
 from fanfic.gates import interactions as ledger_gate
 from fanfic.infra import journal, storage
-from fanfic.stages import metaplan
+from fanfic.stages import metaplan, planning
 
 CAST = ([(f"OH{i}", "The Owl House") for i in range(1, 5)]
         + [(f"GF{i}", "Gravity Falls") for i in range(1, 5)]
@@ -453,3 +453,74 @@ class WhatTheScenesDoIsCounted(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ANovelizationKeepsTheSourcesVillain(unittest.TestCase):
+    """The planning gate demands an INVENTED biggest bad. That is right for a
+    crossover and wrong for a novelization, and the difference cost a real plan.
+
+    Book 1 of the Star Wars programme is a straight novelization whose prompt says
+    "Original characters: none." Planned under the crossover rule it produced a wholly
+    invented Sith Lord, marked `primary`, outranking Darth Angral and framed as the
+    reason the Emperor's destruction is not the end. Well written, and not the book
+    that was asked for — and it would have been drafted into forty-eight chapters
+    before anyone read the plan.
+    """
+
+    def _plan(self, primary_origin):
+        return {
+            "characters": [
+                {"name": "Darth Angral", "origin": "Star Wars: The Old Republic"},
+                {"name": "Darth Veshaan", "origin": "original"},
+            ],
+            "antagonists": [
+                {"name": "Darth Angral", "primary": primary_origin == "canon",
+                 "threat": "He wants the Republic to feel what he felt."},
+                {"name": "Darth Veshaan", "primary": primary_origin == "original",
+                 "threat": "She wants the war to keep producing corpses."},
+            ],
+        }
+
+    def test_a_crossover_still_must_invent_its_biggest_bad(self):
+        """The original rule, unchanged, because its reasoning still holds where it
+        was aimed: a book whose ceiling is a villain the reader already knows the
+        limits of has no room to escalate past their canon."""
+        errors = planning._validate_antagonists(self._plan("canon"))
+        self.assertTrue(any("must be original" in e for e in errors), errors)
+
+    def test_a_novelization_may_keep_the_canon_villain_as_its_ceiling(self):
+        errors = planning._validate_antagonists(self._plan("canon"),
+                                                allow_canon_primary=True)
+        self.assertEqual(errors, [], errors)
+
+    def test_a_novelization_still_has_to_name_a_villain_and_say_what_it_wants(self):
+        """The exemption lifts one rule, not the gate. A plan that does not know what
+        the book is up against is incomplete whatever kind of book it is."""
+        errors = planning._validate_antagonists({"characters": [], "antagonists": []},
+                                                allow_canon_primary=True)
+        self.assertTrue(any("no `antagonists`" in e for e in errors), errors)
+
+        vague = {"characters": [{"name": "Darth Angral", "origin": "swtor"}],
+                 "antagonists": [{"name": "Darth Angral", "primary": True}]}
+        errors = planning._validate_antagonists(vague, allow_canon_primary=True)
+        self.assertTrue(any("no `threat`" in e for e in errors), errors)
+
+    def test_exactly_one_primary_is_still_required(self):
+        two = self._plan("canon")
+        two["antagonists"][1]["primary"] = True
+        errors = planning._validate_antagonists(two, allow_canon_primary=True)
+        self.assertTrue(any("marked `primary`" in e for e in errors), errors)
+
+    def test_the_declaration_is_read_from_the_prompt(self):
+        novelization = ("## Main characters to feature\nKira Carsen, Darth Angral.\n"
+                        "Original characters: none. This is a novelization.\n")
+        original = ("## Main characters to feature\nRuby, Weiss.\n"
+                    "Original characters: one rival, invented for this book.\n")
+        self.assertTrue(jobspec.forbids_original_characters(novelization))
+        self.assertFalse(jobspec.forbids_original_characters(original))
+
+    def test_an_undeclared_job_gets_the_stricter_rule(self):
+        """Absent the declaration, the crossover rule applies — it is what every job
+        written before this existed was planned under."""
+        self.assertFalse(jobspec.forbids_original_characters(
+            "## Main characters to feature\nRuby, Weiss, Blake and Yang.\n"))

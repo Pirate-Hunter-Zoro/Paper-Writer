@@ -61,6 +61,13 @@ Fields marked *(optional)* fall back to the stated default.
 > The canon characters that must appear and matter. Note any relationships or pairings you want
 > honored (or explicitly avoided). List any original characters, with a one-line description each
 > — for OCs, give appearance detail so a reference sheet can be locked.
+>
+> **If this is a straight novelization, say so here with the line `Original characters: none.`**
+> That one line changes a real rule: by default the planner must invent this book's biggest
+> villain, because a crossover whose ceiling is a villain the reader already knows the limits of
+> has nowhere to escalate. For a novelization that is exactly backwards — the canon villain is
+> what the reader came for — so the declaration lets the primary antagonist be a canon character.
+> Without it, an invented antagonist will be planned and placed above the source's own.
 
 ## Tone, genre, and rating
 **(required)**
