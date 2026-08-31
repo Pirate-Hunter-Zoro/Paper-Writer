@@ -956,3 +956,91 @@ class TheTrajectorySurvivesARestart(LoopHarness):
         self.assertEqual(self.drafted, 1, "this should be a fresh draft")
         self.assertEqual(rec["trajectory"], [0])
         self.assertEqual(rec["revisions"], 1)
+
+
+class EveryPassLeavesItsProseBehind(unittest.TestCase):
+    """The loop keeps only its LAST version, and on the first real book that is
+    measurably not always its best: three of nineteen chapters shipped carrying about
+    nine blocking defects an earlier pass had already cleared.
+
+    Whether to ship the better-measured version instead could not be answered, because
+    the better version was overwritten the moment the next pass ran. These snapshots
+    exist so the comparison can be made from real prose. **Nothing reads them and
+    nothing about what ships changes** — that is the point of keeping the two apart."""
+
+    def setUp(self):
+        support.wipe_state()
+        support.stub_model_seams()
+        self.sid = "snap-series"
+        self.series = journal.write_record(
+            journal.new_series(self.sid, f"/inbox/{self.sid}.md", "p"))
+        self.book = journal.write_record(journal.new_book(self.sid, 1, "B"))
+        self.chapter = journal.write_record(journal.new_chapter(self.sid, 1, 1))
+        storage.save_json({"per_book_words": 1600, "per_book_chapters": 2,
+                           "style_guide": "past tense"}, paths.plan_path(self.sid))
+        storage.save_json(new_series_bible(self.sid),
+                          paths.series_bible_path(self.sid))
+        storage.save_json({"chapters": [OUTLINE, dict(OUTLINE, number=2)]},
+                          paths.outline_path(self.sid, 1))
+        records = journal.load_records()
+        journal.set_status(records, records[self.book["key"]], states.DRAFTING,
+                           chapter_count=2)
+
+        def draft(prompt, out_path, log_fn=None, role="drafting"):
+            out_path.write_text(CHAPTER, encoding="utf-8")
+            return "stub draft"
+        drafting.generate = draft
+
+    def _run(self, *passes):
+        self.reviews = 0
+        seq = list(passes)
+
+        def review(series_rec, book_num, chapter_num, prose, truth, gate_brief,
+                   pass_num, log_fn=None):
+            self.reviews += 1
+            return seq[min(self.reviews - 1, len(seq) - 1)]
+        editing.model_review = review
+        records = journal.load_records()
+        chapter_level.run(records, records[self.series["key"]],
+                          records[self.book["key"]],
+                          records[self.chapter["key"]], log_fn=lambda _m: None)
+
+    # Anchors must be UNIQUE in the fixture or the repair is refused as ambiguous and
+    # the loop stops on "could not anchor any repair" after one pass. Note that a
+    # NUMBERED anchor is not unique here even though the paragraph it names is:
+    # `_block(k)` runs k=1..44, so "sector 1" also matches sectors 10-19 — eleven hits.
+    # These two sentences bracket the fixture and appear exactly once.
+    FIX_ONE = ("The spoon was still on the desk",
+               "The spoon lay untouched on the desk")
+    FIX_TWO = ("She had been walking for four days",
+               "She had been walking for five days")
+
+    def test_one_snapshot_per_pass(self):
+        self._run({"issues": [_issue(*self.FIX_ONE)], "structural": []},
+                  {"issues": [_issue(*self.FIX_TWO)], "structural": []},
+                  {"issues": [], "structural": []})
+        self.assertGreaterEqual(self.reviews, 2, "needed at least two applied passes")
+        for n in (1, 2):
+            self.assertTrue(paths.pass_snapshot_path(self.sid, 1, 1, n).exists(),
+                            f"pass {n} left no snapshot")
+
+    def test_the_snapshot_holds_that_pass_s_text(self):
+        self._run({"issues": [_issue(*self.FIX_ONE)], "structural": []},
+                  {"issues": [], "structural": []})
+        first = paths.pass_snapshot_path(self.sid, 1, 1, 1).read_text(encoding="utf-8")
+        self.assertIn(self.FIX_ONE[1], first,
+                      "the snapshot should hold the text AFTER that pass's edits")
+
+    def test_what_ships_is_the_last_pass_not_the_best(self):
+        """The whole point: this observes, it does not steer.
+
+        A pass that finds nothing returns before writing a snapshot — it applied no
+        edits, so there is no new text to keep — which is why this drives one applied
+        pass and then a clean one, and compares against the snapshot that exists."""
+        self._run({"issues": [_issue(*self.FIX_ONE)], "structural": []},
+                  {"issues": [], "structural": []})
+        shipped = paths.chapter_path(self.sid, 1, 1).read_text(encoding="utf-8")
+        last = paths.pass_snapshot_path(self.sid, 1, 1, 1).read_text(encoding="utf-8")
+        self.assertEqual(shipped.strip(), last.strip(),
+                         "snapshotting must not change what ships")
+        self.assertIn(self.FIX_ONE[1], shipped)

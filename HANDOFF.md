@@ -249,9 +249,17 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   version only when it measured at least 3 better", which fires on exactly those three
   chapters, but it needs prose snapshotted per pass and it changes what text ships,
   which is the most consequential change available in this pipeline.
-  **What would decide it:** take ch17's best snapshot and its shipped text and have the
-  editor judge them against each other on craft as well as continuity. If the earlier
-  text is not worse to read, the rule is safe.
+  **What would decide it:** take a chapter's best snapshot and its shipped text and have
+  the editor judge them against each other on craft as well as continuity. If the
+  earlier text is not worse to read, the rule is safe.
+
+  **That experiment could not be run, so the missing piece is now in place.** The better
+  version was overwritten by the next pass every time — there was nothing to compare.
+  `paths.pass_snapshot_path` keeps each pass's prose beside the draft now, and
+  `_edit_to_clean` writes one after every pass that applies anything. **Nothing reads
+  them and nothing about what ships changes**; a pass costs a few tens of KB. From
+  chapter 20 on there will be real text on both sides of the question.
+  (A clean pass writes none, deliberately — it applied no edits, so it has no new text.)
 
   (Parsing note for anyone recomputing this: `ACCEPTED holding 1 issue(s)` puts a paren
   in the line, so match the LAST parenthesised run of digits and arrows, not the first.)
