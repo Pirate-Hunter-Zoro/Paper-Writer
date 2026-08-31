@@ -342,7 +342,7 @@ def _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout
     # that image", "try uploading another image", "unable to process the uploaded
     # image"). Report what the page said and let the reader diagnose it.
     if refs and (result.get("kind") == "bad_reference"):
-        why = " ".join(str(result.get("reason") or "").split())
+        why = _said(result.get("reason"))
         note(f"Gemini would not use {len(refs)} reference picture(s)"
              + (f", saying: {why[:160]}" if why else " and did not say why")
              + ". Redrawing from the description alone; the result is anchored on "
@@ -404,10 +404,28 @@ def _result(proc):
                       f"{proc.returncode}): {detail or 'no output'}"}
 
 
+
+def _said(reason):
+    """The page's message, without the label the page puts in front of its own words.
+
+    Gemini's DOM prefixes its replies with "Gemini said" — an accessibility label, not
+    part of the message — so the reason text arrives already attributed. Quoting it
+    without stripping that produced lines like "Gemini declined to draw this prompt:
+    Gemini said I can't generate the image you requested", which is how it read in the
+    log for the whole of the first run. Also collapses whitespace, because the text is
+    scraped out of a rendered page and arrives with the page's line breaks in it."""
+    text = " ".join(str(reason or "").split())
+    for label in ("Gemini said", "Gemini replied", "Gemini responded"):
+        if text.lower().startswith(label.lower()):
+            text = text[len(label):].lstrip(" :,")
+            break
+    return text
+
+
 def _raise_for(result, note):
     """Turn the driver's `kind` into the exception the engine is written against."""
     kind = result.get("kind") or "transient"
-    reason = result.get("reason") or "the browser could not produce a picture"
+    reason = _said(result.get("reason")) or "the browser could not produce a picture"
     if kind == "quota":
         note(f"Gemini is rate-limiting this session: {reason[:200]}")
         raise QuotaExceeded(f"gemini session limit: {reason[:300]}",
