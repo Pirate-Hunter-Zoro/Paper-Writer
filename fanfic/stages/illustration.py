@@ -1511,8 +1511,23 @@ def render_scene(entry, log_fn=None):
         # `rung` is tracked across the loop rather than derived from the attempt
         # number, because not every failed attempt should cost a rung — a refusal
         # holds its place. See `images.Refused`.
-        prompt = (entry.get("prompt") if rung == 0 and entry.get("prompt")
-                  else build_scene_prompt(
+        # ALWAYS REBUILT, never taken from the queue entry.
+        #
+        # The entry carries a fully-built prompt from enqueue time, and using it at
+        # rung 0 was a real optimisation — the human-readable pack and the render were
+        # guaranteed to be the same text. It is also a snapshot of the series bible as
+        # it was that minute, and a queue entry outlives a lot of corrections.
+        #
+        # Jaric Kaedan is the proof. His locked design was wrong (blonde, unscarred,
+        # against a canon character with a dark buzz cut and a scar through the
+        # eyebrow); the bible was corrected, his sheet re-locked, species and signature
+        # markings added to the prompt builder — and his scenes kept failing
+        # identically, because every one of them was still rendering from a prompt
+        # built before any of it. A cached prompt cannot be repaired.
+        #
+        # The pack still shows the stored text, which is what it is for: a record of
+        # what was asked at the time.
+        prompt = (build_scene_prompt(
                       entry.get("scene", ""),
                       [(n, _locked(sid, n)) for n in names],
                       orientation=orientation, style=entry.get("style"),

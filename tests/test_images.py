@@ -640,6 +640,53 @@ class TheTopUpDoesNotChaseWorkTheCapForbids(unittest.TestCase):
                          "a chapter at the cap the enqueuer will apply is not short")
 
 
+class ACorrectionReachesArtAlreadyQueued(unittest.TestCase):
+    """A queue entry carries a fully-built prompt from enqueue time, and rendering used
+    it verbatim at rung 0. That made every correction to a character's locked design
+    invisible to art already queued.
+
+    Jaric Kaedan is the proof: his design was wrong, the bible was corrected, his sheet
+    re-locked, and species and signature markings added to the builder — and his scenes
+    kept failing identically, because each was still rendering the prompt built before
+    any of it happened. A cached prompt cannot be repaired."""
+
+    def setUp(self):
+        support.wipe_state()
+        support.stub_model_seams()
+        self.prompts = []
+
+        def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+            self.prompts.append(prompt)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(support.PNG)
+        illustration.render = render
+
+    def test_a_stale_cached_prompt_is_not_used(self):
+        from fanfic import paths
+        from fanfic.infra import storage
+        sid = "stale"
+        storage.save_json({"characters": {"Kaedan": {
+            "appearance": "Human male, forty-five, a pale vertical scar through the "
+                          "left eyebrow.",
+            "age": "45", "costumes": ["charcoal robes"]}}},
+            paths.series_bible_path(sid))
+        sheet = paths.sheet_path(sid, 1, "Kaedan")
+        sheet.parent.mkdir(parents=True, exist_ok=True)
+        sheet.write_bytes(support.PNG)
+
+        entry = {"series_id": sid, "book_num": 1, "chapter_num": 1, "k": 1,
+                 "scene": "Kaedan holds an arch open", "characters": ["Kaedan"],
+                 "orientation": "portrait",
+                 # Built before the design was corrected.
+                 "prompt": "STALE PROMPT FROM BEFORE THE CORRECTION"}
+        illustration.render_scene(entry, log_fn=lambda _m: None)
+
+        self.assertTrue(self.prompts, "nothing was rendered")
+        self.assertNotIn("STALE PROMPT", self.prompts[0])
+        self.assertIn("scar", self.prompts[0].lower(),
+                      "the rebuilt prompt should carry the corrected design")
+
+
 class TheWrongCharacterGetsPromoted(unittest.TestCase):
     """The ladder's answer to any failure is a plainer composition, and at rung 2 that
     means keeping only the FIRST character — whoever the art director listed first.
