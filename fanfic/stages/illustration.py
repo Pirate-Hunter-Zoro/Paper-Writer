@@ -918,6 +918,47 @@ def signature_marks(spec):
 
 _SEX_WORDS = {"male": "man", "man": "man", "female": "woman", "woman": "woman"}
 
+# SKIN ONLY, and the narrowness is the point.
+#
+# The first version of this took eyes and hair as well, and two existing tests refused
+# it — correctly. Hair and eye colour are fine facial detail, exactly what a reference
+# picture carries well and what "the words stop describing the face" is there to keep
+# out. Skin tone is different in kind: it is a broad-area property the model overrides
+# wholesale rather than a detail it renders imprecisely, and the critic's complaint was
+# never "the eyes are slightly off", it was "several shades lighter than the sheet".
+_COLOUR_SUBJECTS = ("skin", "complexion", "scales", "fur", "feathers")
+
+
+def colouring_of(spec, limit=1):
+    """Short colour clauses — skin, eyes, hair — from a locked appearance.
+
+    The fourth category to be put back into an anchored prompt, after species, sex and
+    discrete markings, and for the identical reason each time: it is a FACT a render
+    can be flatly wrong about, prose states it in three words, and the model does not
+    reliably take it from the picture.
+
+    Alyn Tenar is again the case, and again the protagonist. Her sheet shows warm brown
+    skin; renders came back "distinctly fair/pale with pink undertones", repeatedly,
+    with that sheet attached. A skin tone is not a likeness — it does not compete with
+    the reference for the shape of a face, it says which of the model's defaults to
+    stop reaching for.
+
+    One short clause, so this cannot creep back into being the appearance paragraph.
+    Hair and eye colour are deliberately excluded: they are the fine detail a reference
+    carries well, and putting them back is the averaging the doctrine warns about."""
+    text = str((spec or {}).get("appearance") or "")
+    out = []
+    for clause in re.split(r"[;,.—–]", text):
+        c = " ".join(clause.split()).strip(" -")
+        if not c or len(c) > 60:
+            continue
+        low = c.lower()
+        if any(sub in low for sub in _COLOUR_SUBJECTS):
+            out.append(c[:1].lower() + c[1:])
+        if len(out) >= limit:
+            break
+    return out
+
 
 def sex_of(spec):
     """"man" / "woman" from a locked appearance, or "" when it does not say.
@@ -973,9 +1014,9 @@ def _costume_line(name, spec, chapter_num=None):
     bits = [b for b in (who_is, age) if b]
     who = f"{name} ({', '.join(bits)})" if bits else name
     line = f"{who}: {costume}." if costume else f"{who}: as in the reference."
-    marks = signature_marks(spec)
-    if marks:
-        line += f" Always: {'; '.join(marks)}."
+    always = colouring_of(spec) + signature_marks(spec)
+    if always:
+        line += f" Always: {'; '.join(always)}."
     return line
 
 
