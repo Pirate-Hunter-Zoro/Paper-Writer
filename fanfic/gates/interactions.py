@@ -15,7 +15,8 @@ What it enforces, and why each one exists:
   * **Nobody is a guest star.** Every locked character appears in at least
     `PLAN_MIN_APPEARANCES` interactions. The last attempt listed characters who then
     went the whole book without a scene anybody had asked for.
-  * **No subset twice.** A repeat is not a payoff. The same three people having a
+  * **Groupings vary.** A core party may recur, up to a budget; past that a repeat
+    is not a payoff. The same three people having a
     second scene is the book doing something it has already done.
   * **Sizes vary.** A ledger of nothing but two-handers is as broken as one of nothing
     but ensembles — the first is a book with no crowd scenes and the second is a book
@@ -38,6 +39,8 @@ of the space — and every character shares real page time with about fifteen ot
 from collections import Counter
 from dataclasses import dataclass, field
 from itertools import combinations
+
+from .. import config
 
 
 @dataclass
@@ -230,13 +233,15 @@ def shortfall_brief(entries, cast_origins, universes, min_appearances,
     # 40 will remove. The proposer needs to see it while it can still avoid it.
     if entries:
         recent = [" + ".join(sorted(e.get("who") or [])) for e in entries[-40:]]
-        lines.append("GROUPS ALREADY USED (never repeat a set — vary it by at least "
+        lines.append(f"GROUPS ALREADY USED (each may recur at most "
+                     f"{config.META_SUBSET_MAX_REPEATS}x — vary by at least "
                      "one person; the most recent are listed):")
         lines.append("  " + "; ".join(recent))
     return "\n".join(lines)
 
 
 def check(entries, cast_origins, universes, min_appearances=6, cross_share=0.60,
+          subset_cap=None, distinct_share=None,
           pairing_share=0.04, physical_share=0.30, front_physical_share=0.20,
           back_physical_share=0.45, register_ceiling=0.50):
     """Validate the whole interaction ledger. Returns a LedgerReport.
@@ -245,6 +250,12 @@ def check(entries, cast_origins, universes, min_appearances=6, cross_share=0.60,
     locked character to their world, or to "original" for a character invented for
     this book."""
     errors = []
+    # Defaults come from config rather than the signature, so a caller that does not
+    # care gets the deployed numbers and a test can still pin one explicitly.
+    if subset_cap is None:
+        subset_cap = config.META_SUBSET_MAX_REPEATS
+    if distinct_share is None:
+        distinct_share = config.META_DISTINCT_GROUP_SHARE
     seen = stats(entries, cast_origins, universes)
     total = seen["total"]
     if not total:
@@ -307,15 +318,30 @@ def check(entries, cast_origins, universes, min_appearances=6, cross_share=0.60,
             + ". Every locked character is a principal; one with almost no scenes is a "
               "name on a list.")
 
-    # 2. No subset twice. A repeat is not a payoff.
-    subsets = Counter(frozenset(e.get("who") or []) for e in entries)
-    repeated = [s for s, n in subsets.items() if n > 1 and s]
-    if repeated:
-        shown = "; ".join(" + ".join(sorted(s)) for s in repeated[:6])
+    # 2. Groupings vary. A core party may recur; it may not BE the book.
+    #
+    # This was an absolute uniqueness rule, and it is the only gate here that has made
+    # a book unplannable rather than merely rejecting a bad proposal — see
+    # `config.META_SUBSET_MAX_REPEATS` for the measurement that changed it. Two clauses
+    # now carry the same intent between them, and both are needed: the cap stops one
+    # grouping dominating, and the distinct floor stops a book that is a small rotation
+    # of groupings each used up to the cap.
+    subsets = Counter(frozenset(e.get("who") or []) for e in entries if e.get("who"))
+    cap = max(1, subset_cap)
+    over = sorted(((n, s) for s, n in subsets.items() if n > cap), reverse=True)
+    if over:
+        shown = "; ".join(f"{' + '.join(sorted(s))} ({n}x)" for n, s in over[:6])
         errors.append(
-            f"{len(repeated)} group(s) of characters are used more than once: {shown}. "
-            f"A second scene for the same set is not a payoff, it is a repeat — vary "
-            f"the grouping, even by one person.")
+            f"{len(over)} grouping(s) exceed the {cap}-scene budget: {shown}. A core "
+            f"party is allowed to recur, but a grouping past its budget is the ledger "
+            f"leaning on one combination — vary it by at least one person.")
+    distinct = len(subsets)
+    want_distinct = round(distinct_share * total)
+    if total and distinct < want_distinct:
+        errors.append(
+            f"only {distinct}/{total} interactions ({distinct/total:.0%}) are a fresh "
+            f"combination of people; the floor is {distinct_share:.0%}. Most scenes "
+            f"should put people together who have not been together before.")
 
     # 3. Sizes vary.
     sizes = seen["sizes"]

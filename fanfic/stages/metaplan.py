@@ -35,6 +35,7 @@ a stubborn model rather than a missing input.
 """
 
 import json
+from collections import Counter
 
 from .. import config, paths
 from ..gates import interactions as ledger_gate
@@ -110,7 +111,7 @@ def _renumber(meta):
     return meta
 
 
-def _validate_chunk(chunk, first_number, plan_names, want_count, used_subsets=()):
+def _validate_chunk(chunk, first_number, plan_names, want_count, used_counts=None):
     """Local, per-chunk checks. Returns a list of errors.
 
     Mostly the things a chunk can be judged on alone: coverage across the whole book is
@@ -118,14 +119,22 @@ def _validate_chunk(chunk, first_number, plan_names, want_count, used_subsets=()
     `gates.interactions`, with each chunk *steered* toward it by a running shortfall
     brief.
 
-    The exception is `used_subsets`, and it earns its place by being the one whole-book
+    The exception is `used_counts`, and it earns its place by being the one whole-book
     rule that a late repair cannot fix. Under-use and thin pairings are closable by
-    writing more scenes; a group of people already used in chapter 4 is a duplicate no
-    amount of re-planning chapter 40 will remove. Caught here, in the chunk that
-    introduces it, it costs one re-proposal — caught only at the end it costs a repair
-    round that cannot succeed."""
+    writing more scenes; a grouping over its budget in chapter 4 is not something
+    re-planning chapter 40 will remove. Caught here, in the chunk that introduces it, it
+    costs one re-proposal — caught only at the end it costs a repair round that cannot
+    succeed.
+
+    It is a BUDGET rather than a ban, and the difference is a book. Forbidding any
+    repeat outright is satisfiable for a 52-character crossover and not for an
+    18-character novelization: the real Star Wars book planned 30 chapters with every
+    grouping unique and then failed three straight attempts on chapters 31-40, every
+    failure being the protagonist plus the same small pool of Jedi Masters — the scenes
+    the source is actually made of. See `config.META_SUBSET_MAX_REPEATS`."""
     errors = []
-    seen_here = set()
+    used_counts = Counter(used_counts or {})
+    seen_here = Counter()
     chapters = chunk.get("chapters")
     if not isinstance(chapters, list) or not chapters:
         return ["the chunk has no `chapters` list"]
@@ -175,13 +184,14 @@ def _validate_chunk(chunk, first_number, plan_names, want_count, used_subsets=()
                     f"{', '.join(ledger_gate.REGISTERS)}, got "
                     f"{entry.get('register')!r}")
             group = frozenset(who)
-            if len(who) >= 2 and (group in used_subsets or group in seen_here):
+            cap = max(1, config.META_SUBSET_MAX_REPEATS)
+            if len(who) >= 2 and used_counts[group] + seen_here[group] >= cap:
                 errors.append(
                     f"chapter {n} interaction {i}: {' + '.join(sorted(who))} have "
-                    f"already had a scene together in this book. A second scene for "
-                    f"the same set is a repeat, not a payoff — vary the grouping, "
-                    f"even by one person.")
-            seen_here.add(group)
+                    f"already shared {cap} scene(s) in this book, which is all this "
+                    f"grouping gets — vary it by at least one person. A core party is "
+                    f"allowed to recur; it is not allowed to be most of the book.")
+            seen_here[group] += 1
     return errors
 
 
@@ -375,7 +385,7 @@ def _build_out(series_rec, book_num, meta, floor, plan_names, origins, step,
                     last = min(done + step, want)
                 errors = _validate_chunk(
                     chunk, first, plan_names, want,
-                    used_subsets={frozenset(e["who"]) for e in ledger(meta)})
+                    used_counts=Counter(frozenset(e["who"]) for e in ledger(meta)))
             if not errors:
                 break
             if log_fn:

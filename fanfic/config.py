@@ -684,6 +684,34 @@ META_BACK_PHYSICAL_SHARE = float(
 META_REGISTER_CEILING = float(
     os.environ.get("FANFIC_META_REGISTER_CEILING", "0.50"))
 
+# How many times ONE exact grouping of characters may share a scene across a book.
+#
+# This was effectively 1 — an absolute uniqueness rule — and it is the only gate in the
+# project that has ever made a book unplannable rather than merely rejecting a bad
+# proposal. The reasoning was sound and the arithmetic was not: it was written for a
+# 52-character crossover, where the supply of sensible groupings is enormous. Run
+# against an 18-character novelization with a fixed core party, the supply runs out.
+#
+# Measured, on the real Star Wars book: 30 chapters and 148 interactions were planned
+# with every grouping unique, and then chapter 31-40 failed three times in a row. Every
+# failure was the protagonist plus one or two of the same small pool of Jedi Masters —
+# the scenes the *source* is made of. The model was not being lazy; there was no
+# unused, sensible combination left to give it.
+#
+# A cap keeps what the rule was for. What it was protecting against is a ledger that is
+# the same four people over and over, and three occurrences of one grouping across two
+# hundred scenes is not that. What it was costing was the core cast of a novelization
+# being forbidden from meeting twice.
+META_SUBSET_MAX_REPEATS = int(
+    os.environ.get("FANFIC_META_SUBSET_MAX_REPEATS", "3"))
+
+# And the other half of the same intent, checked over the finished ledger: MOST scenes
+# must still be a fresh combination. The cap alone permits monotony in principle — 200
+# interactions could be 67 groupings used three times each — so this is the floor that
+# says a book is mostly new pairings rather than a rotation.
+META_DISTINCT_GROUP_SHARE = float(
+    os.environ.get("FANFIC_META_DISTINCT_GROUP_SHARE", "0.60"))
+
 # --- Stalling: what happens instead of failing -------------------------------
 
 # A unit that hits something it cannot get past waits this long before its first

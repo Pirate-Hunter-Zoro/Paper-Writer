@@ -98,7 +98,8 @@ toward them as you go; a shortfall found at the end is expensive to repair.
 - **Nobody is a guest star.** Every character on the cast list ends the book with at
   least six interactions. They are all principals; that is what being on the list
   means.
-- **No group of people is used twice.** A second scene for the same set is a repeat,
+- **Vary who is in a scene.** One exact grouping may recur a few times across the book
+  — a core party is allowed to travel together — but leaning on the same combination is a repeat,
   not a payoff. Vary it, even by one person.
 - **Vary the group sizes.** Two-handers, threes, fours, and some real ensembles. No
   single size may be more than 60% of the book; at least a tenth must be two-handers

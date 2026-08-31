@@ -216,27 +216,51 @@ class ARepeatedGroupIsCaughtWhereItCanStillBeFixed(unittest.TestCase):
         storage.save_json(PLAN, paths.plan_path(self.sid))
         storage.save_json({"characters": {}}, paths.series_bible_path(self.sid))
 
-    def test_a_repeat_within_one_chunk_is_rejected(self):
-        errors = metaplan._validate_chunk(
-            {"chapters": [{"number": 1, "premise": "p", "cast": ["OH1", "GF1"],
-                           "interactions": [
-                               {"who": ["OH1", "GF1"], "promise": "a"},
-                               {"who": ["GF1", "OH1"], "promise": "b"},
-                               {"who": ["OH1", "GF1"], "promise": "c"},
-                               {"who": ["OH1", "GF1"], "promise": "d"}]}]},
-            1, {"OH1", "GF1"}, 33)
-        self.assertTrue(any("already had a scene together" in e for e in errors))
+    def _chunk(self, groups, number=1):
+        return {"chapters": [{"number": number, "premise": "p",
+                              "cast": sorted({n for g in groups for n in g}),
+                              "interactions": [
+                                  {"who": list(g), "promise": f"p{i}"}
+                                  for i, g in enumerate(groups)]}]}
 
-    def test_a_repeat_of_something_already_committed_is_rejected(self):
+    def test_a_grouping_over_its_budget_within_one_chunk_is_rejected(self):
+        """The budget is `config.META_SUBSET_MAX_REPEATS`. Four uses of one pair in a
+        single chunk is the ledger leaning on one combination, which is what the rule
+        has always been for."""
+        pair = ["OH1", "GF1"]
         errors = metaplan._validate_chunk(
-            {"chapters": [{"number": 5, "premise": "p", "cast": ["OH1", "GF1"],
-                           "interactions": [{"who": ["OH1", "GF1"], "promise": "a"}]
-                           * 1 + [{"who": ["OH1", "GF2"], "promise": "b"},
-                                  {"who": ["OH2", "GF1"], "promise": "c"},
-                                  {"who": ["OH2", "GF2"], "promise": "d"}]}]},
-            5, {"OH1", "OH2", "GF1", "GF2"}, 33,
-            used_subsets={frozenset(["OH1", "GF1"])})
-        self.assertTrue(any("already had a scene together" in e for e in errors))
+            self._chunk([pair, pair[::-1], pair, pair]), 1, {"OH1", "GF1"}, 33)
+        self.assertTrue(any("all this grouping gets" in e for e in errors), errors)
+
+    def test_a_grouping_within_its_budget_is_allowed(self):
+        """THE change, and the book it cost to learn. An absolute ban on repeats is
+        satisfiable for a 52-character crossover and not for an 18-character
+        novelization: the real Star Wars book planned 30 chapters with every grouping
+        unique, then failed three straight attempts on chapters 31-40, every failure
+        being the protagonist plus the same small pool of Jedi Masters. A core party is
+        allowed to travel together."""
+        pair = ["OH1", "GF1"]
+        errors = metaplan._validate_chunk(
+            self._chunk([pair, pair[::-1]]), 1, {"OH1", "GF1"}, 33)
+        self.assertEqual([e for e in errors if "grouping" in e], [], errors)
+
+    def test_the_budget_counts_what_earlier_chapters_already_spent(self):
+        """A chunk cannot see the whole book, so the running counts are passed in — a
+        grouping that used its budget in chapter 4 must not get it again in chapter 5."""
+        from collections import Counter
+        spent = Counter({frozenset(["OH1", "GF1"]): config.META_SUBSET_MAX_REPEATS})
+        errors = metaplan._validate_chunk(
+            self._chunk([["OH1", "GF1"], ["OH1", "GF2"], ["OH2", "GF1"]], number=5),
+            5, {"OH1", "OH2", "GF1", "GF2"}, 33, used_counts=spent)
+        self.assertTrue(any("all this grouping gets" in e for e in errors), errors)
+
+    def test_a_grouping_with_budget_left_over_from_earlier_chapters_is_allowed(self):
+        from collections import Counter
+        spent = Counter({frozenset(["OH1", "GF1"]): 1})
+        errors = metaplan._validate_chunk(
+            self._chunk([["OH1", "GF1"], ["OH1", "GF2"]], number=5),
+            5, {"OH1", "OH2", "GF1", "GF2"}, 33, used_counts=spent)
+        self.assertEqual([e for e in errors if "grouping" in e], [], errors)
 
     def test_the_brief_lists_the_groups_already_used(self):
         brief = ledger_gate.shortfall_brief(
