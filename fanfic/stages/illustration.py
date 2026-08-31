@@ -1050,9 +1050,30 @@ def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=Non
                  "context for what the room looks like and must NOT appear in the "
                  "picture")
     elif simplify >= 2:
+        # ONE PERSON, AND THE DESCRIPTION HAS TO BE TOLD SO.
+        #
+        # Cutting the cast list is not enough on its own, and rung 3 already knows
+        # this: the staging line is a sentence about several people doing things, and
+        # a model handed it plus a one-name cast draws the others anyway — with no
+        # sheet, no species, no reference, because they are no longer in the list. The
+        # rung meant to fix an identity failure manufactures a worse one.
+        #
+        # Seen repeatedly on this book: at rung 2 a background Kel Dor came back as an
+        # elderly human, a Togruta as a woman in a headwrap, and the protagonist as a
+        # boy — every time a character the trim had just dropped. Rung 3 countermands
+        # its description explicitly and rung 2 did not, which was an inconsistency
+        # rather than a decision.
+        dropped = [n for n, _s in cast[1:]]
         cast = cast[:1]
         who = cast[0][0] if cast else "the character"
         scene = f"{who}, a single clear portrait, in the setting of: {scene}"
+        if dropped:
+            others = ", ".join(dropped)
+            verb = "is" if len(dropped) == 1 else "are"
+            scene += (f". {who} is the ONLY person in the picture. {others} {verb} "
+                      f"mentioned only to say what is happening around them and must "
+                      f"NOT appear — no second figure, no silhouette, no face in the "
+                      f"background")
     elif simplify == 1:
         cast = cast[:2]
         # Keep the first clause of the staging — the subject and its action — and drop
