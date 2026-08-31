@@ -198,8 +198,8 @@ commits.
 Nothing here is blocking. These are judgements already made; revisit only with evidence.
 
 - **Nearly a third of chapters ship worse than a pass had already made them, and I did
-  NOT change it.** The loop keeps the LAST version, never the best one. At 17 chapters,
-  5 of them (29%) shipped carrying **11 blocking defects a previous pass had already
+  NOT change it.** The loop keeps the LAST version, never the best one. At 18 chapters,
+  5 of them (28%) shipped carrying **11 blocking defects a previous pass had already
   cleared**:
 
       ch4    3 -> 1 -> 3 -> 4               best 1, shipped 4
@@ -213,10 +213,14 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   shipped the 4; ch17 went 2, then 5, and shipped the 5.
 
   The obvious fix is to snapshot the prose each pass and ship the best-measured one.
-  **The reason not to is that the metric is noisy:** across 52 consecutive-pass
-  comparisons the count ROSE 11 times (21%), and ch12 went `7 -> 0 -> 2 -> 0` — the same
-  judge finding nothing, then two defects, then nothing again, on text that changed only
-  by craft edits. Selecting the minimum of a noisy signal buys some genuine improvements
+  **The reason not to is that the metric is noisy, and ch18 is the clearest proof:
+  `1 -> 7 -> 1`.** Up six and back down six, ending exactly where it started. Reading
+  that as real defects requires believing one pass introduced six and the next repaired
+  precisely those six. Across 54 consecutive-pass comparisons the count ROSE 12 times
+  (22%), with jumps of +6, +4, +3 and +2; and ch12 went `7 -> 0 -> 2 -> 0` — the same
+  judge finding nothing, then two defects, then nothing again, on text changed only by
+  craft edits. A "best pass" selected from a signal that swings like this is often just
+  the luckiest read. Selecting the minimum of a noisy signal buys some genuine improvements
   and some lucky reads, and it changes *what text ships*, which is the most consequential
   thing in the pipeline. Chapters that ship holding defects are also already queued for
   the REVISION sweep, which re-reads them against the finished book.
