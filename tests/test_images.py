@@ -33,6 +33,7 @@ from fanfic.errors import QuotaExceeded                           # noqa: E402
 from fanfic.engine import illustrating                            # noqa: E402
 from fanfic.infra import budget, journal                          # noqa: E402
 from fanfic.models import images                                  # noqa: E402
+import pathlib
 from fanfic.providers import image_browser                        # noqa: E402
 from fanfic.stages import illustration, refart                    # noqa: E402
 
@@ -1681,3 +1682,65 @@ class WikiLookupEarnsTheCharacter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class ARejectedUploadReportsWhatWasSaid(unittest.TestCase):
+    """The log line used to assert a cause it did not know.
+
+    "Gemini refused N reference picture(s) — likely read as photographs of real
+    people" was a guess, and repeating it in every log line turned it into a finding:
+    it is where the parked theory that photoreal source art trips the classifier came
+    from. The run's own numbers do not support it — two actual public-figures refusals
+    against 55 rejected uploads, and three of the four `BAD_REFERENCE_PATTERNS` say
+    nothing about people ("try uploading another image").
+
+    The retry itself is right and is not what changed: a rejected upload is not a
+    rejected prompt, so the references are shed and the composition is kept."""
+
+    def _retry(self, reason):
+        said = []
+        calls = []
+
+        def fake_run(cmd, timeout, note):
+            calls.append(cmd)
+            if len(calls) == 1:
+                return {"ok": False, "kind": "bad_reference", "reason": reason}
+            return {"ok": True}
+
+        original = image_browser._run
+        image_browser._run = fake_run
+        self.addCleanup(lambda: setattr(image_browser, "_run", original))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prompt_file = pathlib.Path(tmp) / "prompt.txt"
+            prompt_file.write_text("draw a knight", encoding="utf-8")
+            out = pathlib.Path(tmp) / "out.png"
+            out.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 4096)
+            original_art = image_browser.looks_like_art
+            image_browser.looks_like_art = lambda _p: None
+            self.addCleanup(
+                lambda: setattr(image_browser, "looks_like_art", original_art))
+            image_browser._render_with_retry(
+                ["node", "art.js", "--ref", "a.png"], prompt_file, "draw a knight",
+                None, ["a.png"], out, 60, said.append)
+        return " ".join(said), calls
+
+    def test_the_page_s_own_words_are_reported(self):
+        message, _ = self._retry("Try uploading another image.")
+        self.assertIn("Try uploading another image", message)
+
+    def test_no_cause_is_asserted(self):
+        message, _ = self._retry("Try uploading another image.")
+        self.assertNotIn("photographs of real people", message)
+        self.assertNotIn("likely read as", message)
+
+    def test_a_silent_rejection_says_so_rather_than_inventing_a_reason(self):
+        message, _ = self._retry("")
+        self.assertIn("did not say why", message)
+
+    def test_the_references_are_still_shed_and_the_prompt_kept(self):
+        """The behaviour this log line describes is unchanged."""
+        _, calls = self._retry("Try uploading another image.")
+        self.assertEqual(len(calls), 2, "it must ask again without the references")
+        self.assertNotIn("--ref", calls[1])
+        self.assertNotIn("a.png", calls[1])

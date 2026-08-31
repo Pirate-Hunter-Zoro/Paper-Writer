@@ -332,10 +332,21 @@ def _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout
     # rather than an anchored one, which is the documented fallback and is "merely
     # imprecise rather than actively depicting somebody else" — and it is a great deal
     # better than dropping to an empty-room rung.
+    #
+    # This used to assert the cause — "likely read as photographs of real people" —
+    # and that guess turned into a finding by repetition. It is what seeded the parked
+    # theory that photoreal source art is what trips the classifier. The run's own
+    # numbers do not support it: across ~250 renders Gemini gave the actual public
+    # figures refusal TWICE, against 55 rejected reference uploads, and three of the
+    # four `BAD_REFERENCE_PATTERNS` say nothing about people at all ("can't help with
+    # that image", "try uploading another image", "unable to process the uploaded
+    # image"). Report what the page said and let the reader diagnose it.
     if refs and (result.get("kind") == "bad_reference"):
-        note(f"Gemini refused {len(refs)} reference picture(s) — likely read as "
-             f"photographs of real people. Redrawing from the description alone; the "
-             f"result is anchored on prose, not on art.")
+        why = " ".join(str(result.get("reason") or "").split())
+        note(f"Gemini would not use {len(refs)} reference picture(s)"
+             + (f", saying: {why[:160]}" if why else " and did not say why")
+             + ". Redrawing from the description alone; the result is anchored on "
+               "prose, not on art.")
         prompt_file.write_text(f"{_instruction(aspect)}\n\n{prompt}", encoding="utf-8")
         bare = [c for c in cmd if c != "--ref"]
         bare = [c for c in bare if c not in refs]

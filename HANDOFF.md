@@ -221,10 +221,37 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   verify without spending renders on a running book, so I stopped at documenting it.
   **If you take it on, do the data fix and the sheet re-render together, or the prompts
   and the sheet will disagree and the critic will reject on the difference.**
-- **Not done, and deliberately:** sending only the painterly sheet to scene renders
-  instead of photoreal source art. The theory is that the photoreal art is what trips
-  the "real people" classifier. It is plausible and untested — if refusals stay high,
-  this is the next thing to try, and it is cheap to test.
+- **The painterly-sheet experiment is aimed at the wrong failure mode.** The theory
+  was that photoreal source art trips the "real people" classifier, to be tried if
+  refusals stayed high. Refusals did stay high — they roughly doubled across the
+  morning, per hour `28% → 51% → 49% → 65% → 62% → 73%` of attempts (n=25..49 an hour,
+  so not noise) while successful renders halved from 24/hr to 12/hr. So the trigger
+  fired, and I went to run it, and the numbers say not to:
+
+  | | count |
+  |---|---|
+  | `third-party content providers` (franchise IP) | 50 |
+  | `can't depict some public figures` (real people) | **2** |
+  | reference uploads rejected by Gemini | 55 |
+  | references dropped by our own upload cap | 46 |
+
+  The real-people classifier fires **twice in the whole run**. What actually parks a
+  slot is the franchise-IP refusal, which is about the prompt naming Star Wars, and no
+  change to the reference pictures touches it. The direct test agrees: when the
+  references are shed and the same composition is re-asked with none, it succeeds
+  23 times and is refused again 29 — barely better than a coin toss, which is what you
+  would expect if the references were never the main problem.
+  It would probably still reduce the 55 rejected uploads. But it also removes the
+  photoreal art the vision critic uses to judge identity — the thing sixteen commits
+  were spent getting right — so it trades a measurable identity anchor for an
+  unmeasured refusal gain on a secondary failure mode. **Not worth it on this evidence.
+  If someone runs it anyway, mark a keep-rate baseline first and watch
+  `critic-rejected`, not the headline number.**
+  Where the theory came from is worth knowing: the driver logged every rejected upload
+  as *"likely read as photographs of real people"* — a guess, asserted in the log line
+  itself, which became a finding by repetition. Three of the four
+  `BAD_REFERENCE_PATTERNS` say nothing about people. That line now reports what the
+  page actually said.
 
 ---
 
