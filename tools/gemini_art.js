@@ -528,66 +528,28 @@ async function render(cdp, args, prompt) {
     await cdp.key("keyUp", "Enter", "Enter", 13);
   }
 
-  // VERIFY IT ACTUALLY LEFT THE COMPOSER, and ask again if it did not.
+  // A SEND-VERIFICATION RETRY WAS TRIED HERE AND REMOVED. Recorded so nobody rebuilds
+  // it from the same reasoning.
   //
-  // Neither arm above proves anything was sent. The button selector requires
-  // `:not([disabled])`, and 400ms after inserting ~2KB into a rich-text component the
-  // composer has often not enabled it yet — so we fall through to Enter, and if that
-  // does not register either, the prompt just sits there. The driver then waits out
-  // the entire timeout for a reply to a message it never sent.
+  // The problem is real: `last response text: ""` means the prompt was never submitted
+  // — the page dumps show it still sitting in the composer with no user turn — and the
+  // driver then waits out the whole deadline for a reply to a message it never sent.
   //
-  // It reports that as `no image after Ns; last response text: ""`, which reads as
-  // "Gemini said nothing" and is really "we never asked". Five of these inside half an
-  // hour on the live book, each costing a full deadline and a billed render; the saved
-  // page dumps show the prompt still sitting in the box under an idle greeting
-  // ("Ready when you are", "Where should we start?") with no user turn on the page.
+  // Two attempts, neither of which worked. Fixed sleeps (~2.2s) took the rate from
+  // 5-in-43min to 1-in-15min, which is noise at those counts. Polling for up to 8s,
+  // clicking whenever the send control was enabled and pressing Enter otherwise, then
+  // failed twice within seven minutes of going live — a HIGHER rate than the baseline.
   //
-  // A sent composer is empty, so that is the check. If the composer cannot be found at
-  // all we do NOT block — that is either the page having moved on after a successful
-  // send, or Google having changed the markup, and neither is improved by refusing to
-  // wait for a picture.
-  const composerLength = async () => cdp.eval(`(() => {
-    const el = document.querySelector(
-      'rich-textarea div[contenteditable="true"], div.ql-editor[contenteditable="true"], ' +
-      'div[contenteditable="true"][role="textbox"], textarea[aria-label]');
-    if (!el) return -1;
-    return ((el.value !== undefined ? el.value : el.innerText) || "").trim().length;
-  })()`);
-
-  // POLL for the composer to empty, re-sending as we go, rather than sleeping a fixed
-  // guess. The first version of this waited 600ms and then re-tried twice on 800ms
-  // gaps — about 2.2s of patience, which halved the failures but did not stop them.
-  // The likely reason is the one the `:not([disabled])` selector implies: a ~2KB
-  // insert into a rich-text component can leave the send control disabled for longer
-  // than any fixed delay we would want to hard-code, and Enter is not honoured while
-  // the composer is in that state either. So: wait for the button to become clickable,
-  // take it the moment it does, and keep checking whether the text has gone.
-  const sendDeadline = Date.now() + 8000;
-  while (Date.now() < sendDeadline) {
-    const left = await composerLength();
-    if (left <= 0) break;                       // sent, or no composer to inspect
-    const clicked = await cdp.eval(`(() => {
-      const b = document.querySelector(
-        'button[aria-label*="Send" i]:not([disabled]), button.send-button:not([disabled]), ' +
-        '[data-test-id="send-button"]:not([disabled])');
-      if (b) { b.click(); return true; }
-      return false;
-    })()`);
-    if (!clicked) {
-      // Re-focus first. By this point the page may have moved focus elsewhere, and an
-      // Enter dispatched at the document does nothing at all.
-      await cdp.eval(`(() => {
-        const el = document.querySelector(
-          'rich-textarea div[contenteditable="true"], div.ql-editor[contenteditable="true"], ' +
-          'div[contenteditable="true"][role="textbox"], textarea[aria-label]');
-        if (el) { el.focus(); }
-        return !!el;
-      })()`);
-      await cdp.key("keyDown", "Enter", "Enter", 13);
-      await cdp.key("keyUp", "Enter", "Enter", 13);
-    }
-    await sleep(500);
-  }
+  // The likely harm is the Enter loop: in a contenteditable composer Enter frequently
+  // inserts a NEWLINE rather than submitting, so pressing it ~16 times grows the text,
+  // never empties it, and keeps the loop hammering. Reverted rather than tuned further,
+  // because this is the one file where being wrong stops every picture.
+  //
+  // If you pick it up: the untested lead is that `querySelector('a, b, c')` returns the
+  // first element in DOCUMENT ORDER matching any arm, not the first arm's match, so a
+  // hidden `textarea[aria-label]` earlier in the DOM would make a length check read an
+  // empty element and conclude the send succeeded. Log which arm matched before
+  // building anything on top of it, and measure over hours.
 
   // Wait for a picture. Two conditions, and both are needed: an image large enough to
   // be a render, AND the generation actually finished. Grabbing the first arm alone
