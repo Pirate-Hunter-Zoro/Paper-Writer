@@ -528,6 +528,52 @@ async function render(cdp, args, prompt) {
     await cdp.key("keyUp", "Enter", "Enter", 13);
   }
 
+  // VERIFY IT ACTUALLY LEFT THE COMPOSER, and ask again if it did not.
+  //
+  // Neither arm above proves anything was sent. The button selector requires
+  // `:not([disabled])`, and 400ms after inserting ~2KB into a rich-text component the
+  // composer has often not enabled it yet — so we fall through to Enter, and if that
+  // does not register either, the prompt just sits there. The driver then waits out
+  // the entire timeout for a reply to a message it never sent.
+  //
+  // It reports that as `no image after Ns; last response text: ""`, which reads as
+  // "Gemini said nothing" and is really "we never asked". Five of these inside half an
+  // hour on the live book, each costing a full deadline and a billed render; the saved
+  // page dumps show the prompt still sitting in the box under an idle greeting
+  // ("Ready when you are", "Where should we start?") with no user turn on the page.
+  //
+  // A sent composer is empty, so that is the check. If the composer cannot be found at
+  // all we do NOT block — that is either the page having moved on after a successful
+  // send, or Google having changed the markup, and neither is improved by refusing to
+  // wait for a picture.
+  const composerLength = async () => cdp.eval(`(() => {
+    const el = document.querySelector(
+      'rich-textarea div[contenteditable="true"], div.ql-editor[contenteditable="true"], ' +
+      'div[contenteditable="true"][role="textbox"], textarea[aria-label]');
+    if (!el) return -1;
+    return ((el.value !== undefined ? el.value : el.innerText) || "").trim().length;
+  })()`);
+
+  for (let retry = 0; retry < 3; retry++) {
+    const left = await composerLength();
+    if (left <= 0) break;                       // sent, or no composer to inspect
+    if (retry === 0) await sleep(600);          // it may simply have been slow
+    else {
+      const clicked = await cdp.eval(`(() => {
+        const b = document.querySelector(
+          'button[aria-label*="Send" i]:not([disabled]), button.send-button:not([disabled]), ' +
+          '[data-test-id="send-button"]:not([disabled])');
+        if (b) { b.click(); return true; }
+        return false;
+      })()`);
+      if (!clicked) {
+        await cdp.key("keyDown", "Enter", "Enter", 13);
+        await cdp.key("keyUp", "Enter", "Enter", 13);
+      }
+      await sleep(800);
+    }
+  }
+
   // Wait for a picture. Two conditions, and both are needed: an image large enough to
   // be a render, AND the generation actually finished. Grabbing the first arm alone
   // caught progressive placeholders and saved a blurred half-image.
