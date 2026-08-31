@@ -530,6 +530,22 @@ Deliberately left: "no visible sclera" (Scourge) and "no visible whites" (Morr) 
 an anatomical fact with no prop to reach for, and rewriting them risks losing what makes
 those two faces alien.
 
+**The identity-failure rate is driven by WHICH CHARACTERS are in frame, so comparing
+time windows is misleading.** Measured per render that reached the vision critic:
+
+    before any identity fix today   n=83   25% failed
+    after negation sweep 1          n=10   10%
+    after negation sweep 2 + T7     n=13   31%   <- WORSE than baseline
+    after the refused-refs fallback n=18    0%
+
+The 0% looks like a fix landing and the 31% looks like a regression. Neither is either.
+**Three of window 3's four failures were Kira Carsen** — the same red-hair-drawn-blonde
+defect, three times — and Kira does not appear in window 4 at all. The window that looks
+cured is the window she is missing from. A cast with a hard-to-draw principal in it fails
+more than a cast without one, whatever the prompts say.
+So: before reading any window comparison here, check which characters were actually in
+those renders. `grep -o "<name>" state/illustrator.log` per window is enough.
+
 **None of this is confirmed yet, and the way it will look confirmed is a trap.** An
 hour after the rewrite: 11 renders reached the critic, 1 identity failure, 0 complaints
 about Satele's bangs. That reads like a fix landing. It is not — **Satele has not been
