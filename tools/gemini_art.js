@@ -528,33 +528,33 @@ async function render(cdp, args, prompt) {
     await cdp.key("keyUp", "Enter", "Enter", 13);
   }
 
-  // A SEND-VERIFICATION RETRY WAS TRIED HERE AND REMOVED. Recorded so nobody rebuilds
-  // it from the same reasoning — and so nobody believes the reason I first gave.
+  // WHY THE PROMPT SOMETIMES NEVER LEAVES THE COMPOSER — diagnosed, not fixed.
   //
-  // The problem is real: `last response text: ""` means the prompt was never submitted
-  // — the page dumps show it still sitting in the composer with no user turn — and the
-  // driver then waits out the whole deadline for a reply to a message it never sent.
+  // When a reference upload fails, Gemini marks the attachment chip with an error and
+  // keeps the send control DISABLED. The prompt then sits here and can never go: no
+  // amount of clicking or pressing Enter helps, because there is nothing enabled to
+  // click. The driver waits out the entire deadline and reports
+  // `no image after Ns; last response text: ""`, which reads as "Gemini said nothing"
+  // and actually means "we were never able to ask".
   //
-  // Two attempts: fixed sleeps (~2.2s), then polling for up to 8s while clicking the
-  // send control and pressing Enter. **Neither could be shown to help, and neither
-  // could be shown to hurt.** Measured per 10 minutes: original 1.14, sleeps 0.49,
-  // polling 1.35, and then the reverted original 3.33 — ten events in total, across
-  // windows of three to forty-three minutes. That is noise, and I twice read it as a
-  // result: first calling the sleeps a partial success, then calling the polling a
-  // regression. It was neither.
+  // Evidence, on 2026-08-31: `state/image-diagnostics/2026-08-31T22-05-18Z-timeout.png`
+  // shows five reference chips (valis, t7-o1, lord-scourge, ref1, ref2) each carrying an
+  // error icon, the prompt below them, and the send arrow greyed out. Across that
+  // evening, renders conditioned on references fell 12/hr -> 0/hr while reference-FREE
+  // renders kept working at ~3/hr. Two earlier send-retry schemes were tried and
+  // reverted; both were retrying a click against a control that was disabled.
   //
-  // Removed because the simpler code is the better default when nothing distinguishes
-  // them, not because it was proven harmful. One real caution if you try again: in a
-  // contenteditable composer Enter often inserts a NEWLINE instead of submitting, so a
-  // loop that presses it repeatedly can grow the text rather than send it. That is a
-  // mechanism worth avoiding, not something observed here.
+  // THE FIX IS OBVIOUS AND UNTESTABLE HERE: treat "attachments present and send still
+  // disabled" as `bad_reference`, which sheds the references and re-asks with the
+  // prose-anchored prompt — the path already built for exactly this. I wrote it and
+  // backed it out, because `tests/fixtures/gemini_page.py` does not model a failed
+  // upload: the fixture composer keeps its text after a successful send, so the check
+  // fired on every render carrying references and broke 13 of the 21 browser tests.
   //
-  // The untested lead: `querySelector('a, b, c')` returns the first element in DOCUMENT
-  // ORDER matching any arm, not the first arm's match, so a hidden `textarea[aria-label]`
-  // earlier in the DOM would make a composer-length check read an empty element and
-  // conclude the send succeeded. Log which arm matched first. And measure over hours —
-  // this failure runs at roughly one per ten minutes, so an hour is ~6 events and even
-  // that is thin.
+  // To do it properly: first teach the fixture to serve a failed-upload state (errored
+  // chip + disabled send), then write the check against it. Do not ship this without
+  // that fixture — the failure mode is "every reference is silently discarded", which
+  // looks like working software and quietly destroys visual consistency.
 
   // Wait for a picture. Two conditions, and both are needed: an image large enough to
   // be a render, AND the generation actually finished. Grabbing the first arm alone
