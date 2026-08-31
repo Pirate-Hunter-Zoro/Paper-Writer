@@ -26,7 +26,7 @@
 // Writes the PNG/JPEG to --out and prints ONE line of JSON on stdout:
 //
 //   {"ok":true,  "bytes":N, "width":W, "height":H, "mime":"image/png"}
-//   {"ok":false, "kind":"not_signed_in|quota|refused|no_image|transient|setup",
+//   {"ok":false, "kind":"not_signed_in|quota|refused|bad_reference|no_image|transient|setup",
 //    "reason":"..."}
 //
 // `kind` is the contract that matters, because the three of them mean three
@@ -283,6 +283,22 @@ const WORKING_PATTERNS = [
   /working on it/i,
 ];
 
+// A refusal about the UPLOAD rather than the request. Distinct because the remedy is
+// completely different: the prompt is fine and does not want simplifying — one of the
+// attached pictures is unacceptable to Gemini, and the render should be retried
+// without it.
+//
+// Seen live on Satele Shan, whose wiki art is a photoreal 3D promotional render; the
+// classifier appears to read that as a photograph of a real person. A rejected upload
+// also never produces an attachment chip, so this is the same failure that shows up
+// earlier as "files were set but no attachment preview appeared".
+const BAD_REFERENCE_PATTERNS = [
+  /can'?t help with that image/i,
+  /try uploading another image/i,
+  /unable to process the (uploaded |)image/i,
+  /can'?t (analyze|analyse|identify) (the |)(people|person|faces?) in/i,
+];
+
 const REFUSAL_PATTERNS = [
   /can'?t (help with|create|generate|make)/i,
   /unable to (create|generate)/i,
@@ -293,6 +309,8 @@ const REFUSAL_PATTERNS = [
 
 function classifyText(text) {
   for (const re of LIMIT_PATTERNS) if (re.test(text)) return "quota";
+  // Checked before the general refusal list, whose wording it would otherwise match.
+  for (const re of BAD_REFERENCE_PATTERNS) if (re.test(text)) return "bad_reference";
   for (const re of REFUSAL_PATTERNS) if (re.test(text)) return "refused";
   return null;
 }
@@ -460,7 +478,12 @@ async function render(cdp, args, prompt) {
     const attached = await attachRefs(cdp, args.refs, left());
     if (attached !== true) {
       await dump(cdp, "upload");
-      return { ok: false, kind: "transient",
+      // A rejected upload never produces a preview chip, so "no preview appeared" and
+      // an explicit "can't help with that image" are one failure wearing two faces.
+      // Both want the same remedy: drop the reference, keep the prompt.
+      const kind = /no attachment preview/.test(String(attached))
+        ? "bad_reference" : "transient";
+      return { ok: false, kind,
                reason: `could not attach ${args.refs.length} reference picture(s): ${attached}` };
     }
   }
@@ -527,7 +550,8 @@ async function render(cdp, args, prompt) {
   if (found.verdict) {
     // A guest session declines every picture in the language of a policy refusal. Ask
     // the page who it thinks we are before blaming the prompt.
-    if (found.verdict === "refused" && await cdp.eval(PROBE_SIGNED_OUT)) {
+    if ((found.verdict === "refused" || found.verdict === "bad_reference")
+        && await cdp.eval(PROBE_SIGNED_OUT)) {
       await dump(cdp, "signin");
       return { ok: false, kind: "not_signed_in", reason: notSignedInMessage(
         "the session went to a signed-out guest chat, which answers text and declines " +
