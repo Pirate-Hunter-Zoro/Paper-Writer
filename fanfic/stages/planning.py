@@ -10,7 +10,7 @@ cast to lock — and seeds the series bible from the cast and relationship graph
 A standalone novel is just a one-book series, so this one path covers both.
 """
 
-from .. import config, paths
+from .. import config, jobspec, paths
 from . import anchoring, correction_brief
 from ..infra import storage
 from ..memory.bible import (new_canon, new_character, new_series_bible,
@@ -39,9 +39,33 @@ def propose_plan(series_rec, out_path, log_fn=None, feedback=""):
 
     `feedback` carries the validator's complaints from a previous rejected attempt."""
     universes = series_rec.get("universes", [])
+    prompt_text = series_rec["prompt_text"]
+
+    # A declared novelization is told so up front rather than discovering it by being
+    # rejected. The base template asks for an invented biggest bad; letting the model
+    # propose one and then refusing it costs a full planning call and — worse — the
+    # correction brief pushes it toward satisfying the gate rather than toward the
+    # book the reader asked for.
+    kind = []
+    if jobspec.forbids_original_characters(prompt_text):
+        kind = [
+            "THIS JOB IS A NOVELIZATION, AND ITS CAST IS THE SOURCE'S CAST.",
+            "It has declared that no original characters are to be invented. That "
+            "overrides the instruction above to invent this book's biggest villain: "
+            "the primary antagonist MUST be a canon character from the source, and "
+            "every antagonist's `origin` must name their source universe rather than "
+            "`original`. Do not add a Sith Lord, a conspiracy, or a hidden hand that "
+            "the source does not have — an invented threat placed above the canon one "
+            "is not escalation here, it is a different book than the one asked for.",
+            "Escalation comes from the source's own structure: what the antagonist "
+            "does, what it costs, and what the reader learns about a villain they "
+            "thought they already understood.",
+            "",
+        ]
+
     return text.produce(
         prompts.template("series_plan") + feedback,
-        [f"Universes: {', '.join(universes)}",
+        kind + [f"Universes: {', '.join(universes)}",
          "",
          # The anchor comes FIRST and outranks canon for anything it covers. Canon
          # says what a character looks like across their series; the anchor says what
@@ -59,15 +83,19 @@ def propose_plan(series_rec, out_path, log_fn=None, feedback=""):
          "=" * 70,
          "THE JOB PROMPT (what the reader asked for):",
          "=" * 70,
-         series_rec["prompt_text"]],
+         prompt_text],
         out_path,
         role="planning",
         artifact="the series plan as strict JSON",
         log_fn=log_fn)
 
 
-def _validate(plan):
-    """Structural completeness of a proposed plan. Returns a list of errors."""
+def _validate(plan, allow_canon_primary=False):
+    """Structural completeness of a proposed plan. Returns a list of errors.
+
+    `allow_canon_primary` is set for a job that has declared itself a novelization —
+    see `jobspec.forbids_original_characters`. It relaxes exactly one rule: that the
+    book's biggest villain must be invented."""
     errors = []
     count = plan.get("book_count")
     books = plan.get("books", [])
@@ -128,7 +156,7 @@ def _validate(plan):
     if not plan.get("style_guide"):
         errors.append("plan: no style_guide; the writer has no voice to work in")
 
-    errors += _validate_antagonists(plan)
+    errors += _validate_antagonists(plan, allow_canon_primary=allow_canon_primary)
     errors += _validate_originals(plan)
     errors += _validate_progressions(plan)
 
@@ -141,17 +169,24 @@ def _validate(plan):
     return errors
 
 
-def _validate_antagonists(plan):
-    """The book must have a villain of its own.
+def _validate_antagonists(plan, allow_canon_primary=False):
+    """The book must know what it is up against.
 
     There was no antagonist concept anywhere in this pipeline — not in the plan
     schema, not in a gate, not in a prompt; the word did not appear. Bill Cipher was
     in the last plan only because he is on the Gravity Falls cast list, which is not
     the same thing as the book having decided what it is up against.
 
-    The primary threat must be **original**. An existing villain may appear and may be
-    excellent, but a crossover whose ceiling is a villain the reader already knows the
-    limits of has no room to escalate past their canon."""
+    For an original story the primary threat must also be **invented**. An existing
+    villain may appear and may be excellent, but a crossover whose ceiling is a villain
+    the reader already knows the limits of has no room to escalate past their canon.
+
+    `allow_canon_primary` lifts that one requirement for a declared NOVELIZATION, where
+    it is actively wrong: the canon villain is what the reader came for, and an
+    invented antagonist placed above them is not escalation but a different book. The
+    structural requirements — one primary, everyone named, everyone in the cast,
+    everyone with a stated threat — hold either way, because they are about the plan
+    being complete rather than about where the villain came from."""
     errors = []
     cast = {c.get("name"): c for c in plan.get("characters") or []}
     entries = plan.get("antagonists") or []
@@ -177,6 +212,11 @@ def _validate_antagonists(plan):
                           f"want and what they can actually do about it")
 
     origins = {name: (spec.get("origin") or "") for name, spec in cast.items()}
+    if allow_canon_primary:
+        # A declared novelization. The cast is the source's cast, so requiring an
+        # invented villain here would demand the one thing the job ruled out.
+        return errors
+
     originals = [a for a in entries if origins.get(a.get("name")) == "original"]
     if not originals:
         errors.append(
@@ -277,6 +317,10 @@ def run(series_rec, log_fn=None):
     Returns {"book_count", "books", "title"}. Raises RuntimeError on a structural
     failure — a deterministic park."""
     sid = series_rec["series_id"]
+    novelization = jobspec.forbids_original_characters(series_rec["prompt_text"])
+    if novelization and log_fn:
+        log_fn("planning: this job declares no original characters, so the primary "
+               "antagonist may be a canon villain")
     proposal_path = paths.plan_proposal_path(sid)
     attempts = max(1, config.GATE_MAX_ATTEMPTS)
     feedback, errors = "", []
@@ -286,7 +330,7 @@ def run(series_rec, log_fn=None):
         if not isinstance(plan, dict):
             errors = [why or "the plan is not a JSON object"]
         else:
-            errors = _validate(plan)
+            errors = _validate(plan, allow_canon_primary=novelization)
         if not errors:
             break
         if log_fn:

@@ -124,6 +124,41 @@ def art_direction(prompt_text):
     return " ".join(body.split())                     # collapse wrapped lines
 
 
+_NO_ORIGINALS_RE = re.compile(
+    r"original\s+characters?\s*[:\-]\s*(none|no\b|nil|n/a)", re.IGNORECASE)
+
+
+def forbids_original_characters(prompt_text):
+    """Whether this job has declared that its cast is the source's cast, full stop.
+
+    Written as an explicit declaration rather than inferred, because the two jobs it
+    distinguishes want opposite things and guessing wrong ruins a book either way.
+
+    The planning gate requires the book's biggest villain to be INVENTED, and its
+    reasoning is sound for the job it was written for: a crossover whose ceiling is a
+    villain the reader already knows the limits of has no room to escalate past their
+    canon. Assembled entirely out of other people's antagonists, it has nothing at
+    stake the source shows have not already settled.
+
+    For a straight NOVELIZATION that reasoning inverts completely. The canon villain
+    is the entire point, the canon limits are what the reader came for, and an invented
+    Sith Lord placed above the Emperor is not escalation — it is the failure mode. A
+    novelization of the Jedi Knight story planned under the crossover rule produced
+    exactly that: a wholly original Darth outranking Darth Angral, in a book whose
+    prompt said "Original characters: none."
+
+    So the job says which kind it is, in its own words, in the section that already
+    lists the cast:
+
+        Original characters: none.
+
+    Absent the declaration the crossover rule applies, which is the safe default — it
+    is the stricter of the two, and it is what every job written before this existed
+    was planned under."""
+    body = section_matching(sections(prompt_text), "main character", "character")
+    return bool(_NO_ORIGINALS_RE.search(body or ""))
+
+
 def main_characters(prompt_text):
     """The named cast from the prompt's 'Main characters to feature' section.
 
