@@ -756,13 +756,30 @@ class TheInteractionLedger(unittest.TestCase):
         self.assertFalse(report.passed)
         self.assertTrue(any("fewer than 3 interactions" in e for e in report.errors))
 
-    def test_the_same_group_twice_is_rejected(self):
-        """A second scene for the same set is a repeat, not a payoff."""
+    def test_a_grouping_past_its_budget_is_rejected(self):
+        """A core party may recur; it may not be most of the book. Four scenes for one
+        pair is past the budget in `config.META_SUBSET_MAX_REPEATS`."""
         from fanfic.gates import interactions as gate
         origins = {"C1": "Show", "C2": "Show"}
-        report = gate.check(self._entries(4), origins, ["Show"], min_appearances=1)
+        report = gate.check(self._entries(4), origins, ["Show"], min_appearances=1,
+                            subset_cap=3)
         self.assertFalse(report.passed)
-        self.assertTrue(any("more than once" in e for e in report.errors))
+        self.assertTrue(any("budget" in e for e in report.errors), report.errors)
+
+    def test_a_ledger_that_is_a_small_rotation_is_rejected(self):
+        """The cap alone permits monotony: 200 scenes could be 67 groupings used three
+        times each. The distinct floor is the other half of the same intent."""
+        from fanfic.gates import interactions as gate
+        origins = {f"C{k}": "Show" for k in range(1, 5)}
+        # Three groupings, each used three times — every one inside the cap.
+        groups = [["C1", "C2"], ["C2", "C3"], ["C3", "C4"]]
+        entries = [{"id": f"x.{i}", "who": g, "chapter": i // 3 + 1}
+                   for i, g in enumerate(groups * 3)]
+        report = gate.check(entries, origins, ["Show"], min_appearances=1,
+                            subset_cap=3)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("fresh combination" in e for e in report.errors),
+                        report.errors)
 
     def test_a_ledger_of_only_two_handers_is_rejected(self):
         """As broken as one of only ensemble scenes: a book with no crowd in it."""
