@@ -2411,7 +2411,7 @@ Redirecting `FANFIC_STATE_DIR` is what lets the whole system run against a scrat
 | `FANFIC_CHROME_BIN` | `/Applications/Google Chrome.app/…` | The browser the driver launches. |
 | `FANFIC_NODE_BIN` | `node` | Node 22+, for `tools/gemini_art.js`. No npm packages are used. |
 | `FANFIC_IMAGE_HEADFUL` | `0` | `1` renders in a visible window. The only practical way to debug a selector Google has moved. |
-| `FANFIC_IMAGE_DIAG_DIR` | `<state>/image-diagnostics` | A failed render dumps a screenshot and the page text here. Empty turns it off. |
+| `FANFIC_IMAGE_DIAG_DIR` | `<state>/image-diagnostics` | A failed render dumps a screenshot and the page text here. Set it to the **empty string** to turn dumps off — this is the one tunable where "off" is a real choice rather than the absence of one, so it does not follow the usual "empty means unset" rule. |
 | `FANFIC_IMAGE_RENDER_TIMEOUT_SEC` | `420` | Wall-clock for one render inside the browser. Generous on purpose: a picture takes 8s to 2min depending on what the account is queued behind. |
 | `FANFIC_IMAGE_MAX_UPLOADS` | `6` | Reference pictures attached to one render. They compete for a fixed budget of attention, and uploading is slower than an API part was. |
 | `FANFIC_IMAGE_MIN_BYTES` / `FANFIC_IMAGE_MIN_EDGE` | `20000` / `512` | The sanity floor: what a download must clear to count as art at all. A web page can hand you a spinner, and a spinner is `<img>`-shaped. |

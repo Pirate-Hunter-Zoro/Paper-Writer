@@ -136,6 +136,8 @@ def _env():
         env["GEMINI_ART_HEADFUL"] = "1"
     if config.IMAGE_DIAG_DIR:
         env["GEMINI_ART_DIAG_DIR"] = str(config.IMAGE_DIAG_DIR)
+    # Absent means the driver dumps nothing, which is a supported choice rather than a
+    # misconfiguration — so it is simply not passed.
     return env
 
 
@@ -239,6 +241,11 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
         out_path.unlink()            # so "file present" means "this render produced it"
 
     refs = [str(r) for r in (references or []) if r and r.exists()]
+    # The prompt travels as a FILE rather than as an argv string. A scene prompt is
+    # ~2KB of staging, cast identity and style; putting that on a command line means it
+    # is visible in `ps` to every process on the machine and one shell metacharacter
+    # away from a quoting bug. It lands beside the render, which is always inside the
+    # hidden staging directory, and is removed either way — see the `finally`.
     prompt_file = out_path.with_suffix(".prompt.txt")
     prompt_file.write_text(f"{_instruction(aspect)}\n\n{prompt}", encoding="utf-8")
 
@@ -260,6 +267,8 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
         raise RuntimeError(f"the browser did not return within {timeout}s")
     except FileNotFoundError:
         raise NotSignedIn(f"node binary not found: {config.NODE_BIN}")
+    finally:
+        prompt_file.unlink(missing_ok=True)
 
     result = _result(proc)
     if not result.get("ok"):
@@ -275,7 +284,6 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
          f"{result.get('mime', 'image')} ({result.get('bytes', 0) // 1024} KB) "
          f"through the browser session"
          + (f", conditioned on {len(refs)} reference picture(s)" if refs else ""))
-    prompt_file.unlink(missing_ok=True)
 
 
 def _result(proc):
