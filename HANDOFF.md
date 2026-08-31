@@ -269,6 +269,16 @@ Worth reading. The pattern in all of them is the same.
   part of every deploy; a baseline was marked at 2026-08-31T12:42Z on 219 billed / 62
   kept. It prints the sample size and says so out loud below 40 renders, because a
   delta over a dozen renders is a hypothesis.
+  It also splits the losses into **critic-rejected / refused / hung**, which is the
+  distinction the number badly needs: `billed_render` counts an attempt before it
+  calls `render`, so the denominator holds all three, and "sustained below 30%" means
+  something completely different depending on which is moving. A critic rejection says
+  our prompts regressed; a classifier refusal says nothing about the composition at all
+  and is what the painterly-sheet experiment below is aimed at.
+  First reading after the 12:42Z baseline: **0 critic-rejected, 11 refused, 3 kept.**
+  Read that carefully before drawing the obvious conclusion — a refused attempt never
+  reaches the vision critic, so this is not "14 renders with no identity failures", it
+  is **3 renders that reached the critic and all passed**. n=3.
 - **Chapter trajectories** (`grep ACCEPTED state/scribe.log`). Four of nine reach zero
   defects; the rest ship with recorded issues and are queued for the REVISION sweep.
   **That sweep has never run.** It is the mechanism that makes shipping a flawed

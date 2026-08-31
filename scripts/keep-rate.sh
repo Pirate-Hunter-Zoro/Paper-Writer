@@ -58,3 +58,50 @@ if [ -r "$MARK" ]; then
 else
   echo "baseline    none; run --mark to start measuring a deploy"
 fi
+
+# --- where the losses went ---------------------------------------------------
+#
+# A billed render is not the same kind of failure every time, and the keep rate
+# alone cannot tell you which you have. `billed_render` counts the attempt BEFORE
+# it calls `render`, deliberately -- an attempt that dies mid-flight still spent
+# the wall-clock, and over-counting is the safe direction for a runaway stop. So
+# the denominator holds three unrelated things:
+#
+#   rejected   the vision critic refused the picture -- identity or craft. This is
+#              the one that means OUR prompts regressed.
+#   refused    Gemini's IP classifier declined to draw. Says nothing about the
+#              composition, and §5's untested painterly-sheet experiment is aimed
+#              squarely at this number.
+#   timed out  the page hung and produced nothing.
+#
+# These will not always sum to the billed delta, and the gap is not a bug. A hang
+# is logged when it gives up, up to 600s after `billed_render` counted it, so a
+# timeout can be billed in one window and reported in the next.
+#
+# "Sustained below 30%" reads very differently depending on which of these is
+# moving, so print them rather than making the reader guess.
+LOG="state/illustrator.log"
+if [ -r "$LOG" ] && [ -r "$MARK" ]; then
+  read -r when _ _ < "$MARK"
+  since="$(printf '%s' "$when" | tr 'T' ' ' | tr -d 'Z')"
+  awk -v since="$since" '
+    match($0, /^\[[0-9-]+ [0-9:]+\]/) {
+      stamp = substr($0, 2, RLENGTH - 2)
+      if (stamp < since) next
+      # PARKED lines are excluded FIRST: a park is a summary of the attempts that
+      # preceded it and repeats their "declined to draw" text, so counting it as
+      # well double-counts every refusal. With it excluded the arithmetic closes --
+      # 11 refused + 3 drew = 14 billed, over the window this was checked against.
+      if (/PARKED/)                                    next
+      if (/rejected \(attempt/)                       rej++
+      else if (/declined to draw|refused at simplify/) ref++
+      else if (/no image after/)                       hung++
+    }
+    END {
+      if (rej + ref + hung == 0) { print "losses      none recorded since the baseline"; exit }
+      printf "losses      %d critic-rejected, %d refused by the classifier, %d hung\n",
+             rej, ref, hung
+      if (ref > rej) print "            refusals dominate — that is the classifier, not the prompts (see §5)"
+      else if (rej > ref) print "            critic rejections dominate — look at identity, not the classifier"
+    }' "$LOG"
+fi
