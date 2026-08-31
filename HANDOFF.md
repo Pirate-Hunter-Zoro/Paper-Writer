@@ -358,16 +358,28 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   `prompt_without_refs` change (ruled out — 44 of 49 occurrences had no reference
   refusal anywhere near them).
 
-  **The fix is obvious and was NOT shipped.** Treat "attachments present and send still
-  disabled" as `bad_reference`: that sheds the references and re-asks with the
-  prose-anchored prompt, which is the path already built for this. I wrote it and backed
-  it out because **`tests/fixtures/gemini_page.py` does not model a failed upload** — its
-  composer keeps its text after a successful send, so the check fired on every render
-  carrying references and broke 13 of the 21 browser tests.
-  **Teach the fixture a failed-upload state first (errored chip, disabled send), then
-  write the check against it.** Do not ship it without that: the failure mode is "every
-  reference is silently discarded", which looks like working software while destroying
-  the visual consistency the reference sheets exist for.
+  **The exact gap is one line in `attachRefs` (`tools/gemini_art.js`), and the machinery
+  to handle it already exists.** That function waits until the number of preview chips
+  reaches `refs.length` and then returns `true`. **A chip that APPEARED is not a chip
+  that UPLOADED** — a failed upload still renders a chip, just with an error icon — so
+  the count is satisfied, the driver believes the attach worked, and it walks into the
+  disabled send.
+
+  Note the driver already handles a *detected* attach failure correctly: it returns
+  `bad_reference`, which sheds the references and re-asks with the prose-anchored
+  prompt. That path fired once on this run at 23:06 (`could not attach 6 reference
+  picture(s)`) and worked. Only the detection is missing.
+
+  **The fix:** after the chips appear, test whether any is in an error state and, if so,
+  return a message matching `/no attachment preview/` so it maps to `bad_reference`.
+
+  **NOT SHIPPED, because it cannot be tested yet.** `tests/fixtures/gemini_page.py` has
+  no failed-upload state, so a check written against a guessed error selector fires on
+  healthy chips too — an earlier attempt did exactly that and broke 13 of the 21 browser
+  tests. **Teach the fixture to serve an errored chip with a disabled send first.** The
+  failure mode of getting this wrong is "every reference silently discarded", which
+  looks like working software while destroying the visual consistency the reference
+  sheets exist for.
 
     What is safe to say: the cost per occurrence is capped (180s, down from 600s), and
   attempt 1 of the same slot is often submitted fine — this is intermittent, not a dead

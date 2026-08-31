@@ -711,6 +711,33 @@ async function attachRefs(cdp, refs, budgetMs) {
         ).length)()`);
       return Number(n) >= refs.length ? true : null;
     }, Math.max(4000, Math.min(60000, deadline - Date.now())), 500);
+    // KNOWN GAP: a chip that APPEARED is not a chip that UPLOADED.
+    //
+    // This counts previews and returns success at `>= refs.length`. When Gemini fails
+    // an upload it still renders a chip — with an error icon on it — so the count is
+    // satisfied, this returns true, and the caller proceeds. Gemini then keeps the send
+    // control DISABLED while any attachment is errored, so the prompt can never leave
+    // the composer and the render times out reporting
+    // `no image after Ns; last response text: ""`.
+    //
+    // Seen 2026-08-31: `state/image-diagnostics/2026-08-31T22-05-18Z-timeout.png` shows
+    // five chips each carrying an error icon, the prompt below, and the send arrow
+    // greyed out. Reference-carrying renders went 12/hr -> 0/hr while reference-free
+    // ones kept working. Two send-retry schemes were written and reverted before the
+    // cause was found; both were retrying a click against a disabled control.
+    //
+    // THE FIX, and it is small: after the chips appear, check whether any is in an
+    // error state, and if so return a message matching /no attachment preview/ so the
+    // caller maps it to `bad_reference` — which already sheds the references and
+    // re-asks with the prose-anchored prompt. All of that machinery exists and is
+    // tested; only the detection is missing.
+    //
+    // NOT DONE because it cannot be tested yet: `tests/fixtures/gemini_page.py` has no
+    // failed-upload state, so any check written against a guessed error selector fires
+    // on healthy chips too. An earlier attempt did exactly that and broke 13 of the 21
+    // browser tests. **Teach the fixture to serve an errored chip with a disabled send
+    // first.** The failure mode of getting this wrong is "every reference silently
+    // discarded", which looks like working software.
     if (ready) return true;
     lastError = "files were set but no attachment preview appeared";
   }
