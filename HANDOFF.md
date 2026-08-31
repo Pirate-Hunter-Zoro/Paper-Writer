@@ -381,9 +381,30 @@ a "not", deliberately: *"the prosthetic does not change"* is a contrast describi
 his eyes behave, not an instruction to omit an object, so there is no noun to latch on
 to.
 
-**The critic does not lose anything.** It is handed the same text *and* the reference
-sheet, and the sheet still shows the correct hair — every one of those ten complaints
-cites the sheet, not the prose.
+**It corrupts the JUDGE as well as the generator, which is worse.** Jaric Kaedan's
+appearance read *"dark throughout this entire book, never blonde and never grey"*. The
+first verdict ever passed on him reported: *"the locked reference sheet shows blonde
+hair ... and the design states blonde throughout this entire book"* — the critic
+collapsed the negation, inverted the fact, and rejected the render for **not** being
+blonde. Every one of the seven later Kaedan verdicts says "dark buzz cut", so the sheet
+was right all along and that one rejection was pure negation damage.
+
+**The critic does not otherwise lose anything.** It is handed the same text *and* the
+reference sheet, and the sheet shows the correct hair — every one of Satele's ten
+complaints cites the sheet, not the prose.
+
+**My first sweep was incomplete and I had to redo it.** I scanned only the rendered
+costume line, which is one surface; the full `appearance` text is another, and it is
+what reference-sheet generation and the sheet critic are handed. Kaedan's "never
+blonde" lived there and my first pass sailed past it. A second sweep over the full text
+found eight more that name a drawable noun — Satele's "never a green single blade",
+Revan's "No mask, no armour" (he is a character *famous* for a mask), Alyn's "never
+wears her hood up", Orgus's "must never be drawn ornate", Praven's "must not be
+generalised into robes", Rusk's "no illustration ever helmets him", Corrin's insignia,
+and two "no over-robe"s. All rephrased positively.
+Deliberately left: "no visible sclera" (Scourge) and "no visible whites" (Morr) describe
+an anatomical fact with no prop to reach for, and rewriting them risks losing what makes
+those two faces alien.
 
 **This is the rule to apply to any new bible: say what is in the picture, never what is
 absent.** It is worth a gate at plan time, in the shape of §4.13's — a locked appearance
