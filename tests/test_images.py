@@ -1744,3 +1744,48 @@ class ARejectedUploadReportsWhatWasSaid(unittest.TestCase):
         self.assertEqual(len(calls), 2, "it must ask again without the references")
         self.assertNotIn("--ref", calls[1])
         self.assertNotIn("a.png", calls[1])
+
+
+class ThePageLabelIsNotPartOfTheMessage(unittest.TestCase):
+    """Gemini's DOM prefixes its own replies with "Gemini said" — an accessibility
+    label, not words it wrote. Quoting the scraped text without stripping it gave
+    "Gemini declined to draw this prompt: Gemini said I can't generate the image you
+    requested", which is how every refusal read in the log for the whole first run."""
+
+    def test_the_label_is_stripped(self):
+        self.assertEqual(
+            image_browser._said("Gemini said Sorry I can't help with that image."),
+            "Sorry I can't help with that image.")
+
+    def test_a_colon_after_the_label_goes_too(self):
+        self.assertEqual(image_browser._said("gemini said: I can't generate that"),
+                         "I can't generate that")
+
+    def test_text_without_the_label_is_untouched(self):
+        self.assertEqual(image_browser._said("the browser died"), "the browser died")
+
+    def test_only_a_leading_label_is_stripped(self):
+        """It is a prefix, not a phrase to censor: the words can legitimately appear
+        inside a message and must survive there."""
+        self.assertEqual(
+            image_browser._said("I asked and Gemini said no"),
+            "I asked and Gemini said no")
+
+    def test_the_page_s_line_breaks_are_collapsed(self):
+        self.assertEqual(image_browser._said("Gemini said one\n\n  two   three"),
+                         "one two three")
+
+    def test_nothing_is_not_an_error(self):
+        self.assertEqual(image_browser._said(None), "")
+
+    def test_a_refusal_reads_without_the_doubled_attribution(self):
+        raised = {}
+        try:
+            image_browser._raise_for(
+                {"kind": "refused",
+                 "reason": "Gemini said I can't generate the image you requested."},
+                lambda m: None)
+        except Exception as exc:                       # Refused
+            raised["msg"] = str(exc)
+        self.assertNotIn("Gemini said", raised["msg"])
+        self.assertIn("I can't generate the image you requested", raised["msg"])
