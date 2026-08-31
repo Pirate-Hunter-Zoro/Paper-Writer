@@ -30,6 +30,47 @@ import re
 _TRANSITION = re.compile(r"\bonwards?\b|\bafter (?:the|his|her|their|its)\b", re.I)
 
 
+# --- What a locked appearance may not say -------------------------------------
+
+# Objects that can be ADDED to a picture. Deliberately not "shadow", "sclera" or
+# "whites": those are lighting and anatomy, properties of a thing already in frame
+# rather than props a model can reach for, and "casting no shadow" is the entire point
+# of drawing a Force ghost.
+_ADDABLE = (r"mask|armour|armor|helmet|hood|robes?|blade|insignia|lightsaber|saber|"
+            r"sword|bolt|weapon|cannon|rifle|bangs|fringe|beard|blonde|ornate|"
+            r"flashes|cloak")
+
+# "not" is excluded on purpose. It is overwhelmingly a verb negation — "a runner's
+# build, not a soldier's", "his face does not move much, so the armour reads as the
+# expression" — and including it made the check fire on prose that forbids nothing.
+# The noun must also follow within two words, which is what keeps that second example
+# from matching across the comma.
+_FORBIDS = re.compile(
+    rf"\b(?:no|never|without)\b\s+(?:\w+\s+){{0,2}}(?:{_ADDABLE})\b", re.I)
+
+
+def forbids_a_visible_thing(text):
+    """Phrases that tell a renderer to leave an object OUT. Returns what it found.
+
+    An image model has no reliable negation: "no side bangs" puts *side bangs* in the
+    prompt, and the noun is what gets drawn. On the first real book this was the single
+    largest cause of identity failure — **ten of twenty-one `[WRONG CHARACTER]`
+    verdicts were Satele Shan's side bangs**, forbidden in her locked appearance in
+    those words. Tarnis, described as having "no lightsaber anywhere on him", was drawn
+    holding one.
+
+    It damages the JUDGE as well, which is worse and less obvious. Jaric Kaedan's
+    appearance read "dark throughout this entire book, never blonde and never grey";
+    the first verdict passed on him reported that "the design states blonde throughout
+    this entire book" and rejected the render for not being blonde.
+
+    Checked rather than left to review because the same negation is written into three
+    separate places — the appearance, a plain wardrobe string, and a dated costume
+    entry — and a person sweeping them by hand misses one. Three consecutive sweeps of
+    the SWTOR bible each fixed one surface and left another."""
+    return [" ".join(m.group(0).split()) for m in _FORBIDS.finditer(str(text or ""))]
+
+
 def describes_multiple_transitions(text):
     """True when a costume names more than one point at which the look changes.
 

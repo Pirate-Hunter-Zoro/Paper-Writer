@@ -154,6 +154,25 @@ def _validate(plan, allow_canon_primary=False):
             errors.append(f"plan: character {name} has no `origin` — name the source "
                           f"universe they come from, or `original` if they were "
                           f"invented for this book")
+        # An image model has no reliable negation: "no side bangs" puts side bangs in
+        # the prompt. Ten of the first real book's twenty-one identity failures were
+        # exactly that one forbidden feature. Checked over the appearance AND every
+        # costume, because the same negation gets written into all of them and a person
+        # sweeping by hand fixes one surface and misses the others — which happened
+        # three times in a row.
+        surfaces = [spec.get("appearance")] + [
+            c.get("text") if isinstance(c, dict) else c
+            for c in (spec.get("costumes") or [])]
+        forbidden = [p for surface in surfaces
+                     for p in bible_rules.forbids_a_visible_thing(surface)]
+        if forbidden:
+            errors.append(
+                f"plan: character {name} describes what must NOT be in the picture "
+                f"({', '.join(repr(p) for p in forbidden[:4])}). An image model cannot "
+                f"subtract: naming the thing is what puts it in the frame, and it "
+                f"misleads the vision critic the same way. Say what IS there instead — "
+                f"\"hair drawn back from a fully exposed hairline\", not \"no side "
+                f"bangs\"; \"bare-faced, in plain cloth\", not \"no mask, no armour\".")
     if not plan.get("style_guide"):
         errors.append("plan: no style_guide; the writer has no voice to work in")
 

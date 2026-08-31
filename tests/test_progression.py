@@ -564,3 +564,80 @@ class AnItineraryIsNeverStampedAsAnAnchor(unittest.TestCase):
         self.progressions[0]["costume"] = ACostumeIsOneOutfitNotAnItinerary.ONE_OUTFIT
         outlining._lock_costume_variants(self.sid, self.outline, self.progressions)
         self.assertEqual(len(self._costumes()), 2)
+
+
+class APromptMayNotSayWhatIsAbsent(unittest.TestCase):
+    """The largest single cause of identity failure on the first real book.
+
+    An image model has no reliable negation. "no side bangs" puts *side bangs* in the
+    prompt and the noun is what gets drawn: **ten of twenty-one `[WRONG CHARACTER]`
+    verdicts were Satele Shan's side bangs**, forbidden in her appearance in those
+    exact words. Tarnis, described as having "no lightsaber anywhere on him", was drawn
+    holding one.
+
+    It misleads the vision critic too, which is worse because it is invisible. Jaric
+    Kaedan's appearance said "dark throughout this entire book, never blonde and never
+    grey"; the first verdict on him reported "the design states blonde throughout this
+    entire book" and rejected the render for not being blonde."""
+
+    def test_the_satele_case(self):
+        self.assertEqual(bible.forbids_a_visible_thing(
+            "brown-black hair in braids and no side bangs at any point"),
+            ["no side bangs"])
+
+    def test_the_kaedan_case(self):
+        self.assertTrue(bible.forbids_a_visible_thing(
+            "dark throughout this entire book, never blonde and never grey"))
+
+    def test_a_verb_negation_is_not_a_forbidden_object(self):
+        """`not` is excluded deliberately, and the noun must follow closely. Both of
+        these forbid nothing, and an earlier draft of the rule fired on both."""
+        self.assertEqual(bible.forbids_a_visible_thing(
+            "his face does not move much, so the armour reads as the expression"), [])
+        self.assertEqual(bible.forbids_a_visible_thing(
+            "a runner's build, not a soldier's"), [])
+
+    def test_lighting_and_anatomy_are_left_alone(self):
+        """A shadow and a sclera are properties of something already in frame, not
+        props a model can add. "Casting no shadow" is the whole point of a Force
+        ghost."""
+        self.assertEqual(bible.forbids_a_visible_thing(
+            "translucent and lit from within, casting no shadow, his belt empty"), [])
+        self.assertEqual(bible.forbids_a_visible_thing(
+            "bright red eyes with no visible sclera"), [])
+
+    def test_nothing_at_all_is_fine(self):
+        for value in (None, "", "plain undyed Jedi robes, blue saber at the hip"):
+            self.assertEqual(bible.forbids_a_visible_thing(value), [])
+
+    def _plan(self, appearance, costumes=("plain robes",)):
+        return {"characters": [{"name": "Satele", "appearance": appearance,
+                                "age": "56", "voice": "clipped", "origin": "swtor",
+                                "costumes": list(costumes)}],
+                "progressions": [{"id": "p.1", "who": "Satele", "starts": "a",
+                                  "ends": "b"}],
+                "style_guide": "past tense"}
+
+    def _errors(self, plan):
+        return [e for e in planning._validate(plan, allow_canon_primary=True)
+                if "NOT be in the picture" in e]
+
+    def test_the_plan_gate_rejects_it(self):
+        self.assertTrue(self._errors(self._plan(
+            "Human female, hair in braids and no side bangs at any point.")))
+
+    def test_the_gate_also_reads_the_costumes(self):
+        """The surface my hand-sweeps kept missing: the same negation is written into
+        the appearance, a plain wardrobe string and a dated entry, and fixing one is
+        not fixing it."""
+        self.assertTrue(self._errors(self._plan(
+            "Human female, hair drawn back from a fully exposed hairline.",
+            costumes=["plain robes, no lightsaber anywhere on her belt"])))
+        self.assertTrue(self._errors(self._plan(
+            "Human female, hair drawn back from a fully exposed hairline.",
+            costumes=[{"from_chapter": 4, "text": "robes, No mask, no armour"}])))
+
+    def test_a_positive_description_passes(self):
+        self.assertEqual(self._errors(self._plan(
+            "Human female, hair in braids drawn back from a fully exposed hairline.")),
+            [])

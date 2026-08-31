@@ -417,10 +417,26 @@ the illustrator working chapters in order, a given character may not surface for
 Absence of a failure is mostly absence of a test. **Check that the character actually
 appeared before reading anything into a clean stretch.**
 
-**This is the rule to apply to any new bible: say what is in the picture, never what is
-absent.** It is worth a gate at plan time, in the shape of §4.13's — a locked appearance
-that negates a visible noun is a defect the planner should be made to rephrase. Not
-built yet; the data is repaired and the run is what matters today.
+**The rule is now a gate, because I could not apply it by hand.** Say what is in the
+picture, never what is absent — and `bible.forbids_a_visible_thing` enforces it at plan
+time over the appearance *and* every costume entry, so a new book cannot start with one.
+
+I built the gate because three consecutive hand-sweeps each missed a surface. The same
+negation gets written into three places, and I fixed them in three separate passes:
+first the rendered costume line, then the full `appearance` (which is what reference-
+sheet generation reads — Kaedan's "never blonde" was hiding there), then the plain
+wardrobe strings, which still held Alyn's "no lightsaber", T7's "no restraining bolt"
+and Morr's "no weapon" after both earlier passes. Each time I believed I was done.
+That is what a deterministic check is for.
+
+The rule is narrow on purpose, and the exclusions are the interesting part: `not` is
+excluded, because it is nearly always a verb negation forbidding nothing ("a runner's
+build, not a soldier's"); the noun must follow within two words, which is what stops
+"his face does not move much, so the armour reads as the expression" matching across
+the comma; and shadows, sclera and whites are not on the list, because those are
+lighting and anatomy rather than props a model can reach for — "casting no shadow" is
+the entire point of drawing a Force ghost. Validated against the bible as it stood
+before today: 21 real hits, 0 false.
 
 ---
 
