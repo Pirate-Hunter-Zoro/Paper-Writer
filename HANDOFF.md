@@ -288,10 +288,24 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   before each Enter — an Enter dispatched at the document does nothing. If the composer
   cannot be found it does NOT block, because that is either a successful send or a
   markup change and neither is helped by refusing to wait.
-  The first attempt at this used fixed sleeps totalling ~2.2s and only halved the rate
-  (5 in 43 minutes before, 1 in 15 minutes after), which is what suggested the real
-  cause: a ~2KB insert can leave the send control disabled for longer than any delay
-  worth hard-coding. Polling for the state you need beats guessing how long it takes.
+  **NEITHER ATTEMPT IS PROVEN, AND THE SECOND ONE VISIBLY DID NOT WORK.** Be careful
+  reading the commits: the first used fixed sleeps (~2.2s) and the rate went 5-in-43min
+  to 1-in-15min, which is not a result on those numbers. The polling version then failed
+  within three minutes of going live — `ch16_4` at 18:07, restart at 18:04 — and the
+  dump shows the prompt STILL in the composer after the full 8s of clicking and Enter.
+  So the retry is either not running or not able to submit.
+
+  **The most likely reason it is not running, untested:** `querySelector('a, b, c')`
+  returns the first element in DOCUMENT ORDER matching *any* arm, not the first arm's
+  match. If a hidden `textarea[aria-label]` sits earlier in the DOM than the real
+  `rich-textarea`, the length check reads an empty element, concludes the prompt was
+  sent, and breaks out immediately. Worth testing by logging which arm matched, then
+  matching the composer the same way in both the insert and the check.
+
+  What is safe to say: the cost per occurrence is capped (180s, down from 600s), and
+  attempt 1 of the same slot is often submitted fine — this is intermittent, not a dead
+  path. **Measure over hours, not minutes,** before believing any fix here:
+  `grep 'no image after' state/illustrator.log | grep -c 'text: \"\"'`.
 
   **The deadline is now 180s, set on measurement.** Once the knob worked (below), it was
   worth asking what it should be. Across 81 successful renders paired to a confident
