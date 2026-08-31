@@ -320,12 +320,19 @@ at.** I first wrote this off as "comfortable at every plausible keep rate" again
 direction is the wrong one and the whole band is bounded by the refusal rate rather
 than by anything about picture quality.
 
-**Trigger and remedy, so nobody has to work it out later:** if
-`scripts/keep-rate.sh` shows the since-baseline rate holding below ~15% over a few
-hundred renders, raise `FANFIC_IMAGE_RENDER_BUDGET` in `launchd/fleet.env` — pictures
-cost nothing but wall-clock, and hitting the ceiling stops the book dead until a person
-notices. **Then restart the daemons**, or the number will not take effect; that is
-exactly how the 800 → 1600 raise sat inert for twenty minutes (§5).
+**DONE — the ceiling was raised 1600 → 2400 at 13:50Z and the daemons restarted.** The
+rate held at 15% across three consecutive checks over 67 renders, which left a margin of
+eight pictures out of 189. That is not a margin. At 2400 it is ~128.
+
+I acted on 67 renders rather than the "few hundred" this section originally asked for,
+and the asymmetry is the whole argument: unused ceiling costs nothing at all, while
+hitting it stops the book dead with every slot queued waiting for a person — and with
+the owner away that could be a day of idle fleet. **When one side of a bet is free, take
+it early.** The threshold was written for confidence in the number; it should not have
+been applied to a decision this lopsided.
+
+If it needs raising again, the same reasoning applies, and **restart the daemons after**
+— or the number sits inert exactly as the 800 → 1600 raise did (§5).
 
 **This is also what the 800 → 1600 ceiling was worth, concretely.** Under the 800 cap
 that was still in force until 07:29, the run had 549 renders left against a 675–860
