@@ -235,6 +235,13 @@ def _edit_to_clean(records, series_rec, book_num, chapter_rec, chapter_outline, 
         else:
             spliced = 0
         storage.atomic_write_text(prose, draft_path)
+        # Keep this pass's text as well as the running draft. Nothing reads it; it is
+        # there so that "should the loop ship its best version rather than its last?"
+        # can be answered by comparing real prose instead of arguing from defect counts.
+        # The better version used to be overwritten by the next pass, which is why the
+        # question has stayed open.
+        storage.atomic_write_text(
+            prose, paths.pass_snapshot_path(sid, book_num, n, pass_num))
 
         log_fn(f"book {book_num} ch {n}: pass {pass_num} — {len(blocking)} blocking, "
                f"{len(applied)} edit(s) applied, {len(rejected)} rejected, "

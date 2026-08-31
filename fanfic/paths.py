@@ -229,6 +229,27 @@ def draft_path(series_id, book_num, chapter_num):
     return tmp_path(f"draft_{slug(series_id)}_b{book_num}_ch{int(chapter_num):02d}.md")
 
 
+def pass_snapshot_path(series_id, book_num, chapter_num, pass_num):
+    """The prose as one editorial pass left it. Written, never read by the pipeline.
+
+    The loop keeps only the LAST version of a chapter, and on this book that is
+    measurably not always the best one: three of nineteen chapters shipped carrying
+    about nine blocking defects an earlier pass had already cleared (ch16 went
+    `1 -> 3 -> 4` after reaching 1). Whether to ship the better-measured version instead
+    turns on a question nobody could answer, because the better version was overwritten
+    the moment the next pass ran.
+
+    So: keep it. This changes NOTHING about what ships — it exists so the comparison can
+    be made from real text rather than argued from defect counts. A chapter costs a few
+    tens of KB per pass.
+
+    See §5 of the handoff for the decision this is meant to inform, and for why the
+    counts alone cannot settle it: shipping an earlier snapshot also discards that
+    pass's craft edits, and nothing yet measures whether that trade is worth taking."""
+    return tmp_path(f"pass_{slug(series_id)}_b{book_num}_ch{int(chapter_num):02d}"
+                    f"_p{int(pass_num):02d}.md")
+
+
 def patch_path(series_id, book_num, chapter_num):
     """Where a revision proposes its edit list, before the harness applies it."""
     return tmp_path(f"patch_{slug(series_id)}_b{book_num}"
