@@ -161,9 +161,22 @@ def chapters_short_of_cap(series_rec, book_num):
     Measured against the chapter's real segment count, not against the ceiling, so a
     three-scene chapter with three pictures is finished and a six-scene chapter with
     two is not. Reads each accepted chapter's prose, which is why the caller does this
-    once a cycle rather than per render."""
+    once a cycle rather than per render.
+
+    THE CAP HERE MUST BE THE ONE THE ENQUEUER WILL APPLY, and for a while it was not.
+    This compared against the static `IMAGES_PER_CHAPTER` ceiling while
+    `enqueue_chapter` applies the budget-derived cap, so a six-segment chapter holding
+    five pictures under a derived cap of five was reported short, handed to the
+    enqueuer, and refused — every cycle, forever. It cost no model calls, which is why
+    it was easy to miss, but it printed three confident lines about work it could never
+    do every thirty seconds, and a log that says that is a log nobody reads.
+
+    Using the derived cap keeps the behaviour that matters: when the keep rate improves
+    and the cap rises, the shortfall reappears and those chapters are topped up — which
+    is exactly what `ARaisedCeilingReachesChaptersAlreadyWritten` pins."""
     sid = series_rec["series_id"]
-    ceiling = max(1, config.IMAGES_PER_CHAPTER)
+    ceiling = max(1, min(config.IMAGES_PER_CHAPTER,
+                         images_per_chapter(series_rec, book_num)))
     counts = illustration.queued_counts(sid, book_num)
     short = []
     for chapter_num, have in sorted(counts.items()):
