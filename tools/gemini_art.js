@@ -300,6 +300,14 @@ const BAD_REFERENCE_PATTERNS = [
 ];
 
 const REFUSAL_PATTERNS = [
+  // "There are a lot of people I can help with, but I can't depict some public
+  // figures." Gemini reads this project's reference art — photoreal 3D promotional
+  // renders — as photographs of real humans, and then declines to draw the person.
+  // Worth its own pattern rather than leaving it to the timeout: unmatched, this cost
+  // a full 600-second wait before the slot could even move to its next rung.
+  /can'?t depict some public figures/i,
+  /can'?t (depict|generate images of) (real |)(people|persons|individuals)/i,
+  /do you have anyone else in mind/i,
   /can'?t (help with|create|generate|make)/i,
   /unable to (create|generate)/i,
   /i'?m not able to (create|generate)/i,
