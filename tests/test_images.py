@@ -358,7 +358,9 @@ class BestEffortTests(unittest.TestCase):
     def test_a_quota_hit_defers_and_the_book_completes_once_it_clears(self):
         calls = {"n": 0}
 
-        def flaky(prompt, out_path, references=None, log_fn=None, aspect=None):
+        def flaky(prompt, out_path, references=None, log_fn=None, aspect=None,
+
+                  prompt_without_refs=None):
             calls["n"] += 1
             if calls["n"] <= 2:                       # the first two are rate-limited
                 raise QuotaExceeded("rate limit", retry_after=1)
@@ -383,7 +385,7 @@ class BestEffortTests(unittest.TestCase):
         itself the moment the vendor, the quota or the prompt stops being the problem.
         """
         def safety_blocked(prompt, out_path, references=None, log_fn=None,
-                           aspect=None):
+                           aspect=None, prompt_without_refs=None):
             raise RuntimeError("gemini produced no image (finishReason=SAFETY)")
         illustration.render = safety_blocked
 
@@ -402,7 +404,9 @@ class BestEffortTests(unittest.TestCase):
         """And the other half of it: waiting has to be a wait, not a wedge."""
         state = {"broken": True}
 
-        def sometimes(prompt, out_path, references=None, log_fn=None, aspect=None):
+        def sometimes(prompt, out_path, references=None, log_fn=None, aspect=None,
+
+                      prompt_without_refs=None):
             if state["broken"]:
                 raise RuntimeError("gemini produced no image (finishReason=SAFETY)")
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -562,7 +566,8 @@ class EverybodyInFrameKeepsTheirAnchor(unittest.TestCase):
         support.stub_model_seams()
         self.sent = []
 
-        def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+        def render(prompt, out_path, references=None, log_fn=None, aspect=None,
+                   prompt_without_refs=None):
             self.sent = [Path(r).name for r in (references or [])]
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(support.PNG)
@@ -656,7 +661,8 @@ class ACorrectionReachesArtAlreadyQueued(unittest.TestCase):
         support.stub_model_seams()
         self.prompts = []
 
-        def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+        def render(prompt, out_path, references=None, log_fn=None, aspect=None,
+                   prompt_without_refs=None):
             self.prompts.append(prompt)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(support.PNG)
@@ -961,7 +967,8 @@ class ARefusalDoesNotCostARung(unittest.TestCase):
 
     def _watch_rungs(self, fail_with):
         """Record the simplify level each render is asked at."""
-        def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+        def render(prompt, out_path, references=None, log_fn=None, aspect=None,
+                   prompt_without_refs=None):
             # The empty-room rungs are recognisable from the prompt itself.
             if "EMPTY room" in prompt or "nobody in it" in prompt:
                 self.rungs.append(3)
@@ -1122,7 +1129,9 @@ class SheetsComeFirst(unittest.TestCase):
         sheet.write_bytes(support.PNG)
         seen = {}
 
-        def capture(prompt, out_path, references=None, log_fn=None, aspect=None):
+        def capture(prompt, out_path, references=None, log_fn=None, aspect=None,
+
+                    prompt_without_refs=None):
             seen["refs"] = list(references or [])
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(support.PNG)
@@ -1220,7 +1229,8 @@ class AnImperfectPictureBeatsNoPicture(unittest.TestCase):
         """Keeping is only ever "keep what rendered". With nothing to keep, the slot
         waits — and the attempt count on it is what makes the next visit ask for
         something plainer instead of repeating the request that just failed."""
-        def never_a_scene(prompt, out_path, references=None, log_fn=None, aspect=None):
+        def never_a_scene(prompt, out_path, references=None, log_fn=None, aspect=None,
+                          prompt_without_refs=None):
             # Sheets land, so the scene gets past the sheets-first gate and it is the
             # scene's own loop being tested rather than its anchor's.
             if re.match(r"ch\d+_", out_path.name):
@@ -1811,7 +1821,7 @@ class TheRenderTimeoutIsTheConfiguredOne(unittest.TestCase):
         seen = {}
 
         def fake_generate(prompt, out_path, references=None, timeout=None,
-                          log_fn=None, aspect=None):
+                          log_fn=None, aspect=None, prompt_without_refs=None):
             seen["timeout"] = timeout
 
         original = illustration.images.generate
@@ -1875,3 +1885,71 @@ class ADroidsSensorEyeIsItsFace(unittest.TestCase):
             spec = {"appearance": f"Protocol droid. {phrase}."}
             self.assertTrue(illustration.signature_marks(spec),
                             f"not recognised as a marking: {phrase}")
+
+
+class ARefusedUploadGetsTheWordsBack(unittest.TestCase):
+    """The trim assumes the pictures arrive. On this book they often did not.
+
+    `build_scene_prompt(anchored=True)` drops the appearance paragraph because a
+    reference picture describes a face better than prose can. That is right while the
+    picture is attached — and Gemini refuses whole reference sets often enough that
+    ~40% of this book's renders were re-asked with none. Those got the trimmed text and
+    no picture: nothing anchoring the face at all.
+
+    Kira Carsen is the case. Her locked design is dark red hair, "the single feature a
+    reader identifies Kira by"; her anchored prompt says nothing about hair, on purpose.
+    All six references were refused and she came back a golden blonde three times."""
+
+    KIRA = {"appearance": "Human female, twenty, fair-skinned and freckled, with dark "
+                          "red hair kept short and pushed back, blue eyes.",
+            "age": "20", "costumes": ["rust-brown jacket, grey plated shoulders"]}
+
+    def test_the_trim_removes_the_hair_and_the_fallback_restores_it(self):
+        anchored = illustration.build_scene_prompt(
+            "Kira on a walkway.", [("Kira Carsen", self.KIRA)], anchored=True)
+        unanchored = illustration.build_scene_prompt(
+            "Kira on a walkway.", [("Kira Carsen", self.KIRA)], anchored=False)
+        self.assertNotIn("red hair", anchored)
+        self.assertIn("red hair", unanchored)
+
+    def _shed_refs_prompt(self, prompt_without_refs):
+        """Drive the real retry with an upload refusal and capture what got re-asked."""
+        written = []
+
+        def fake_run(cmd, timeout, note):
+            written.append(prompt_file.read_text(encoding="utf-8"))
+            if len(written) == 1:
+                return {"ok": False, "kind": "bad_reference", "reason": "nope"}
+            return {"ok": True}
+
+        original = image_browser._run
+        image_browser._run = fake_run
+        self.addCleanup(lambda: setattr(image_browser, "_run", original))
+        original_art = image_browser.looks_like_art
+        image_browser.looks_like_art = lambda _p: None
+        self.addCleanup(
+            lambda: setattr(image_browser, "looks_like_art", original_art))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prompt_file = pathlib.Path(tmp) / "p.txt"
+            prompt_file.write_text("ANCHORED", encoding="utf-8")
+            out = pathlib.Path(tmp) / "o.png"
+            out.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 4096)
+            image_browser._render_with_retry(
+                ["node", "art.js", "--ref", "a.png"], prompt_file, "ANCHORED", None,
+                ["a.png"], out, 60, lambda _m: None,
+                prompt_without_refs=prompt_without_refs)
+        return written
+
+    def test_the_retry_re_asks_with_the_untrimmed_prompt(self):
+        written = self._shed_refs_prompt("UNANCHORED WITH THE HAIR")
+        self.assertEqual(len(written), 2)
+        self.assertIn("ANCHORED", written[0])
+        self.assertIn("UNANCHORED WITH THE HAIR", written[1],
+                      "the fallback re-asked with the prompt written for pictures")
+
+    def test_without_a_fallback_it_still_re_asks_with_what_it_had(self):
+        """Sheets and covers pass nothing; they must keep working unchanged."""
+        written = self._shed_refs_prompt(None)
+        self.assertEqual(len(written), 2)
+        self.assertIn("ANCHORED", written[1])

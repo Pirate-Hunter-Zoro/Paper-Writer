@@ -59,10 +59,10 @@ def forbids_a_visible_thing(text):
     those words. Tarnis, described as having "no lightsaber anywhere on him", was drawn
     holding one.
 
-    It damages the JUDGE as well, which is worse and less obvious. Jaric Kaedan's
-    appearance read "dark throughout this entire book, never blonde and never grey";
-    the first verdict passed on him reported that "the design states blonde throughout
-    this entire book" and rejected the render for not being blonde.
+    (An earlier version of this docstring also claimed it misleads the vision critic,
+    citing a Kaedan verdict that reported "the design states blonde". That was wrong:
+    his locked design really was blonde at the time and was corrected later. The
+    generator half is what the evidence supports.)
 
     Checked rather than left to review because the same negation is written into three
     separate places — the appearance, a plain wardrobe string, and a dated costume

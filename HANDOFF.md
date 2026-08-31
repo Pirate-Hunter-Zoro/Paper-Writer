@@ -356,6 +356,35 @@ Worth reading. The pattern in all of them is the same.
 
 ---
 
+## 6z. The trim assumed the pictures arrive; on this book they often do not
+
+**~40% of this book's renders are re-asked with every reference refused, and until now
+they were re-asked with the prompt written for having references.**
+
+`build_scene_prompt(anchored=True)` drops each character's appearance paragraph. That is
+correct doctrine — "there is no wording for a particular jaw", and a model handed both
+prose and a picture averages them into a stranger. It holds *while the picture is
+attached*. Gemini refuses whole reference sets often (106 prose-anchored fallbacks so
+far), and the driver's fallback quietly re-asked with the trimmed text and no pictures:
+**nothing anchoring the face at all, from either direction.**
+
+Kira Carsen is the case, and she is a principal from chapter 18 on. Her locked design is
+dark red hair — the critic calls it "the single feature a reader identifies Kira by" —
+and her anchored prompt says nothing about hair, deliberately. All six references were
+refused and she came back a golden blonde three times running, at three different rungs.
+
+The fix carries a second prompt down beside the first: `prompt_without_refs`, the same
+scene with the appearance paragraphs intact, used only when the uploads are refused. The
+doctrine is unchanged when references land; it stops applying when they do not.
+
+**Note what this is NOT.** It is not "put hair colour back in anchored prompts". I was
+about to argue for that off Kira's failures, and it would have been the wrong fix
+addressing a real symptom: the anchored prompt is right, the fallback was wrong. Check
+whether the references actually arrived before concluding the words are missing
+something — `grep 'would not use' state/illustrator.log`.
+
+---
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
@@ -381,13 +410,16 @@ a "not", deliberately: *"the prosthetic does not change"* is a contrast describi
 his eyes behave, not an instruction to omit an object, so there is no noun to latch on
 to.
 
-**It corrupts the JUDGE as well as the generator, which is worse.** Jaric Kaedan's
-appearance read *"dark throughout this entire book, never blonde and never grey"*. The
-first verdict ever passed on him reported: *"the locked reference sheet shows blonde
-hair ... and the design states blonde throughout this entire book"* — the critic
-collapsed the negation, inverted the fact, and rejected the render for **not** being
-blonde. Every one of the seven later Kaedan verdicts says "dark buzz cut", so the sheet
-was right all along and that one rejection was pure negation damage.
+**A claim I made here and then had to withdraw.** I wrote that negations corrupt the
+vision critic too, citing Kaedan: his appearance said *"never blonde"*, and the first
+verdict on him reported *"the design states blonde throughout this entire book"*. That
+looked like the critic collapsing the negation. It was not. `illustration.py` records
+what actually happened — *"His locked design was wrong (blonde, unscarred, against a
+canon character with a dark buzz cut and a scar through the eyebrow); the bible was
+corrected, his sheet re-locked"*. The design really was blonde at the time and the
+critic was reporting it accurately. **There is no evidence a negation has ever misled
+the critic.** The generator half stands on its own — Satele's ten, Tarnis's lightsaber —
+and is why the rewrite and the gate are still right.
 
 **The critic does not otherwise lose anything.** It is handed the same text *and* the
 reference sheet, and the sheet shows the correct hair — every one of Satele's ten

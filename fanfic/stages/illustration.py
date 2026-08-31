@@ -342,7 +342,8 @@ def _aspect_for(orientation):
 
 # --- Model seams -------------------------------------------------------------
 
-def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+def render(prompt, out_path, references=None, log_fn=None, aspect=None,
+           prompt_without_refs=None):
     """Model seam: one image generation.
 
     The timeout comes from config, and passing it explicitly is the point. It used to
@@ -360,11 +361,12 @@ def render(prompt, out_path, references=None, log_fn=None, aspect=None):
     the illustrator's wall-clock, and it is throughput that decides when a book ends."""
     images.generate(prompt, out_path, references=references,
                     timeout=config.IMAGE_RENDER_TIMEOUT_SEC,
-                    log_fn=log_fn, aspect=aspect)
+                    log_fn=log_fn, aspect=aspect,
+                    prompt_without_refs=prompt_without_refs)
 
 
 def billed_render(prompt, out_path, label, series_id, references=None, log_fn=None,
-                  aspect=None):
+                  aspect=None, prompt_without_refs=None):
     """One render, counted against the picture budget as it happens.
 
     **Every attempt is counted, including the ones a vision critic then rejects**, and
@@ -380,7 +382,8 @@ def billed_render(prompt, out_path, label, series_id, references=None, log_fn=No
     protects and not whether it is right. A render that fails mid-flight still took the
     time, and the safe direction to be wrong about a runaway stop is over-counting."""
     budget.record_image(series_id, label)
-    render(prompt, out_path, references=references, log_fn=log_fn, aspect=aspect)
+    render(prompt, out_path, references=references, log_fn=log_fn, aspect=aspect,
+           prompt_without_refs=prompt_without_refs)
 
 
 def vision_verdict(image_path, spec_text, references=(), log_fn=None):
@@ -1671,14 +1674,26 @@ def render_scene(entry, log_fn=None):
         #
         # The pack still shows the stored text, which is what it is for: a record of
         # what was asked at the time.
-        prompt = (build_scene_prompt(
-                      entry.get("scene", ""),
-                      [(n, _locked(sid, n)) for n in names],
-                      orientation=orientation, style=entry.get("style"),
-                      simplify=rung,
-                      location=_locked_place(sid, entry.get("location", "")),
-                      chapter_num=entry.get("chapter_num"),
-                      anchored=rung < 3))
+        def _scene_prompt(anchored):
+            return build_scene_prompt(
+                entry.get("scene", ""),
+                [(n, _locked(sid, n)) for n in names],
+                orientation=orientation, style=entry.get("style"),
+                simplify=rung,
+                location=_locked_place(sid, entry.get("location", "")),
+                chapter_num=entry.get("chapter_num"),
+                anchored=anchored)
+
+        prompt = _scene_prompt(rung < 3)
+        # The SAME scene with the appearance paragraphs left in, held ready in case
+        # Gemini refuses the uploads. `anchored=True` drops those paragraphs because a
+        # picture describes a face better than prose — true only while the picture is
+        # actually attached, and on this book roughly 40% of renders end up re-asked
+        # with every reference refused. Without this the fallback got the trimmed text
+        # and had nothing left to go on: Kira Carsen, whose locked design is dark red
+        # hair and whose prompt says nothing about hair, came back a golden blonde
+        # three times in a row.
+        prompt_without_refs = _scene_prompt(False) if rung < 3 else prompt
         # From rung 3 the prompt has taken the people out, so the critic must be told
         # that too. Handing it the locked cast while the prompt asked for an empty room
         # is the generator/judge document mismatch this project has recorded three
@@ -1690,7 +1705,8 @@ def render_scene(entry, log_fn=None):
                           f"scene:b{book_num}c{entry['chapter_num']}"
                           f"k{entry['k']}:{rung + 1}", sid,
                           references=(references if rung < 3 else None),
-                          log_fn=log_fn, aspect=aspect)
+                          log_fn=log_fn, aspect=aspect,
+                          prompt_without_refs=prompt_without_refs)
             # The critic is handed exactly what the generator was handed. Anything
             # else and the two of them are judging different documents, which is the
             # one failure mode this pipeline reproduces at every layer it has.
