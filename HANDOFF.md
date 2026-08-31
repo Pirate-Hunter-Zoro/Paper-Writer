@@ -257,8 +257,12 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   version was overwritten by the next pass every time — there was nothing to compare.
   `paths.pass_snapshot_path` keeps each pass's prose beside the draft now, and
   `_edit_to_clean` writes one after every pass that applies anything. **Nothing reads
-  them and nothing about what ships changes**; a pass costs a few tens of KB. From
-  chapter 20 on there will be real text on both sides of the question.
+  them and nothing about what ships changes**; a pass costs a few tens of KB. **Live from
+  chapter 21** — ch20 was accepted three minutes before the deploy — and confirmed on
+  disk: `state/tmp/pass_swtor-jedi-knight_b1_ch21_p0*.md`, one per applied pass.
+  To settle the question when a chapter next ships worse than its best, diff its lowest
+  snapshot against `state/series/<sid>/book/1/chapters/chNN.md` and have the editor
+  judge both on craft as well as continuity.
   (A clean pass writes none, deliberately — it applied no edits, so it has no new text.)
 
   (Parsing note for anyone recomputing this: `ACCEPTED holding 1 issue(s)` puts a paren
