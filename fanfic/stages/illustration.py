@@ -88,12 +88,29 @@ def _retry_state(dest):
 
 
 def attempts_so_far(dest):
-    """How many renders this slot has already burned, across every cycle.
+    """The ladder rung this slot has already reached, across every cycle.
 
-    The ladder reads this rather than restarting at rung zero, which is the difference
-    between three escalating attempts and the same failing attempt forever."""
+    Read rather than restarting at zero, which is the difference between three
+    escalating attempts and the same failing attempt forever.
+
+    `attempts` is the legacy key: sidecars written before rung and visits were split
+    stored one number meaning both, and reading it as a rung is the right reading of
+    an old file — it is what the ladder used it for."""
+    state = _retry_state(dest)
+    for key in ("rung", "attempts"):
+        if key in state:
+            try:
+                return max(0, int(state.get(key) or 0))
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def visits_so_far(dest):
+    """How many times this slot has been parked and come back. Drives the backoff."""
+    state = _retry_state(dest)
     try:
-        return max(0, int(_retry_state(dest).get("attempts") or 0))
+        return max(0, int(state.get("visits") or state.get("attempts") or 0))
     except (TypeError, ValueError):
         return 0
 
@@ -109,20 +126,28 @@ def due(dest, now=None):
     return (now if now is not None else time.time()) >= next_at
 
 
-def defer(dest, reason, attempts, now=None):
+def defer(dest, reason, rung, now=None):
     """Park a slot that would not render, and say when to come back to it.
 
-    The wait doubles per attempt to `IMAGE_RETRY_BACKOFF_MAX_SEC`, so a slot the
-    vendor is refusing outright is retried hourly rather than in a hot loop, and one
-    blocked by something a person fixes tomorrow resumes by itself."""
+    TWO NUMBERS, NOT ONE, and conflating them was a bug worth spelling out. The ladder
+    needs the RUNG this slot reached — how plain a picture it is now asking for. The
+    backoff needs the number of VISITS — how many times we have come back. They used to
+    be the same integer, which was true only while every failed attempt cost a rung.
+
+    Once a refusal stopped costing a rung (see `images.Refused`), they diverged and the
+    single number broke both halves. It was floored at 1, so a slot parked at rung 0
+    resumed at rung 1 and crept up a rung per visit despite never being rejected. And
+    the backoff exponent was `n - IMAGE_MAX_REGENERATIONS`, which with a rung in it is
+    almost always zero — so a slot the vendor simply refuses was retried every five
+    minutes forever instead of easing off toward an hour."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    attempts = max(1, int(attempts))
-    rungs = max(0, attempts - config.IMAGE_MAX_REGENERATIONS)
+    rung = max(0, int(rung))
+    visits = visits_so_far(dest) + 1
     wait = min(config.IMAGE_RETRY_BACKOFF_MAX_SEC,
-               config.IMAGE_RETRY_BACKOFF_BASE_SEC * (2 ** rungs))
+               config.IMAGE_RETRY_BACKOFF_BASE_SEC * (2 ** max(0, visits - 1)))
     now = now if now is not None else time.time()
     storage.atomic_write_text(json.dumps(
-        {"attempts": attempts, "next_at": now + wait,
+        {"rung": rung, "visits": visits, "next_at": now + wait,
          "reason": (reason or "")[:500]}), retry_marker(dest))
     _legacy_skip_marker(dest).unlink(missing_ok=True)
     return wait
