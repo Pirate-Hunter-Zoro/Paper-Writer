@@ -304,9 +304,28 @@ constraint; wall-clock is.**
 
     illustrated      9 of 46 chapters, 5.1 scene images each, plus 22 sheets
     still needed     ~189 pictures
-    renders needed   ~540 (at 35% keep) to ~860 (at 22%)
-    budget left      1345
-    verdict          comfortable at every plausible keep rate
+    budget left      ~1333
+
+      keep rate   renders needed   margin
+        35%             540          +793
+        26%             727          +606   <- cumulative rate for the run so far
+        20%             945          +388
+        15%           1,260           +73   <- the rate since the 12:42Z baseline
+        14%           1,350           -17   <- goes short
+
+**Comfortable at the run's cumulative rate, thin at the rate it is currently running
+at.** I first wrote this off as "comfortable at every plausible keep rate" against a
+22–35% band; the marginal rate then fell to 15% and the honest margin at that rate is
+73 renders, about 6%. It is not short, and 15% rests on only ~47 renders, but the
+direction is the wrong one and the whole band is bounded by the refusal rate rather
+than by anything about picture quality.
+
+**Trigger and remedy, so nobody has to work it out later:** if
+`scripts/keep-rate.sh` shows the since-baseline rate holding below ~15% over a few
+hundred renders, raise `FANFIC_IMAGE_RENDER_BUDGET` in `launchd/fleet.env` — pictures
+cost nothing but wall-clock, and hitting the ceiling stops the book dead until a person
+notices. **Then restart the daemons**, or the number will not take effect; that is
+exactly how the 800 → 1600 raise sat inert for twenty minutes (§5).
 
 **This is also what the 800 → 1600 ceiling was worth, concretely.** Under the 800 cap
 that was still in force until 07:29, the run had 549 renders left against a 675–860
