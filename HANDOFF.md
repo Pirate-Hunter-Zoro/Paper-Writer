@@ -376,12 +376,29 @@ Nothing here is blocking. These are judgements already made; revisit only with e
       hr 19      180s                54%
       hr 20      180s                52%
 
-  At 180s that failure was eating about half of every attempt, and attempts per hour
-  FELL from 60 to 27 because each one burns the full deadline. Correlation rather than
-  proof — hour 17 has two at 420s, so the deadline is not the whole story — but it is a
-  change I made, it is free to undo, and every hour at 420s or 600s sits near zero.
-  **If you try a shorter deadline again, measure the FULL driver call (insert, send,
-  wait), not the page's own working time, and watch the share rather than the count.**
+  **I reverted to 420s on that correlation and it did NOT fix it — so the deadline is
+  not the cause.** Hour 21 back at 420s still ran 3 unsent in 8 attempts (38%), which is
+  nowhere near the 0% of hours 15-16. Pictures actually drawn, which is the metric that
+  matters:
+
+      hr 15   600s        13 drawn     0 min lost
+      hr 16   600/420     16 drawn     0 min lost
+      hr 18   180s        12 drawn    27 min lost
+      hr 19   180s         4 drawn    57 min lost
+      hr 20   180 -> 420  10 drawn    70 min lost
+      hr 21   420s         3 drawn    21 min lost   (partial hour)
+
+  **Throughput roughly halved around 17:00 and has stayed halved through four different
+  deadline and driver configurations** — 600s, 420s, 180s, two driver retry schemes, and
+  back again. Nothing I changed moved it, and it survived reverting all of it. On that
+  evidence the cause is most likely environmental (a Gemini-side change or throttle that
+  began around 17:00 UTC), not anything in this repo.
+
+  Left at 420s, the code default. Note the tradeoff if you revisit: if the failure rate
+  is deadline-independent, a SHORTER deadline is better for throughput because each
+  failure costs less wall-clock — but do not re-derive 180s from render durations the
+  way I did. **Measure the FULL driver call (insert, send, wait), not the page's own
+  working time, and watch the share of attempts rather than the count per hour.**
 
     **The timeout half was a dead knob, and that is fixed.** `illustration.render` — the
   only path a scene or sheet render takes — hardcoded `timeout=600`, so
