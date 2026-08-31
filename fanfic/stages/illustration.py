@@ -28,7 +28,7 @@ from ..errors import QuotaExceeded
 from ..gates import segments
 from ..infra import budget, storage
 from ..models import images, prompts, text
-from ..models.images import NotSignedIn
+from ..models.images import NotSignedIn, Refused
 from . import refart
 
 
@@ -935,12 +935,12 @@ def generate_reference_sheet(series_rec, book_num, character, log_fn=None,
     attempts = max(1, config.IMAGE_MAX_REGENERATIONS)
     prior = attempts_so_far(dest)
     last, staged = "", storage.staging_dir_for(dest.parent) / dest.name
+    # The rung the next attempt asks at. Resumes where the last visit left it —
+    # restarting at zero is how a retry loop asks forever for a layout it has already
+    # been refused — but a refusal does not advance it, because a refusal is not a
+    # verdict on the layout.
+    rung = prior
     for attempt in range(1, attempts + 1):
-        # The ladder resumes where the last visit left it. Restarting at rung zero is
-        # how a retry loop asks forever for the elaborate layout it has already been
-        # refused three times, and it is the difference between escalation and
-        # repetition.
-        rung = prior + attempt - 1
         spec = _sheet_prompt(character, style, simplify=rung,
                              from_source_art=bool(source_art))
         try:
@@ -958,10 +958,17 @@ def generate_reference_sheet(series_rec, book_num, character, log_fn=None,
             # ladder. A quota clears on its own and a signed-out profile needs a
             # human; both are waits, and the engine above knows how to wait.
             raise                                # defer: never a failure
+        except Refused as exc:
+            last = str(exc)
+            if log_fn:
+                log_fn(f"sheet {character['name']} refused at simplify={rung}; asking "
+                       f"again for the same layout rather than a plainer one")
+            continue
         except RuntimeError as exc:
             last = str(exc)
             if log_fn:
-                log_fn(f"sheet {character['name']} attempt {rung + 1} error: {last}")
+                log_fn(f"sheet {character['name']} attempt {attempt} error: {last}")
+            rung += 1
             continue
         if verdict.get("passed"):
             storage.atomic_place(staged, dest)
@@ -970,8 +977,9 @@ def generate_reference_sheet(series_rec, book_num, character, log_fn=None,
             return dest
         last = "; ".join(verdict.get("issues", []))
         if log_fn:
-            log_fn(f"sheet {character['name']} rejected (attempt {rung + 1}, "
+            log_fn(f"sheet {character['name']} rejected (attempt {attempt}, "
                    f"simplify={rung}): {last}")
+        rung += 1
 
     # A sheet the critic would not pass is still worth having, and by a wide margin.
     # Without one, every scene that character appears in draws them from prose alone —
@@ -987,10 +995,10 @@ def generate_reference_sheet(series_rec, book_num, character, log_fn=None,
                    f"an imperfect anchor beats none: {last}")
         return dest
 
-    wait = defer(dest, last, prior + attempts)
+    wait = defer(dest, last, rung)
     if log_fn:
-        log_fn(f"sheet {character['name']!r} PARKED after {prior + attempts} tries "
-               f"(nothing rendered); retrying in {wait}s one rung plainer: {last}")
+        log_fn(f"sheet {character['name']!r} PARKED (nothing rendered); retrying in "
+               f"{wait}s at simplify={rung}: {last}")
     return None
 
 
@@ -1350,6 +1358,10 @@ def render_scene(entry, log_fn=None):
     prior = attempts_so_far(dest)
     last, wrong_character = "", False
     staged = storage.staging_dir_for(dest.parent) / dest.name
+    # The rung the NEXT attempt asks at. Advanced by a rejection — the picture came out
+    # and was wrong, so ask for less — but NOT by a refusal, which is a classifier
+    # firing rather than a verdict on the composition. See `images.Refused`.
+    rung = prior
     for attempt in range(1, attempts + 1):
         # Ask for LESS each time, rather than asking for the same thing again. A
         # composition the model already failed at is not improved by repetition; the
@@ -1361,7 +1373,10 @@ def render_scene(entry, log_fn=None):
         # cycle would repeat, not escalate, and "never give up" would mean "never
         # finish". Three rungs down, the request is a picture of the room with nobody
         # in it, which nothing has to identify and nothing can crowd.
-        rung = prior + attempt - 1
+        #
+        # `rung` is tracked across the loop rather than derived from the attempt
+        # number, because not every failed attempt should cost a rung — a refusal
+        # holds its place. See `images.Refused`.
         prompt = (entry.get("prompt") if rung == 0 and entry.get("prompt")
                   else build_scene_prompt(
                       entry.get("scene", ""),
@@ -1394,10 +1409,20 @@ def render_scene(entry, log_fn=None):
             # ladder. A quota clears on its own and a signed-out profile needs a
             # human; both are waits, and the engine above knows how to wait.
             raise
+        except Refused as exc:
+            # A refusal says nothing about the composition, and it is not even stable:
+            # the identical prompt is often drawn on a later try. Spend the attempt,
+            # keep the rung, and ask for the same picture again.
+            last = str(exc)
+            if log_fn:
+                log_fn(f"scene {dest.name} refused at simplify={rung}; asking again "
+                       f"for the same composition rather than a plainer one")
+            continue
         except RuntimeError as exc:
             last = str(exc)
             if log_fn:
-                log_fn(f"scene {dest.name} attempt {rung + 1} error: {last}")
+                log_fn(f"scene {dest.name} attempt {attempt} error: {last}")
+            rung += 1
             continue
         if verdict.get("passed"):
             storage.atomic_place(staged, dest)
@@ -1406,9 +1431,10 @@ def render_scene(entry, log_fn=None):
         last = "; ".join(verdict.get("issues", []))
         wrong_character = bool(verdict.get("wrong_character"))
         if log_fn:
-            log_fn(f"scene {dest.name} rejected (attempt {rung + 1}, "
+            log_fn(f"scene {dest.name} rejected (attempt {attempt}, "
                    f"simplify={rung})"
                    + (" [WRONG CHARACTER]" if wrong_character else "") + f": {last}")
+        rung += 1
 
     # Out of attempts for this visit with a rendered image in hand. Keep it — UNLESS
     # the thing the critic cannot get past is that this is not the right person.
@@ -1434,11 +1460,11 @@ def render_scene(entry, log_fn=None):
     # the picture must not ship, and the slot must not be given up on, so it waits and
     # comes back a rung plainer until it is a picture the critic has nothing to say
     # about. A hole in the book is not one of the outcomes on offer.
-    wait = defer(dest, last, prior + attempts)
+    wait = defer(dest, last, rung)
     if log_fn:
         why = ("shows the wrong character" if wrong_character else "nothing rendered")
-        log_fn(f"scene {dest.name} PARKED after {prior + attempts} tries ({why}); "
-               f"retrying in {wait}s at simplify={prior + attempts}: {last}")
+        log_fn(f"scene {dest.name} PARKED ({why}); retrying in {wait}s at "
+               f"simplify={rung}: {last}")
     return None
 
 

@@ -73,6 +73,22 @@ NAME = "gemini-browser"
 CAPABILITY = Capability(supports_references=True)
 
 
+class Refused(RuntimeError):
+    """Gemini declined to draw this prompt.
+
+    Its own class because the ladder's answer to a failure is to ask for LESS, and
+    that answer is wrong here. Simplification exists for a composition the model
+    cannot render — too many faces, an impossible staging — and a refusal is not
+    that. It is a classifier firing, and the evidence says it fires probabilistically:
+    Lord Praven's sheet was refused twice and then drawn from the identical prompt on
+    the third attempt.
+
+    Treating the two alike cost real pictures. Two chapter-one and chapter-three scene
+    slots burned all three rungs on refusals alone and landed on the empty-room rung —
+    so the reader gets a picture of a yard where the book has a fight, and nothing
+    about the composition was ever wrong."""
+
+
 class NotSignedIn(RuntimeError):
     """The Chrome profile has no live Gemini session.
 
@@ -381,5 +397,5 @@ def _raise_for(result, note):
     if kind == "refused":
         # A refusal is about THIS wording, so the ladder in `illustration` has
         # somewhere to go: a plainer prompt, then a picture of the empty room.
-        raise RuntimeError(f"Gemini declined to draw this prompt: {reason}")
+        raise Refused(f"Gemini declined to draw this prompt: {reason}")
     raise RuntimeError(reason)
