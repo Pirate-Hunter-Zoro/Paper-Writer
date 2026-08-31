@@ -554,24 +554,39 @@ async function render(cdp, args, prompt) {
     return ((el.value !== undefined ? el.value : el.innerText) || "").trim().length;
   })()`);
 
-  for (let retry = 0; retry < 3; retry++) {
+  // POLL for the composer to empty, re-sending as we go, rather than sleeping a fixed
+  // guess. The first version of this waited 600ms and then re-tried twice on 800ms
+  // gaps — about 2.2s of patience, which halved the failures but did not stop them.
+  // The likely reason is the one the `:not([disabled])` selector implies: a ~2KB
+  // insert into a rich-text component can leave the send control disabled for longer
+  // than any fixed delay we would want to hard-code, and Enter is not honoured while
+  // the composer is in that state either. So: wait for the button to become clickable,
+  // take it the moment it does, and keep checking whether the text has gone.
+  const sendDeadline = Date.now() + 8000;
+  while (Date.now() < sendDeadline) {
     const left = await composerLength();
     if (left <= 0) break;                       // sent, or no composer to inspect
-    if (retry === 0) await sleep(600);          // it may simply have been slow
-    else {
-      const clicked = await cdp.eval(`(() => {
-        const b = document.querySelector(
-          'button[aria-label*="Send" i]:not([disabled]), button.send-button:not([disabled]), ' +
-          '[data-test-id="send-button"]:not([disabled])');
-        if (b) { b.click(); return true; }
-        return false;
+    const clicked = await cdp.eval(`(() => {
+      const b = document.querySelector(
+        'button[aria-label*="Send" i]:not([disabled]), button.send-button:not([disabled]), ' +
+        '[data-test-id="send-button"]:not([disabled])');
+      if (b) { b.click(); return true; }
+      return false;
+    })()`);
+    if (!clicked) {
+      // Re-focus first. By this point the page may have moved focus elsewhere, and an
+      // Enter dispatched at the document does nothing at all.
+      await cdp.eval(`(() => {
+        const el = document.querySelector(
+          'rich-textarea div[contenteditable="true"], div.ql-editor[contenteditable="true"], ' +
+          'div[contenteditable="true"][role="textbox"], textarea[aria-label]');
+        if (el) { el.focus(); }
+        return !!el;
       })()`);
-      if (!clicked) {
-        await cdp.key("keyDown", "Enter", "Enter", 13);
-        await cdp.key("keyUp", "Enter", "Enter", 13);
-      }
-      await sleep(800);
+      await cdp.key("keyDown", "Enter", "Enter", 13);
+      await cdp.key("keyUp", "Enter", "Enter", 13);
     }
+    await sleep(500);
   }
 
   // Wait for a picture. Two conditions, and both are needed: an image large enough to

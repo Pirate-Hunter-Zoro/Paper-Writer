@@ -197,6 +197,34 @@ commits.
 
 Nothing here is blocking. These are judgements already made; revisit only with evidence.
 
+- **A quarter of chapters ship worse than a pass had already made them, and I did NOT
+  change it.** The loop keeps the LAST version, never the best one. Across sixteen
+  chapters:
+
+      ch4    3 -> 1 -> 3 -> 4               best 1, shipped 4
+      ch6    7 -> 1 -> 1 -> 2               best 1, shipped 2
+      ch15   3 -> 4 -> 4                    best 3, shipped 4
+      ch16   6 -> 4 -> 4 -> 1 -> 3 -> 4     best 1, shipped 4
+
+  Roughly five excess blocking defects shipped that a previous pass had already cleared.
+  `_still_improving` compares the *minimum* over its window, so one good pass keeps the
+  loop alive through the bad passes that follow it — which is exactly how ch16 went 1,
+  then 3, then 4, and shipped the 4.
+
+  The obvious fix is to snapshot the prose each pass and ship the best-measured one.
+  **The reason not to is that the metric is noisy.** Across 44 consecutive-pass
+  comparisons the count ROSE 8 times (18%), and ch12 went `7 -> 0 -> 2 -> 0` — the same
+  judge finding nothing, then two defects, then nothing again, on text that changed only
+  by craft edits. Selecting the minimum of a noisy signal buys some genuine improvements
+  and some lucky reads, and it would be a change to *what text ships*, which is the most
+  consequential thing in the pipeline.
+  There is also already a backstop built for this exact case: chapters that ship holding
+  defects are queued for the REVISION sweep, which re-reads them against the finished
+  book. ch16 is the first chapter in this run to use it.
+  **Revisit with:** a measurement of how often the judge's count is reproducible on
+  unchanged text. If the judge is stable to within ~1 defect, "keep the best" becomes
+  clearly right; at 18% rise it does not.
+
 - **First clean evidence for the pass budget, now that restarts stop corrupting it.**
   Chapter 13 ran `6 -> 3 -> 2 -> 1 -> 2 -> 0` — six passes, the first chapter in the run
   to reach `EDIT_HARD_MAX_PASSES`, and it did so *across a daemon restart I performed
@@ -255,9 +283,15 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   and 400ms after inserting ~2KB into a rich-text composer it often is not enabled yet,
   so the code falls through to Enter — and if Enter does not register either, the
   driver waits out the whole deadline for a reply to a message that was never sent.
-  `gemini_art.js` now checks that the composer emptied and re-sends up to twice if it
-  did not. If the composer cannot be found it does NOT block, because that is either a
-  successful send or a markup change and neither is helped by refusing to wait.
+  `gemini_art.js` now POLLS for up to 8s: it re-checks whether the composer has emptied,
+  clicks the send control the moment it becomes enabled, and re-focuses the composer
+  before each Enter — an Enter dispatched at the document does nothing. If the composer
+  cannot be found it does NOT block, because that is either a successful send or a
+  markup change and neither is helped by refusing to wait.
+  The first attempt at this used fixed sleeps totalling ~2.2s and only halved the rate
+  (5 in 43 minutes before, 1 in 15 minutes after), which is what suggested the real
+  cause: a ~2KB insert can leave the send control disabled for longer than any delay
+  worth hard-coding. Polling for the state you need beats guessing how long it takes.
 
   **The deadline is now 180s, set on measurement.** Once the knob worked (below), it was
   worth asking what it should be. Across 81 successful renders paired to a confident
