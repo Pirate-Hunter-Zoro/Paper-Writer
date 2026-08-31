@@ -105,7 +105,65 @@ def resolve_host(universe, log_fn=None):
 
 
 def _words(text):
-    return {w.lower() for w in re.findall(r"[A-Za-z]+", text) if len(w) > 2}
+    """The identifying tokens of a name.
+
+    Alphanumeric, not alphabetic, and that is not cosmetic. The pattern was
+    `[A-Za-z]+` with a three-letter floor, which reduces "T7-O1" to {"T", "O"} and
+    then drops both — so the lookup returned None for a principal with 48 scenes, and
+    every droid designation in the genre (T7-O1, HK-51, C2-N2, 2V-R8) failed the same
+    way. A short alphanumeric token like "T7" is far MORE identifying than an ordinary
+    short word, not less."""
+    tokens = set()
+    for w in re.findall(r"[A-Za-z0-9]+", text):
+        if len(w) > 2 or any(c.isdigit() for c in w):
+            tokens.add(w.lower())
+    return tokens
+
+
+def _exact_page(host, name):
+    """The wiki's own article for `name`, following redirects, or None.
+
+    Asked BEFORE search, because search is where the dangerous answers live. A wiki
+    search never returns nothing, so it will happily offer a derived page — asked for
+    "Vitiate" the Star Wars wiki answered "Vitiate's palace", which shares the word and
+    is a building. A direct title lookup either has the article or does not, and it
+    resolves the redirects that made search necessary in the first place ("Stanford
+    Pines" -> "Ford Pines")."""
+    try:
+        data = _api(host, {"action": "query", "titles": name, "redirects": 1})
+        pages = (data.get("query") or {}).get("pages") or {}
+    except Exception:                                             # noqa: BLE001
+        return None
+    for pid, page in pages.items():
+        if str(pid) != "-1" and "missing" not in page and page.get("title"):
+            return page["title"]
+    return None
+
+
+def _is_index_page(base):
+    """Whether a title is a disambiguation or list page rather than an article.
+
+    These are the one hit that looks perfect and carries nothing: "Tarnis
+    (disambiguation)" matches the name exactly and its only images are navigation
+    icons. A sheet drawn from it is a sheet drawn from no reference at all, which the
+    provenance sidecar would then record as anchored."""
+    low = base.lower()
+    return ("(disambiguation)" in low or low.startswith("list of ")
+            or low.endswith(" (disambiguation)"))
+
+
+def _is_derived(base, name):
+    """Whether a hit is a page ABOUT the character rather than the character — a
+    possessive, or their name plus extra words.
+
+    "Vitiate's palace" is the live example and the sheet it would have anchored is the
+    failure this whole module exists to prevent: a character drawn from a picture of a
+    building, with nothing anywhere saying so."""
+    low, want = base.lower(), name.lower()
+    if "'s " in low or low.startswith(want + "'"):
+        return True
+    extra = _words(base) - _words(name)
+    return bool(extra) and _words(name) <= _words(base)
 
 
 def resolve_title(host, name):
@@ -129,6 +187,11 @@ def resolve_title(host, name):
     is unambiguously better than another show's art: without it a sheet falls back to
     the locked prose description, which is merely imprecise rather than actively
     depicting somebody else."""
+    # 1. The wiki's own article, redirects followed. Safest by a distance.
+    direct = _exact_page(host, name)
+    if direct and not _is_index_page(direct):
+        return direct.split("/")[0].strip()
+
     try:
         data = _api(host, {"action": "query", "list": "search",
                            "srsearch": name, "srlimit": 5})
@@ -138,15 +201,21 @@ def resolve_title(host, name):
     wanted = _words(name)
     if not wanted:
         return None
-    for hit in hits:
-        base = hit.split("/")[0].strip()
+    bases = [hit.split("/")[0].strip() for hit in hits]
+    bases = [b for b in bases if not _is_index_page(b)]
+
+    # 2. An exact title still wins outright.
+    for base in bases:
         if base.lower() == name.lower():
             return base
-    for hit in hits:
-        base = hit.split("/")[0].strip()
-        if wanted & _words(base):
-            return base
-    return None
+
+    # 3. Otherwise a hit must share a real word AND not be a page about the character
+    #    rather than the character. Ordered by how little it adds to the name, so
+    #    "Scourge (Sith)" beats "Scourge's lightsaber" rather than tying with it.
+    plausible = [b for b in bases if wanted & _words(b) and not _is_derived(b, name)]
+    if not plausible:
+        return None
+    return min(plausible, key=lambda b: (len(_words(b) - wanted), len(b)))
 
 
 def hosts_for_character(origin, universes, log_fn=None):
