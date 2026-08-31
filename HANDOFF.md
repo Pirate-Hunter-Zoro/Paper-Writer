@@ -241,6 +241,13 @@ Worth reading. The pattern in all of them is the same.
   picked those up when it restarted at 07:16:29. The number is a lagging average over
   mostly-old renders. Let a few hundred accumulate on current code before reading it as
   a trend — this is exactly the small-sample trap of §6.
+  **Use `scripts/keep-rate.sh` instead of reading the cumulative number.** It divides
+  the same two records the engine does (its cumulative figure agrees with the log line
+  exactly), but it also reports the rate *since a marked baseline*, which is the number
+  that answers "did what I just deployed help?". Run `scripts/keep-rate.sh --mark` as
+  part of every deploy; a baseline was marked at 2026-08-31T12:42Z on 219 billed / 62
+  kept. It prints the sample size and says so out loud below 40 renders, because a
+  delta over a dozen renders is a hypothesis.
 - **Chapter trajectories** (`grep ACCEPTED state/scribe.log`). Four of nine reach zero
   defects; the rest ship with recorded issues and are queued for the REVISION sweep.
   **That sweep has never run.** It is the mechanism that makes shipping a flawed
