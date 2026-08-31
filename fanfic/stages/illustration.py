@@ -343,8 +343,23 @@ def _aspect_for(orientation):
 # --- Model seams -------------------------------------------------------------
 
 def render(prompt, out_path, references=None, log_fn=None, aspect=None):
-    """Model seam: one image generation."""
-    images.generate(prompt, out_path, references=references, timeout=600,
+    """Model seam: one image generation.
+
+    The timeout comes from config, and passing it explicitly is the point. It used to
+    be a hardcoded `timeout=600` here, which quietly made
+    `FANFIC_IMAGE_RENDER_TIMEOUT_SEC` a knob that did nothing: this is the only path
+    scene and sheet renders take, so the configured value was never once applied and
+    an operator tuning it would have changed the number, restarted, and watched
+    nothing happen. The same shape as an env change that never reaches a running
+    daemon, one layer further in.
+
+    It also restores the value the config comment argues for. Renders measured on the
+    live book run a median of 22 seconds and a p90 of 51 — the config's "eight seconds
+    to two minutes" is right — so 420 is still eight times the p90, while 600 spent ten
+    minutes discovering that a hung page was hung. Timeouts were costing about 9% of
+    the illustrator's wall-clock, and it is throughput that decides when a book ends."""
+    images.generate(prompt, out_path, references=references,
+                    timeout=config.IMAGE_RENDER_TIMEOUT_SEC,
                     log_fn=log_fn, aspect=aspect)
 
 

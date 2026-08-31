@@ -225,12 +225,21 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   wording since last night; it was at 07:36 and has not recurred in the five hours
   since, so it is likelier that the text rendered after the last check than that the
   pattern is broken.
-  **Not fixed, deliberately:** one occurrence each. The change is a regex in
-  `tools/gemini_art.js`, which is the riskiest file in the project and the one whose
-  tests are opt-in and need Chrome — and the illustrator has to be booted out first,
-  because a Chrome profile opens in one process at a time (§3). Worth doing if it
-  recurs, and then `scripts/check-browser.sh` is the thing to run. Not worth doing on
-  n=1 while the run is healthy.
+  **The pattern half is not fixed, deliberately:** one occurrence each, and the change
+  is a regex in `tools/gemini_art.js`, the riskiest file here and the one whose tests
+  are opt-in and need Chrome — with the illustrator booted out first, because a Chrome
+  profile opens in one process at a time (§3). Worth doing if it recurs, and then
+  `scripts/check-browser.sh` is the thing to run.
+
+  **The timeout half was a dead knob, and that is fixed.** `illustration.render` — the
+  only path a scene or sheet render takes — hardcoded `timeout=600`, so
+  `FANFIC_IMAGE_RENDER_TIMEOUT_SEC` had never applied to a single render in the run.
+  Tuning it, restarting, and watching nothing happen is the same trap as an env change
+  that never reaches a running daemon, one layer further in. The seam now passes the
+  configured value, which restores the 420 the config comment argues for — and the
+  measurement backs that comment exactly: successful renders on this book run a
+  **median of 22s and a p90 of 51s**, so 420 is still eight times the p90 while 600 was
+  spending ten minutes to discover that a hung page was hung.
 
 - **T7-O1 wears a restraining bolt for the whole book, and I left it that way.** Same
   defect as (13) from the other side: `costume_for_chapter` takes the base look to be

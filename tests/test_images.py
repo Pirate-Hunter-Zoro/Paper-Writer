@@ -1789,3 +1789,46 @@ class ThePageLabelIsNotPartOfTheMessage(unittest.TestCase):
             raised["msg"] = str(exc)
         self.assertNotIn("Gemini said", raised["msg"])
         self.assertIn("I can't generate the image you requested", raised["msg"])
+
+
+# Captured at import, before any test's setUp runs: `support.stub_model_seams()`
+# replaces `illustration.render` wholesale and the replacement outlives the test that
+# installed it, so a test about the real seam has to hold its own reference.
+_REAL_RENDER = illustration.render
+
+
+class TheRenderTimeoutIsTheConfiguredOne(unittest.TestCase):
+    """`FANFIC_IMAGE_RENDER_TIMEOUT_SEC` was a knob that did nothing.
+
+    `illustration.render` is the only path a scene or sheet render takes, and it
+    hardcoded `timeout=600`, so the configured value was never applied to anything. An
+    operator tuning it would have changed the number, restarted, and seen no effect —
+    the same shape as an env change that never reaches a running daemon, one layer
+    further in. That is worth a test precisely because nothing fails when it regresses;
+    the number simply stops meaning anything."""
+
+    def _timeout_used(self):
+        seen = {}
+
+        def fake_generate(prompt, out_path, references=None, timeout=None,
+                          log_fn=None, aspect=None):
+            seen["timeout"] = timeout
+
+        original = illustration.images.generate
+        illustration.images.generate = fake_generate
+        self.addCleanup(
+            lambda: setattr(illustration.images, "generate", original))
+        _REAL_RENDER("draw a knight", pathlib.Path("/tmp/x.png"))
+        return seen.get("timeout")
+
+    def test_the_configured_value_reaches_the_driver(self):
+        self.assertEqual(self._timeout_used(), config.IMAGE_RENDER_TIMEOUT_SEC)
+
+    def test_it_is_not_the_old_hardcoded_number(self):
+        """Guards the specific regression rather than just 'some value is passed'."""
+        original = config.IMAGE_RENDER_TIMEOUT_SEC
+        config.IMAGE_RENDER_TIMEOUT_SEC = 137
+        self.addCleanup(
+            lambda: setattr(config, "IMAGE_RENDER_TIMEOUT_SEC", original))
+        self.assertEqual(self._timeout_used(), 137,
+                         "the seam is ignoring config and using its own number")
