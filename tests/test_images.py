@@ -543,6 +543,61 @@ class EveryoneInFrameGetsADesign(unittest.TestCase):
         self.assertIn("Camila Noceda", scenes[0]["characters"])
 
 
+class EverybodyInFrameKeepsTheirAnchor(unittest.TestCase):
+    """A scene's references are truncated at `IMAGE_MAX_UPLOADS`, so their ORDER
+    decides who keeps an anchor and who loses one.
+
+    Built per character — lead's art, lead's sheet, second's art, second's sheet — a
+    four-hander produces eight references and a cap of six silently deletes the last
+    characters' SHEETS. Those characters then reach the model with nothing, which is
+    exactly what the design forbids: everyone outside the lead is supposed to be
+    anchored by their locked sheet alone.
+
+    It surfaced live as a background figure drawn as a different person entirely, with
+    the log reporting eight references attached."""
+
+    def setUp(self):
+        support.wipe_state()
+        support.stub_model_seams()
+        self.sent = []
+
+        def render(prompt, out_path, references=None, log_fn=None, aspect=None):
+            self.sent = [Path(r).name for r in (references or [])]
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(support.PNG)
+        illustration.render = render
+
+    def _cast(self, names):
+        """Give everyone a locked sheet and everyone some source art, so the reference
+        list genuinely exceeds the upload cap — which is the only condition under which
+        ordering can lose somebody their anchor."""
+        from fanfic import paths
+        for n in names:
+            sheet = paths.sheet_path("s", 1, n)
+            sheet.parent.mkdir(parents=True, exist_ok=True)
+            sheet.write_bytes(support.PNG)
+            art = paths.refart_dir("s", 1, n)
+            art.mkdir(parents=True, exist_ok=True)
+            for i in range(3):
+                (art / f"ref{i}.webp").write_bytes(support.PNG)
+
+    def test_every_character_in_frame_keeps_a_sheet(self):
+        names = ["A Adams", "B Brown", "C Clark", "D Davis"]
+        self._cast(names)
+        entry = {"series_id": "s", "book_num": 1, "chapter_num": 1, "k": 9,
+                 "scene": "four of them argue in a hangar", "characters": names,
+                 "orientation": "portrait"}
+        illustration.render_scene(entry, log_fn=lambda _m: None)
+        # The cap truncates, so the assertion is about WHAT SURVIVES it: every
+        # character's sheet, ahead of any lead's optional top-up art.
+        kept = self.sent[:config.IMAGE_MAX_UPLOADS]
+        sheets = [f for f in kept if f.endswith(".png")]
+        self.assertGreaterEqual(
+            len(sheets), 4,
+            f"a four-hander must keep four sheets within the upload cap; "
+            f"the first {config.IMAGE_MAX_UPLOADS} sent were {kept}")
+
+
 class ARefusalDoesNotCostARung(unittest.TestCase):
     """The ladder asks for LESS after each failure, and that is right for a rejection
     and wrong for a refusal.

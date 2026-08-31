@@ -279,7 +279,16 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
     if out_path.exists():
         out_path.unlink()            # so "file present" means "this render produced it"
 
+    # Truncated HERE, not at the call site, so everything downstream — the driver
+    # arguments, the retry logic and the log line — talks about the same list. It
+    # reported the untruncated count for a while, which meant a log claiming eight
+    # attached references described a render that was sent six.
     refs = [str(r) for r in (references or []) if r and r.exists()]
+    dropped = max(0, len(refs) - config.IMAGE_MAX_UPLOADS)
+    refs = refs[:config.IMAGE_MAX_UPLOADS]
+    if dropped:
+        note(f"{dropped} reference picture(s) beyond the {config.IMAGE_MAX_UPLOADS} "
+             f"upload cap were not sent")
     # The prompt travels as a FILE rather than as an argv string. A scene prompt is
     # ~2KB of staging, cast identity and style; putting that on a command line means it
     # is visible in `ps` to every process on the machine and one shell metacharacter
@@ -292,7 +301,7 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
            "--out", str(out_path),
            "--prompt-file", str(prompt_file),
            "--timeout", str(int(timeout))]
-    for ref in refs[:config.IMAGE_MAX_UPLOADS]:
+    for ref in refs:
         cmd += ["--ref", ref]
 
     try:

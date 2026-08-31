@@ -1339,14 +1339,32 @@ def render_scene(entry, log_fn=None):
     # with it. The people in front are identified by looking like people, and the ones
     # behind are identified by being where the scene says they are.
     lead = max(1, config.IMAGE_REFERENCE_CHARACTERS)
-    references = []
+    # SHEETS FIRST, FOR EVERYONE, THEN SOURCE ART FOR THE LEADS.
+    #
+    # Order is load-bearing because the list is truncated at `IMAGE_MAX_UPLOADS`
+    # further down, and truncation takes the front. Interleaved per character — lead's
+    # art, lead's sheet, second's art, second's sheet — a four-hander builds a list of
+    # eight and the cap of six silently removes the LAST characters' sheets. Those
+    # characters then arrive with no reference at all, which is precisely the case the
+    # design says must never happen: "everyone else is anchored by their locked sheet
+    # alone."
+    #
+    # It showed up as a background figure rendered as a completely different person —
+    # a leathery sixty-year-old with untidy grey hair came back as a clean-shaven man
+    # of forty-five — while the log cheerfully reported eight references attached.
+    #
+    # Every character's sheet is one picture and is the whole of their identity budget;
+    # source art is a top-up for the one or two the composition puts in front. So the
+    # sheets go first and the top-ups compete for whatever room is left.
+    sheets, extra_art = [], []
     for position, name in enumerate(names):
-        if position < lead:
-            references += refart.for_character(
-                sid, book_num, name)[:config.REF_IMAGES_PER_RENDER]
         sheet = paths.sheet_path(sid, book_num, name)
         if sheet.exists():
-            references.append(sheet)
+            sheets.append(sheet)
+        if position < lead:
+            extra_art += refart.for_character(
+                sid, book_num, name)[:config.REF_IMAGES_PER_RENDER]
+    references = sheets + extra_art
     orientation = entry.get("orientation", "portrait")
     aspect = _aspect_for(orientation)
     # Identity ground truth for the critic. Stored at enqueue time; rebuilt from the
