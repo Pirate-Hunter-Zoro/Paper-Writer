@@ -406,6 +406,17 @@ Deliberately left: "no visible sclera" (Scourge) and "no visible whites" (Morr) 
 an anatomical fact with no prop to reach for, and rewriting them risks losing what makes
 those two faces alien.
 
+**None of this is confirmed yet, and the way it will look confirmed is a trap.** An
+hour after the rewrite: 11 renders reached the critic, 1 identity failure, 0 complaints
+about Satele's bangs. That reads like a fix landing. It is not — **Satele has not been
+drawn once since the change**, nor has Tarnis, nor T7. The test has not run. The one
+failure was Kira, it predates half the rewrite, and it is about hair colour that was
+never in the prompt at all.
+Worth internalising for anything prompt-level here: with ~85% of attempts refused and
+the illustrator working chapters in order, a given character may not surface for hours.
+Absence of a failure is mostly absence of a test. **Check that the character actually
+appeared before reading anything into a clean stretch.**
+
 **This is the rule to apply to any new bible: say what is in the picture, never what is
 absent.** It is worth a gate at plan time, in the shape of §4.13's — a locked appearance
 that negates a visible noun is a defect the planner should be made to rephrase. Not
