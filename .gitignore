@@ -10,6 +10,10 @@ state/
 # finished one out of the folder and that shows up in git as a deletion.
 /inbox/
 
+# The Node driver has no dependencies at all; this is insurance against anyone
+# running `npm install` in here and committing the result.
+node_modules/
+
 __pycache__/
 *.pyc
 .DS_Store
