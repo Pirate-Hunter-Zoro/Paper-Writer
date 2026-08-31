@@ -197,9 +197,12 @@ def stub_model_seams():
     validator, delivery — runs for real, which is the point: this proves the harness
     wiring independent of the models."""
 
-    def canon_proposal(prompt_text, universe, out_path, log_fn=None):
+    def canon_proposal(prompt_text, universe, out_path, log_fn=None, focus=()):
         from fanfic import jobspec
-        entities = jobspec.implied_entities(prompt_text) or ["Ruby"]
+        # `focus` makes this a top-up: the caller has told us exactly which entities
+        # the frozen canon is missing, and a stub that ignored that would make the
+        # merge path look like it worked while never exercising it.
+        entities = list(focus) or jobspec.implied_entities(prompt_text) or ["Ruby"]
         storage.save_json({"universe": universe, "facts": [
             {"id": f"c.{i}", "category": "character", "subject": entity,
              "text": f"{entity} is an established character.", "citation": "wiki"}
@@ -343,7 +346,14 @@ def wipe_state():
                  paths.image_spend_log(), paths.usage_log()):
         if path.exists():
             path.unlink()
-    for directory in (config.STATE_DIR / "series", config.INBOX_DIR):
+    # Canon belongs here too, and did not until canon started GROWING. It is keyed on
+    # the universe rather than the series, so every fixture in the suite shares one
+    # file — which was harmless while it was written once and never touched again, and
+    # is a leak now that a job tops it up. One test's top-up would otherwise satisfy
+    # the next test's coverage gate, and the case that proves the first dig happens at
+    # all would pass or fail depending on what ran before it.
+    for directory in (config.STATE_DIR / "series", config.STATE_DIR / "canon",
+                      config.INBOX_DIR):
         if directory.exists():
             shutil.rmtree(directory)
 

@@ -2661,6 +2661,15 @@ Stated plainly so nothing surprises you at 2 a.m.:
   Watch it work. If a selector has moved, the failing probe is named in the JSON and the page is
   dumped to `state/image-diagnostics/`, and the fix is a selector list in `gemini_art.js` — every
   probe in that file already tries several, precisely so this is an edit rather than a rewrite.
+- **Canon grows; it is not immutable.** Canon is keyed on the *universe*, so every job
+  naming the same source shares one file — worth 15-40 minutes a book, and the reason a
+  multi-book programme in one universe mines its wikis once. It used to be frozen
+  absolutely, which was a trap: the coverage gate still ran against each new job's cast,
+  so a second book with a different cast parked at 0% with an error saying "research"
+  and a cause three steps away in "the freeze". A frozen canon that does not cover a new
+  prompt is now **topped up for exactly the entities it is missing** and merged back,
+  under fresh fact ids. One top-up per universe per job, so a genuinely uncoverable
+  entity costs one call and then parks rather than looping.
 - **`doctor` is not built.** The deferred, never-destructive audit unit — re-open finished books,
   confirm the epub is valid, images are present, and no late continuity drift slipped past the
   per-chapter gates — remains deferred until the core pipeline is proven on the mini, the same way
