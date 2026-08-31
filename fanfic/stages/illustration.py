@@ -772,6 +772,26 @@ def _character_line(name, spec, chapter_num=None):
     return line + "."
 
 
+def species_of(spec):
+    """The character's species, when it is not human. "" for humans and unknowns.
+
+    Locked appearances open with it by convention — "Togruta female, fifty-five…",
+    "Kel Dor male, sixty-five…", "Human female, nineteen…" — so it is the first clause
+    with any trailing sex word removed."""
+    first = str((spec or {}).get("appearance") or "").split(",")[0].strip()
+    words = [w for w in first.split() if w]
+    # The clause must END in a sex word to count. That is the whole convention —
+    # "Togruta female", "Kel Dor male", "Human female" — and requiring it is what stops
+    # this guessing: an appearance opening "red cloak, hooded" or "brown hair, tall"
+    # otherwise yields "red cloak" as a species and puts it in the prompt as one.
+    if not words or words[-1].lower() not in ("male", "female", "man", "woman"):
+        return ""
+    label = " ".join(words[:-1]).strip(" .-")
+    if not label or label.lower().startswith("human"):
+        return ""
+    return label if len(label.split()) <= 3 else ""
+
+
 def _costume_line(name, spec, chapter_num=None):
     """Name and this chapter's costume, and nothing else.
 
@@ -785,7 +805,20 @@ def _costume_line(name, spec, chapter_num=None):
     # Age survives the trim even though the reference carries a face, because it is the
     # one identity fact a reference can be actively wrong about: the source art is
     # drawn from a whole series and this book starts after its epilogue.
-    who = f"{name} ({age})" if age else name
+    #
+    # SPECIES SURVIVES IT TOO, for a different and more embarrassing reason: the model
+    # does not reliably read it off the pictures, and its default is human. Two
+    # non-human principals were drawn as humans within five minutes of each other —
+    # Bela Kiwiiks, a Togruta with montrals and head-tails, rendered in a cloth
+    # head-wrap; Tol Braga, a Kel Dor, rendered as an elderly human in goggles — both
+    # with their reference sheet and source art attached.
+    #
+    # "Where a reference exists the words stop describing the face" is right about a
+    # face. A species is not a face; it is a category, prose states it exactly, and
+    # leaving it out lets the model fall back to the commonest option in its training.
+    species = species_of(spec)
+    bits = [b for b in (species, age) if b]
+    who = f"{name} ({', '.join(bits)})" if bits else name
     return f"{who}: {costume}." if costume else f"{who}: as in the reference."
 
 
@@ -882,9 +915,15 @@ def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=Non
     if cast:
         lines.append("")
         if anchored:
+            non_human = sorted({species_of(s2) for _n, s2 in cast if species_of(s2)})
             lines.append("The people in this picture are the ones in the attached "
                          "reference pictures. Draw those faces. What each is wearing "
                          "in this scene:")
+            if non_human:
+                lines.append("Species is NOT optional and NOT human by default: "
+                             + ", ".join(non_human)
+                             + " must be drawn as that species, with the anatomy the "
+                               "reference pictures show.")
             lines += [f"- {_costume_line(n, s, chapter_num)}" for n, s in cast]
         else:
             lines.append("The characters, drawn exactly as described and instantly "
