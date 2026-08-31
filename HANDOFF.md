@@ -253,6 +253,25 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   `BAD_REFERENCE_PATTERNS` say nothing about people. That line now reports what the
   page actually said.
 
+- **What is actually driving the refusal climb is not established, and two obvious
+  explanations are already ruled out.** Worth reading before anyone spends a day on it.
+  *Not the reference pictures* — see above. *Not our prompts getting wordier*, which was
+  my own first guess, since the morning's fixes each added a line to the identity block:
+  the refused-prompt dumps in `state/image-diagnostics/*refused.txt` carry the full
+  prompt, and their median length is flat at 1733–1984 characters across hours 07–11
+  **while the refusal rate went 28% → 65% over exactly those hours.** It only grows to
+  ~2350 at hour 12, well after the climb was underway. So terser prompts are unlikely
+  to buy anything.
+  What is left is a property of the session or the classifier rather than of what we
+  send — consistent with the thing §3 already says, that the identical prompt often
+  succeeds on a later try. **Do not go re-authenticating on that hunch**: the session
+  directory *is* the credential, it is not expired, and a working profile is not worth
+  risking on a theory. If you want to test it, the cheap version is to note whether the
+  rate falls after the fleet has been idle for a while.
+  Caveat on all of the above: the dumps only exist for renders that FAILED, so this is a
+  selected sample compared against itself hour by hour. It is enough to rule things out,
+  not enough to name a cause.
+
 ---
 
 ## 6. Errors I made, so you can avoid the same shape
