@@ -38,6 +38,8 @@ Query string picks the behaviour, so one fixture covers the whole contract:
     ?scenario=quota         a usage ceiling
     ?scenario=signedout     the guest chat: a composer, no account, declines pictures
     ?scenario=silent        never produces anything, to exercise the timeout
+    ?scenario=empty         answers with a completely empty response bubble — the
+                            live hang that burned two ten-minute timeouts
 
     python3 tests/fixtures/gemini_page.py [port]
 """
@@ -194,6 +196,15 @@ document.getElementById("send").addEventListener("click", async () => {
   await new Promise((r) => setTimeout(r, 300));
 
   if (SCENARIO === "silent") { busy(false); return; }
+
+  if (SCENARIO === "empty") {
+    // What the live page actually did: a response element containing nothing at all,
+    // with generation finished. No image, no words, no refusal — a state the wait
+    // loop had no exit condition for.
+    busy(false);
+    respond("");
+    return;
+  }
 
   if (SCENARIO === "refused" || SCENARIO === "signedout") {
     busy(false);
