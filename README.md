@@ -1,5 +1,10 @@
 # Fanfiction-Writer
 
+> **A run is in progress.** See [HANDOFF.md](HANDOFF.md) for what is currently running,
+> the sixteen fixes that came out of watching it fail, and what to watch. This README is
+> the design; that file is the state of play, and where the two disagree about the
+> picture path, that file is newer.
+
 An AI-driven, human-out-of-the-loop **illustrated-novel factory** that runs as a fleet of
 `launchd` daemons on a Mac mini. You drop a prompt into a folder — from your phone, if you like,
 because the folder is in iCloud. The fleet researches the source universe, plans a series, writes
