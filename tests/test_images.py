@@ -598,6 +598,51 @@ class EverybodyInFrameKeepsTheirAnchor(unittest.TestCase):
             f"the first {config.IMAGE_MAX_UPLOADS} sent were {kept}")
 
 
+class SpeciesIsNotAFace(unittest.TestCase):
+    """An anchored prompt drops the appearance paragraph, because prose and pictures
+    disagree about a face and a model handed both averages them. That is right about
+    faces and wrong about SPECIES.
+
+    Two non-human principals were drawn as humans within five minutes of each other on
+    the live book — Bela Kiwiiks, a Togruta with montrals and head-tails, rendered in a
+    cloth head-wrap; Tol Braga, a Kel Dor, rendered as an elderly human in goggles —
+    both with their sheet and source art attached. The model does not reliably read
+    species off a picture, and its default is human.
+
+    A species is a category, not a likeness. Prose states it exactly, so prose keeps
+    it, exactly as age is kept for a related reason."""
+
+    def test_a_non_human_keeps_their_species_in_an_anchored_prompt(self):
+        cast = [("Bela Kiwiiks",
+                 {"appearance": "Togruta female, fifty-five, deep red skin",
+                  "age": "55", "costumes": "Jedi robes"})]
+        prompt = illustration.build_scene_prompt(
+            "she studies a hologram", cast, anchored=True)
+        self.assertIn("Togruta", prompt)
+
+    def test_a_human_is_not_labelled_with_a_species(self):
+        """Saying "Human" of a human is noise in a prompt that is already crowded."""
+        cast = [("Alyn Tenar",
+                 {"appearance": "Human female, nineteen, lean", "age": "19",
+                  "costumes": "Jedi robes"})]
+        prompt = illustration.build_scene_prompt(
+            "she holds the gap", cast, anchored=True)
+        self.assertNotIn("Human,", prompt)
+
+    def test_the_prompt_says_species_is_not_optional(self):
+        cast = [("Tol Braga", {"appearance": "Kel Dor male, sixty-five",
+                               "age": "65", "costumes": "robes"})]
+        prompt = illustration.build_scene_prompt("he speaks", cast, anchored=True)
+        self.assertIn("NOT human by default", prompt)
+
+    def test_species_extraction_refuses_to_guess(self):
+        """A description that does not open with a species yields nothing rather than
+        a wrong label — the same rule the wiki lookup follows."""
+        self.assertEqual(illustration.species_of(
+            {"appearance": "A tall and rather complicated person"}), "")
+        self.assertEqual(illustration.species_of({}), "")
+
+
 class ARefusalDoesNotCostARung(unittest.TestCase):
     """The ladder asks for LESS after each failure, and that is right for a rejection
     and wrong for a refusal.
