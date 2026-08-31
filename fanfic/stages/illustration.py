@@ -916,6 +916,32 @@ def signature_marks(spec):
     return out
 
 
+_SEX_WORDS = {"male": "man", "man": "man", "female": "woman", "woman": "woman"}
+
+
+def sex_of(spec):
+    """"man" / "woman" from a locked appearance, or "" when it does not say.
+
+    Same convention the species reader uses — appearances open "Togruta female,
+    fifty-five" — and the same justification, arrived at the same way. A sex is a
+    category. Prose states it in one word. The model does not reliably take it from a
+    picture, and when the prompt omits it the model fills the blank from whatever it
+    finds likeliest.
+
+    Alyn Tenar is the case, and she is the protagonist. Her appearance opens "Human
+    female, nineteen", so the species reader strips "female" to isolate "Human" and
+    then discards the whole thing as unremarkable — leaving her sex nowhere in the
+    prompt. She was rendered three times as "a pale, flat-chested masculine build with
+    a squared jaw" that "a reader would take for a boy", in scenes where her own
+    reference sheet was attached."""
+    first = str((spec or {}).get("appearance") or "").split(",")[0].strip()
+    words = [w.lower().strip(" .-") for w in first.split() if w]
+    for w in reversed(words):
+        if w in _SEX_WORDS:
+            return _SEX_WORDS[w]
+    return ""
+
+
 def _costume_line(name, spec, chapter_num=None):
     """Name and this chapter's costume, and nothing else.
 
@@ -941,7 +967,10 @@ def _costume_line(name, spec, chapter_num=None):
     # face. A species is not a face; it is a category, prose states it exactly, and
     # leaving it out lets the model fall back to the commonest option in its training.
     species = species_of(spec)
-    bits = [b for b in (species, age) if b]
+    # Species first when there is one — "Togruta woman" reads as a description of a
+    # person, where "woman, Togruta" reads as a form being filled in.
+    who_is = " ".join(b for b in (species, sex_of(spec)) if b)
+    bits = [b for b in (who_is, age) if b]
     who = f"{name} ({', '.join(bits)})" if bits else name
     line = f"{who}: {costume}." if costume else f"{who}: as in the reference."
     marks = signature_marks(spec)
