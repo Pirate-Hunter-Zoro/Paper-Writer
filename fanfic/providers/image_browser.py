@@ -279,6 +279,20 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
     for ref in refs[:config.IMAGE_MAX_UPLOADS]:
         cmd += ["--ref", ref]
 
+    try:
+        _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout,
+                           note)
+    finally:
+        # Scratch, and it must go whatever happened. Splitting the driver call out of
+        # this function once moved the cleanup into the success path alone, and a
+        # failed render started leaving a `.prompt.txt` beside the image it did not
+        # produce — inside the staging directory the binder reads.
+        prompt_file.unlink(missing_ok=True)
+
+
+def _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout,
+                       note):
+    """One render, with the one retry that is worth making automatically."""
     result = _run(cmd, timeout, note)
 
     # A REJECTED UPLOAD IS NOT A REJECTED PROMPT, and treating them alike costs a
@@ -316,7 +330,6 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
          f"{result.get('mime', 'image')} ({result.get('bytes', 0) // 1024} KB) "
          f"through the browser session"
          + (f", conditioned on {len(refs)} reference picture(s)" if refs else ""))
-    prompt_file.unlink(missing_ok=True)
 
 
 def _run(cmd, timeout, note):
