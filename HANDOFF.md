@@ -197,33 +197,38 @@ commits.
 
 Nothing here is blocking. These are judgements already made; revisit only with evidence.
 
-- **A quarter of chapters ship worse than a pass had already made them, and I did NOT
-  change it.** The loop keeps the LAST version, never the best one. Across sixteen
-  chapters:
+- **Nearly a third of chapters ship worse than a pass had already made them, and I did
+  NOT change it.** The loop keeps the LAST version, never the best one. At 17 chapters,
+  5 of them (29%) shipped carrying **11 blocking defects a previous pass had already
+  cleared**:
 
       ch4    3 -> 1 -> 3 -> 4               best 1, shipped 4
       ch6    7 -> 1 -> 1 -> 2               best 1, shipped 2
       ch15   3 -> 4 -> 4                    best 3, shipped 4
       ch16   6 -> 4 -> 4 -> 1 -> 3 -> 4     best 1, shipped 4
+      ch17   7 -> 2 -> 5 -> 5               best 2, shipped 5
 
-  Roughly five excess blocking defects shipped that a previous pass had already cleared.
-  `_still_improving` compares the *minimum* over its window, so one good pass keeps the
-  loop alive through the bad passes that follow it — which is exactly how ch16 went 1,
-  then 3, then 4, and shipped the 4.
+  `_still_improving` compares the *minimum* over its window, so one good pass sustains
+  the loop through the bad passes that follow it — ch16 went 1, then 3, then 4, and
+  shipped the 4; ch17 went 2, then 5, and shipped the 5.
 
   The obvious fix is to snapshot the prose each pass and ship the best-measured one.
-  **The reason not to is that the metric is noisy.** Across 44 consecutive-pass
-  comparisons the count ROSE 8 times (18%), and ch12 went `7 -> 0 -> 2 -> 0` — the same
+  **The reason not to is that the metric is noisy:** across 52 consecutive-pass
+  comparisons the count ROSE 11 times (21%), and ch12 went `7 -> 0 -> 2 -> 0` — the same
   judge finding nothing, then two defects, then nothing again, on text that changed only
   by craft edits. Selecting the minimum of a noisy signal buys some genuine improvements
-  and some lucky reads, and it would be a change to *what text ships*, which is the most
-  consequential thing in the pipeline.
-  There is also already a backstop built for this exact case: chapters that ship holding
-  defects are queued for the REVISION sweep, which re-reads them against the finished
-  book. ch16 is the first chapter in this run to use it.
+  and some lucky reads, and it changes *what text ships*, which is the most consequential
+  thing in the pipeline. Chapters that ship holding defects are also already queued for
+  the REVISION sweep, which re-reads them against the finished book.
+
   **Revisit with:** a measurement of how often the judge's count is reproducible on
-  unchanged text. If the judge is stable to within ~1 defect, "keep the best" becomes
-  clearly right; at 18% rise it does not.
+  UNCHANGED text — run the editor twice over one accepted chapter and compare. If it is
+  stable to within ~1 defect, "keep the best" becomes clearly right. At a 21% rise rate
+  it is not, and this is the single largest known quality leak in the pipeline, so the
+  measurement is worth making properly.
+
+  (Parsing note for anyone recomputing this: `ACCEPTED holding 1 issue(s)` puts a paren
+  in the line, so match the LAST parenthesised run of digits and arrows, not the first.)
 
 - **First clean evidence for the pass budget, now that restarts stop corrupting it.**
   Chapter 13 ran `6 -> 3 -> 2 -> 1 -> 2 -> 0` — six passes, the first chapter in the run
