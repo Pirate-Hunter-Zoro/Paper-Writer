@@ -557,6 +557,40 @@ something — `grep 'would not use' state/illustrator.log`.
 
 ---
 
+## 6c. A DECISION FOR YOU: empty-room pictures while uploads are broken
+
+Not acted on, because it is a quality-versus-progress trade that has already been made
+once deliberately and should not be re-made by me at the end of a long session.
+
+**The situation.** A timeout advances the ladder rung; a refusal does not (§4.5). While
+Gemini's uploads are failing (§3), every reference-carrying render times out, so scenes
+walk down the ladder without a single picture ever being drawn or judged. `ch19_6` and
+`ch20_1` reached **rung 3 — a picture of the room with nobody in it** — on compositions
+that were never at fault.
+
+**Why the current behaviour is defensible anyway, which I nearly missed.** Rung 3
+attaches no references, so it is the one rung that still *works* when uploads are
+blocked. Descending is what rescues the slot; it ships a degraded picture instead of
+nothing. `test_a_render_failure_still_advances_the_ladder` asserts this on purpose.
+
+**The two options, honestly:**
+
+  * *Leave it.* Scenes affected during an upload outage get peopleless pictures, which
+    are permanent. The book keeps moving.
+  * *Hold the rung on a timeout*, matching the refusal rule — nothing was drawn, so
+    there is no verdict on the composition. Pictures stay correct; affected slots stall
+    on their backoff until uploads recover, and the book waits. This matches the stated
+    philosophy elsewhere ("images are never skipped; what a spent ceiling costs is
+    TIME") but reverses a tested decision.
+
+A middle option exists: hold for the first N timeouts, then allow descent — transient
+blocks cost nothing, persistent ones still escape.
+
+**If you leave it, check `ch19_6` and `ch20_1` when the run finishes** and re-queue them
+if they came back empty: `rm` the image and its `.retry`, and the illustrator redraws.
+
+---
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
