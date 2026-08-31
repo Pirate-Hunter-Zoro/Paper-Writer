@@ -777,6 +777,47 @@ class TrimmingTheCastMustTrimTheDescription(unittest.TestCase):
         self.assertIn("EMPTY room", prompt)
 
 
+class ColouringIsAFactNotALikeness(unittest.TestCase):
+    """The fourth category restored to an anchored prompt, after species, sex and
+    discrete markings, for the identical reason each time.
+
+    Alyn Tenar's sheet shows warm brown skin. Renders came back "distinctly fair/pale
+    with pink undertones", repeatedly, with that sheet attached. A skin tone does not
+    compete with the reference for the shape of a face; it says which of the model's
+    defaults to stop reaching for."""
+
+    def test_skin_tone_reaches_the_prompt(self):
+        spec = {"appearance": "Human female, nineteen, lean. Warm brown skin, "
+                              "grey-green eyes.",
+                "age": "19", "costumes": ["tunic"]}
+        line = illustration._costume_line("Alyn Tenar", spec, 1)
+        self.assertIn("warm brown skin", line)
+        self.assertIn("Always:", line)
+
+    def test_hair_and_eye_colour_stay_out(self):
+        """The guard against creeping back into the appearance paragraph. Those are the
+        fine detail a reference carries well; skin tone is a broad-area property the
+        model overrides wholesale. Two older tests enforce this and should keep doing
+        so."""
+        spec = {"appearance": "Human female, nineteen. Warm brown skin, grey-green "
+                              "eyes, dark brown hair cropped to the jaw.",
+                "age": "19", "costumes": ["tunic"]}
+        line = illustration._costume_line("Alyn Tenar", spec, 1)
+        self.assertIn("warm brown skin", line)
+        self.assertNotIn("grey-green eyes", line)
+        self.assertNotIn("brown hair", line)
+
+    def test_a_long_clause_is_a_description_not_a_fact(self):
+        spec = {"appearance": "Her skin carries the particular weathering of somebody "
+                              "who has spent a decade outdoors in hard country."}
+        self.assertEqual(illustration.colouring_of(spec), [])
+
+    def test_an_appearance_with_no_colouring_adds_nothing(self):
+        spec = {"appearance": "Human male, forty, tall and square.",
+                "age": "40", "costumes": ["robes"]}
+        self.assertNotIn("Always:", illustration._costume_line("X", spec, 1))
+
+
 class ASexIsACategoryNotALikeness(unittest.TestCase):
     """The protagonist was rendered three times as a boy.
 
