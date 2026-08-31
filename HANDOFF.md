@@ -174,6 +174,19 @@ Nothing here is blocking. These are judgements already made; revisit only with e
 - **Render ceiling raised 800 → 1600.** The book runs at ~3 renders per kept picture,
   not the assumed 2. Hitting the ceiling stops the book dead until a person notices,
   and pictures cost nothing but wall-clock.
+  **It was not actually in effect until 07:29 on the 31st, and that is the lesson.**
+  `FANFIC_IMAGE_RENDER_BUDGET=1600` landed in `launchd/fleet.env` in `2744c8e` at
+  07:13, but the scribe had restarted at 07:08 — *before* that commit — and `run.sh`
+  only sources `fleet.env` at launch. So the engine went on enforcing 800 for another
+  twenty minutes while the file on disk said 1600, and the budget line in the log was
+  the only place the difference was visible. At 188/800 spent with 45 chapters left
+  needing roughly 600 more renders, the book was on course to hit the ceiling and hold
+  in ILLUSTRATING. Restarting the daemons applied it (612 remaining → 1381, and the
+  per-chapter cap recovered 4 → 6).
+  **An env change is not deployed until the unit that reads it restarts.** Pushing is
+  the deploy for *code*, because `run.sh` pulls; it is not the deploy for `fleet.env`
+  of a process already running. Check `grep 'picture budget allows' state/scribe.log |
+  tail -1` against the cap you think is live.
 - **T7-O1 wears a restraining bolt for the whole book, and I left it that way.** Same
   defect as (13) from the other side: `costume_for_chapter` takes the base look to be
   the FIRST undated entry, and T7's is `"Captive: grey chassis with the red Flesh Raider
