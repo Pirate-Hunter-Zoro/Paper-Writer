@@ -804,6 +804,21 @@ and it had **two causes, both now addressed**.
   identity lines now comes back clean.** Run that audit after touching the prompt
   builder; it is three lines of Python and it catches what reasoning does not.
 
+- **Declaring the species was not enough: the alien ANATOMY was in nobody's prompt.**
+  Once Scourge had his species (below), the failure simply moved — `ch20_5` gave him a
+  smooth, spur-free face with ordinary ears, missing the braided tendril beard entirely.
+  `signature_marks` had no words for non-human features, so montrals, lekku, tendrils,
+  antennae and breath masks reached no prompt at all. That is **66 slot-appearances**:
+  Lord Praven (29), Bela Kiwiiks (16), Scourge (10), Tol Braga (9), Nyriss (2).
+  It explains the oldest identity failures in the run — Kiwiiks drawn as a human in a
+  head-wrap, Braga as an elderly human in goggles — which were previously blamed on the
+  model ignoring its references.
+
+  A caution about auditing, learned twice in ten minutes: my first pass used substring
+  matching and reported Satele Shan as having non-human anatomy, because "fin" is inside
+  "fine lines". **Use word boundaries before believing an audit**, or it will hand you a
+  list that is mostly noise and a conclusion that is mostly wrong.
+
 - **Lord Scourge had no species at all in his prompt, and he is in ten illustrations.**
   `species_of` reads the opening clause of a locked appearance and required the SEX WORD
   TO BE ITS LAST WORD — the convention being "Togruta female, fifty-five…". Scourge
