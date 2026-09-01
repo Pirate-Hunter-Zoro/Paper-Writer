@@ -1104,6 +1104,39 @@ def mature_cast(cast_specs):
     return out
 
 
+_TENS = {2: "twenty", 3: "thirty", 4: "forty", 5: "fifty", 6: "sixty",
+         7: "seventy", 8: "eighty", 9: "ninety"}
+_ONES = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+         6: "six", 7: "seven", 8: "eight", 9: "nine"}
+
+# What the age should LOOK like, banded. A number is a weak token for an image model;
+# these are the nouns it can actually draw.
+_AGE_MARKS = ((65, "deeply lined and weathered, grey or white hair, an old face"),
+              (55, "a lined face, heavier jaw, grey coming into the hair"),
+              (45, "clear lines at the eyes and mouth, a settled middle-aged face"))
+
+
+def age_in_words(years):
+    """"fifty-six", not "56".
+
+    The first version of this line said "Satele Shan is 56" and she was still drawn in
+    her late twenties. Numerals carry almost nothing to a diffusion model, where
+    "fifty-six" is a token it has seen attached to a great many faces."""
+    years = int(years)
+    tens, ones = divmod(years, 10)
+    if tens not in _TENS:
+        return str(years)
+    return _TENS[tens] + (f"-{_ONES[ones]}" if ones else "")
+
+
+def age_marks(years):
+    """The visible signs of that age, as things to draw rather than a number."""
+    for floor, marks in _AGE_MARKS:
+        if years >= floor:
+            return marks
+    return ""
+
+
 def identity_block(cast_specs, chapter_num=None):
     """The locked designs of everyone in frame — the vision critic's ground truth."""
     return "\n".join(f"  {_character_line(n, s, chapter_num)}"
@@ -1235,10 +1268,10 @@ def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=Non
             if older:
                 lines.append(
                     "Age is NOT optional and NOT young by default: "
-                    + ", ".join(f"{n} is {a}" for n, a in older)
-                    + ". Draw each of them at that age, with the lined skin, heavier "
-                      "features and greying the reference pictures show. A face that "
-                      "reads a decade younger than the number is the wrong person.")
+                    + "; ".join(f"{n} is {age_in_words(a)} — {age_marks(a)}"
+                                for n, a in older)
+                    + ". Draw each of them with that face. One that reads a decade "
+                      "younger is the wrong person.")
             lines += [f"- {_costume_line(n, s, chapter_num)}" for n, s in cast]
         else:
             lines.append("The characters, drawn exactly as described and instantly "

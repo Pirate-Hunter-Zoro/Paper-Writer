@@ -705,7 +705,28 @@ and it had **two causes, both now addressed**.
   *One clean before-reading exists.* `ch01_3` was redrawn at 02:14, 40 seconds BEFORE
   the restart that made the age line live, so it shows the state without it: Kaedan has
   a head (the new critic rule), Satele has her braids and no fringe (the negation fix),
-  and she still reads about **forty**. That is the gap the age line has to close.
+  and she still reads about **forty**.
+
+  **ITERATION ONE FAILED, measured.** At 02:35 — twenty minutes AFTER the age line went
+  live — `ch14_5` was rejected with Satele "roughly late twenties to mid thirties". I
+  rebuilt that exact prompt to check, and the line was in it: *"Grand Master Satele Shan
+  is 56."* So the instruction reached the model and the model ignored it.
+
+  **Iteration two, and the reasoning behind it:** both mentions used the NUMERAL. A
+  digit carries almost nothing to a diffusion model, and "fine lines at the eyes" — the
+  only other age signal in her prompt — actively undersells fifty-six. The line now
+  spells the age and hands over things that can be drawn:
+
+      Age is NOT optional and NOT young by default: Grand Master Satele Shan is
+      fifty-six — a lined face, heavier jaw, grey coming into the hair; Master Orgus
+      Din is sixty — ...; Master Jaric Kaedan is forty-five — clear lines at the eyes
+      and mouth, a settled middle-aged face. Draw each of them with that face. One that
+      reads a decade younger is the wrong person.
+
+  Banded at 45 / 55 / 65 so a forty-five-year-old and a sixty-five-year-old do not get
+  the same description. **Also unverified.** If this fails too, the next lever is her
+  locked appearance itself, which still says only "fine lines at the eyes" for a woman
+  of fifty-six — the sheet shows far more than that.
 
 - **Hair colour is a stated fact now too, and this reverses a documented decision.**
   `colouring_of` excluded hair because "hair and eye colour are the fine detail a
