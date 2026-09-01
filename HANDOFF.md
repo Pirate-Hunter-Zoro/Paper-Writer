@@ -677,9 +677,30 @@ answerable from the image alone, so it does NOT require handing the critic the s
 description — which was removed for good reason and must stay removed (it nitpicked
 props until slots were skipped).
 
-**2. Satele Shan reads about thirty-five.** Her locked design is fifty-six with lined
-eyes. This is the run's worst recurring identity failure — ten of twenty-one
-`WRONG CHARACTER` verdicts — and it is not fixed. See §6a for the negation half of it.
+**2. Satele Shan reads about thirty-five.** Her locked design is fifty-six. This was the
+run's worst recurring identity failure — ten of twenty-one `WRONG CHARACTER` verdicts —
+and it had **two causes, both now addressed**.
+
+  * *The fringe half* was a negation: her appearance said "no side bangs appear at any
+    point", which is how bangs got drawn. Rewritten positively (§6a).
+  * *The age half* was a bare number. The whole of the anchored prompt's defence was
+    `(woman, 56)` in a parenthetical — **and a number is not an instruction to draw
+    anything.** An image model's prior for an adult sits near thirty and quietly
+    overrules a photograph: her sheet is genuinely excellent (lined, heavy-jawed,
+    braided, no fringe) and she still came back "late twenties to early thirties" with
+    it attached. Orgus Din, sixty, came back "roughly 45".
+
+  Age now gets the same emphatic line species already had, and for the same reason —
+  a categorical fact the generator defaults wrong on that a reference picture does not
+  settle: *"Age is NOT optional and NOT young by default: Grand Master Satele Shan is
+  56, Master Orgus Din is 60. Draw each of them at that age ... A face that reads a
+  decade younger than the number is the wrong person."* Threshold 45; younger cast
+  members are left out, because below it the default and the number already agree and
+  extra words only compete with the reference.
+
+  **Unverified.** The mechanism is sound and matches four earlier fixes of the same
+  shape (species, sex, skin tone, markings), but no render has tested it yet. Watch the
+  next scenes containing Satele or Orgus.
 
 **3. The pictures show the quiet moments and skip the action.** Chapter 1 opens with a
 nineteen-year-old holding a breach against Flesh Raiders. Its five illustrations were:
