@@ -315,10 +315,45 @@ def generate(prompt, out_path, references=None, timeout=None, log_fn=None,
         prompt_file.unlink(missing_ok=True)
 
 
+# How many times to re-ask with the references still attached before giving up on
+# anchoring for this render. Two, because the failure is transient and detection is
+# fast (~5s): three total attempts cost ~15 seconds against a 420-second deadline,
+# and buy back a locked face that would otherwise be lost for the rest of the book.
+_UPLOAD_RETRIES = 2
+
+
 def _render_with_retry(cmd, prompt_file, prompt, aspect, refs, out_path, timeout,
                        note, prompt_without_refs=None):
     """One render, with the one retry that is worth making automatically."""
     result = _run(cmd, timeout, note)
+
+    # A FAILED TRANSFER IS NOT A REJECTED PICTURE, and this is the difference between
+    # a character keeping their face and losing it.
+    #
+    # Gemini's uploader fails intermittently: the chip appears, sits in a loading
+    # state, and flips to an error, after which the app ignores the send. Measured on
+    # 2026-09-01, uploads failed for roughly twenty minutes, worked, then failed again,
+    # with a reference-free render succeeding in the same minute a 179-byte valid PNG
+    # failed to attach — so it is the transfer, not the file and not the prompt.
+    #
+    # Shedding the references on the first such failure would be the wrong trade. The
+    # picture would be drawn from prose and KEPT, permanently, because a slot that
+    # produced an image is done — a character loses their locked face for the rest of
+    # the book on the strength of one bad second. Detection now costs about five
+    # seconds rather than the whole 420-second deadline, so simply asking again with
+    # the references intact is cheap, and it is what the book actually wants.
+    for attempt in range(_UPLOAD_RETRIES):
+        if result.get("kind") != "upload_failed":
+            break
+        note(f"reference upload failed; retrying with the references intact "
+             f"({attempt + 1} of {_UPLOAD_RETRIES})")
+        result = _run(cmd, timeout, note)
+
+    # Still failing after those tries: treat it like a rejected reference and fall
+    # through to the shed-and-re-ask below. A prose-anchored picture is worse than an
+    # anchored one and much better than a slot that never draws.
+    if result.get("kind") == "upload_failed":
+        result = dict(result, kind="bad_reference")
 
     # A REJECTED UPLOAD IS NOT A REJECTED PROMPT, and treating them alike costs a
     # character their sheet. Gemini refuses some reference pictures outright — a

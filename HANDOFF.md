@@ -969,6 +969,98 @@ word "droid" was in none of their prompts before it.
 
 ---
 
+## 6f. The picture path stalled for hours, and BOTH of my first two theories were wrong
+
+**Symptom, 2026-09-01 from about 11:57:** renders stopped. Every attempt carrying
+references reported `no image after 420s; last response text: ""`, which reads as
+"Gemini said nothing" and actually means **we were never able to ask**. Three attempts
+per slot at 420 seconds each is 21 minutes to produce nothing, then a park. Reference-
+free renders kept working the whole time.
+
+### What it actually is
+
+The upload fails. The attachment chip is optimistic: it appears immediately, sits in a
+loading state, then flips to an error — and once any attachment is errored, Gemini
+**ignores the send**. The prompt sits in the composer until the deadline expires.
+
+Measured, not inferred:
+
+    reference-free render      -> ok, 165 KB, ~20s
+    179-byte valid PNG as ref  -> upload errored, no send, timed out
+
+Same minute, same session. So it is the transfer — not the prompt, not the file, not
+its format, not its size.
+
+The error is visible in the DOM as
+`<gem-attachment class="... gem-attachment-loading-error ...">` containing
+`<gem-icon fonticonname="error">`.
+
+### Two wrong theories, both of which I believed and one of which I nearly shipped
+
+**Wrong theory 1: "a JPEG named `.png` is rejected by the uploader."** All 39 character
+sheets really are JPEG bytes under a `.png` name (Gemini returns JPEG; `paths.py` names
+everything `.png` on purpose, and `mime_of` exists for exactly this). It is a real
+mismatch and it is a genuinely plausible cause — Chrome infers the upload's MIME type
+from the extension. I wrote the normalizer, wrote four tests, proved they could fail,
+and then tested it against the live page: **a mislabelled file uploaded fine, and a
+correctly-named one failed.** Four alternating runs failed identically regardless of
+extension. The change was reverted in full; nothing of it is in the tree. Had I shipped
+on the tests alone it would have looked like a fix and changed nothing.
+
+**Wrong theory 2, which had been written in this repo as fact for a day: "Gemini keeps
+the send control DISABLED."** It does not. A DOM dump of the live failure shows the send
+button with no `disabled`, no `aria-disabled` and no disabled class. The click lands and
+is dropped. That sentence had been sitting in two long comment blocks in
+`tools/gemini_art.js`, asserted as a diagnosis, and it sent two separate send-retry
+schemes chasing a control that was never disabled. Both comments are now corrected.
+
+The lesson is the one already in `memory/state-a-hypothesis-not-a-finding.md`, in its
+sharpest form yet: **a guess written into a code comment becomes a finding by being read
+back.** The fix here only arrived after dumping the actual DOM.
+
+### What shipped
+
+`dump()` now also writes `<stamp>-timeout.dom.json` — the outerHTML of the attachment
+chips and the send button. The text dump could never show this: an errored chip
+contributes only a filename, identical to a healthy one. That file is what ended the
+investigation, and it took ten seconds to read.
+
+Detection lives in the **wait-for-picture loop**, not in `attachRefs`. This matters and
+it is the second thing I got wrong: a check made the instant the chips appear runs
+*before* the upload has failed, sees two healthy-looking chips, and changes nothing —
+which is exactly what my first version did live while its fixture test passed. The
+fixture now models the real timing (`?scenario=uploadfail` errors after 2.5s), so the
+test fails without the wait-loop check.
+
+A failed transfer gets its own kind, `upload_failed`, and is **retried twice with the
+references still attached** before anything is shed. That distinction is the whole point:
+
+  * a *rejected picture* is permanent -> shed it, redraw from prose;
+  * a *failed transfer* is transient  -> ask again, keep the face.
+
+Shedding on the first failure would redraw the scene from prose and **keep it**, because
+a slot that produced an image is done. A character would lose their locked face for the
+rest of the book on the strength of one bad second. Detection now costs ~5s instead of
+420s, so three anchored attempts cost ~15s against a 420s deadline.
+
+Measured end to end, live, against the real page:
+
+    before:  420s x 3 attempts -> nothing, slot parked
+    after:   5.6s to detect; 3 anchored tries, then shed, then drew -> 37s total
+
+### The open question: WHY do uploads fail?
+
+Not answered, and I am not going to invent a reason. What is known: they worked earlier
+on 2026-09-01, failed consistently for ~20 minutes, worked again, and were failing again
+at 14:00. The account is on the free tier (the page shows an "Upgrade" button and the
+`Flash` model), so a per-window upload limit is a candidate — **a candidate, not a
+finding.** The fleet is now resilient to it either way: the cost of an upload outage is
+prose-anchored pictures instead of anchored ones, rather than a stalled illustrator.
+
+**If uploads stay broken, the book fills with prose-anchored art**, which is precisely
+the identity weakness the owner asked to fix. That is the thing to watch, and
+`scripts/unanchored-scenes.sh` counts it.
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side

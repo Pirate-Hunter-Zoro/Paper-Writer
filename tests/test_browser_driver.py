@@ -199,6 +199,46 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["kind"], "refused")
 
+    def test_a_failed_upload_is_reported_as_a_failed_upload(self):
+        """A chip that APPEARED is not a chip that UPLOADED, and the difference cost
+        this book two multi-hour outages.
+
+        When an upload fails Gemini still renders a chip — carrying an error icon — so
+        a check that counts previews is satisfied and the driver sends. The send is
+        then silently ignored, and the render burns its entire deadline before
+        reporting `no image after Ns; last response text: ""`, which reads as "Gemini
+        said nothing" and means "we were never able to ask". At 420s x 3 attempts that
+        is 21 minutes per slot, producing nothing.
+
+        Reported as `upload_failed` and NOT as `bad_reference`, because the two want
+        different remedies. A rejected picture is permanent and should be shed; a
+        failed transfer is transient and worth simply asking again with the references
+        intact. Conflating them costs a character their locked face for the rest of
+        the book on the strength of one bad second.
+
+        The send button is NOT disabled during this, which is what made it hard: two
+        earlier fixes retried a click against a control that was never disabled."""
+        sheet = self.tmp / "sheet.png"
+        sheet.write_bytes(_fixture_png(1024, 1536))
+        result = self.run_driver("uploadfail", self.tmp / "nope.png",
+                                 refs=[sheet], timeout=25)
+        self.assertFalse(result["ok"], result)
+        self.assertEqual(result["kind"], "upload_failed",
+                         f"a failed upload must be named, not timed out on: {result}")
+
+    def test_a_healthy_upload_is_not_mistaken_for_a_failed_one(self):
+        """The other direction, and the one that would be invisible.
+
+        A false positive here sheds every reference on a working page and returns a
+        picture that looks fine and is of the wrong person — the one failure this
+        project cannot see. So the error check is scoped inside the chips."""
+        sheets = [self.tmp / "a.png", self.tmp / "b.png"]
+        for sheet in sheets:
+            sheet.write_bytes(_fixture_png(1024, 1536))
+        out = self.tmp / "healthy.png"
+        result = self.run_driver("ok", out, refs=sheets)
+        self.assertTrue(result["ok"], f"references were shed on a healthy page: {result}")
+
     def test_a_usage_ceiling_is_reported_as_quota(self):
         result = self.run_driver("quota", self.tmp / "quota.png")
         self.assertFalse(result["ok"])
