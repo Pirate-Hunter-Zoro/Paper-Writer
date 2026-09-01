@@ -164,6 +164,19 @@ class CDP {
 // So the probe looks for the ACCOUNT, and treats a visible "Sign in" call to action as
 // the negative. Both signals are checked because either alone is fragile: an account
 // chip is markup Google reshuffles, and "Sign in" as a string could appear anywhere.
+// Chrome's network error page, in its own words. `ERR_NAME_NOT_RESOLVED`,
+// `ERR_INTERNET_DISCONNECTED` and friends render as a real document, so the driver can
+// read WHY it never got a page instead of guessing.
+const PROBE_LOAD_ERROR = `(() => {
+  const code = document.querySelector('.error-code, #error-code');
+  if (code && code.textContent.trim()) return code.textContent.trim();
+  const body = (document.body ? document.body.innerText : "");
+  const m = body.match(/ERR_[A-Z_]+/);
+  if (m) return m[0];
+  if (/site can.?t be reached|no internet/i.test(body)) return "the page did not load";
+  return "";
+})()`;
+
 const PROBE_STATE = `(() => {
   const url = location.href;
   if (/accounts\.google\.com|ServiceLogin|signin/i.test(url)) return "signin";
@@ -545,9 +558,33 @@ async function render(cdp, args, prompt) {
   }, Math.min(60000, left()), 700);
 
   if (state !== "composer") {
-    await dump(cdp, "signin");
-    return { ok: false, kind: "not_signed_in",
-             reason: notSignedInMessage(`page state: ${state || "never loaded"}`) };
+    // A SIGN-IN WALL AND A PAGE THAT NEVER LOADED ARE NOT THE SAME THING, and this
+    // conflated them: `waitFor` returns null when the state never left "loading", and
+    // null fell into the not-signed-in branch as "page state: never loaded".
+    //
+    // That is the one diagnosis in this driver that asks a HUMAN to act — "run
+    // scripts/gemini-login.sh" — so getting it wrong sends somebody to re-authenticate
+    // a session that was never broken. On 2026-09-01 it was wrong 18 times out of 18:
+    // every single "not signed in" dump that day was a Chrome network error page
+    // reading ERR_NAME_NOT_RESOLVED, while `curl` on the same machine fetched
+    // gemini.google.com in 0.24s. A DNS blip inside the browser, reported as a lost
+    // login.
+    //
+    // So: only a POSITIVELY detected sign-in wall says not_signed_in. A page that
+    // never arrived is `browser_unavailable` — retryable on a short fixed wait, which
+    // is what a transient network failure deserves.
+    if (state === "signin") {
+      await dump(cdp, "signin");
+      return { ok: false, kind: "not_signed_in",
+               reason: notSignedInMessage("the page showed a sign-in wall") };
+    }
+    await dump(cdp, "unreachable");
+    const why = await cdp.eval(PROBE_LOAD_ERROR);
+    return { ok: false, kind: "browser_unavailable",
+             reason: why
+               ? `${APP_URL} did not load: ${why}. The session is not implicated — `
+                 + `this is the network, and it is retried.`
+               : `${APP_URL} never finished loading, and showed no error to report` };
   }
 
   // `.id`, NOT `.frameId` — a Frame's identifier is `id`, and getting this wrong

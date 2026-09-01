@@ -1288,6 +1288,49 @@ If a fourth handler of `QuotaExceeded` is ever added, it must branch on `source`
 test for the illustrator one says so in its docstring, and the field exists precisely so
 that no future reader has to infer a cause from a message written elsewhere.
 
+## 6l. "Not signed in" was wrong 18 times out of 18
+
+Late on 2026-09-01 the illustrator began parking every render with:
+
+    the Chrome profile is not signed in to Gemini (page state: never loaded).
+    Run scripts/gemini-login.sh once, sign in, close the window, and renders
+    resume by themselves.
+
+**Nothing was wrong with the session.** The saved dump for that exact failure is a
+Chrome network error page:
+
+    This site can't be reached
+    gemini.google.com's server IP address could not be found.
+    ERR_NAME_NOT_RESOLVED
+
+while `curl https://gemini.google.com/` on the same machine, seconds later, returned
+HTTP 200 in 0.24 seconds. A DNS blip inside the browser process. Every one of the 18
+"not signed in" dumps that day was a network error page.
+
+This is the worst of the day's misdiagnoses, because it is **the one diagnosis in the
+whole driver that asks a HUMAN to act.** The owner had asked to be told if anything
+needed doing on their end, and this would have handed them a script to run against a
+session that was never broken — the machine confidently outsourcing its own transient
+network failure.
+
+The cause is one line. `waitFor` returns null when the page state never leaves
+"loading", and null fell through into the not-signed-in branch, which then reported the
+null as the reason: "page state: never loaded". A sign-in wall and a page that never
+arrived are not the same thing, and only one of them is a human errand.
+
+Now only a POSITIVELY detected sign-in wall says `not_signed_in`. A page that never
+loaded is `browser_unavailable` — the short retryable wait from 6j — and the driver
+reads Chrome's own error page so the log says `ERR_NAME_NOT_RESOLVED` rather than
+guessing. Tested by pointing the driver at a dead port, which is exactly that shape:
+nothing to connect to, nothing wrong with the session.
+
+**The pattern of the whole day, stated once:** every failure was diagnosed by a message
+that asserted a cause nobody had checked — the send button "disabled" (it was not), the
+JPEG extension (irrelevant), the substring `spend/quota limit` (never emitted), the
+"image quota" that was a Claude ceiling, the "setup failure" that was contention, and
+now a "lost login" that was DNS. The mechanisms were all fine. **The stories about them
+were wrong, and the stories were what got written down.**
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
