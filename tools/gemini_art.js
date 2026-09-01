@@ -269,6 +269,25 @@ const PROBE_HAS_RESPONSE = `(() => document.querySelectorAll(
 // the page must not read as a failed upload. A false positive here sheds every
 // reference and returns a picture that looks fine and is of the wrong person — the one
 // failure this project cannot see — so this errs narrow.
+// How much text is still sitting in the composer.
+//
+// A SUCCESSFUL SEND CLEARS IT. Verified against the real page rather than assumed: in
+// a dump of a REFUSED render — so the prompt definitely went — the prompt text appears
+// only under "You said" in the conversation and never in the composer. So a composer
+// still holding two kilobytes, with nothing answered and nothing generating, means the
+// send did not land.
+//
+// The fixture kept its text after a send for a long time, which is why an earlier
+// attempt at this check fired on every healthy render and broke 13 of the 21 browser
+// tests. It clears now, like the real one.
+const PROBE_COMPOSER_TEXT = `(() => {
+  const el = document.querySelector(
+    'rich-textarea div[contenteditable="true"], div.ql-editor[contenteditable="true"], ' +
+    'div[contenteditable="true"][role="textbox"], textarea[aria-label]');
+  if (!el) return 0;
+  return ((el.innerText || el.value) || "").trim().length;
+})()`;
+
 const PROBE_ERRORED_UPLOADS = `(() => {
   const chips = document.querySelectorAll(
     'user-query-file-preview, .file-preview, .attachment-container, ' +
@@ -578,18 +597,7 @@ async function render(cdp, args, prompt) {
   await cdp.send("Input.insertText", { text: prompt });
   await sleep(400);
 
-  const sent = await cdp.eval(`(() => {
-    const b = document.querySelector(
-      'button[aria-label*="Send" i]:not([disabled]), button.send-button:not([disabled]), ' +
-      '[data-test-id="send-button"]:not([disabled])');
-    if (b) { b.click(); return true; }
-    return false;
-  })()`);
-  if (!sent) {
-    // No send button we recognise: press Enter, which the composer also honours.
-    await cdp.key("keyDown", "Enter", "Enter", 13);
-    await cdp.key("keyUp", "Enter", "Enter", 13);
-  }
+  await pressSend(cdp);
 
   // WHY THE PROMPT SOMETIMES NEVER LEAVES THE COMPOSER — now handled in `attachRefs`.
   //
@@ -626,6 +634,20 @@ async function render(cdp, args, prompt) {
   // Four minutes is generous headroom over anything real and saves six of those ten.
   let workingSince = 0;
   const WORKING_MAX_MS = Number(process.env.GEMINI_ART_WORKING_MAX_MS) || 240000;
+  // When the prompt was last pushed, and how many times we have re-pushed it. The
+  // live app silently drops a send under load: the button stays enabled, no error is
+  // shown, and the prompt sits in the composer until the deadline expires. That cost
+  // 65 renders and about 7.6 hours of wall-clock on 2026-09-01 alone.
+  let sentAt = Date.now();
+  let resends = 0;
+  const SEND_STUCK_MS = Number(process.env.GEMINI_ART_SEND_STUCK_MS) || 25000;
+  const SEND_RETRIES = 1;
+  // Measured against WHAT WE TYPED, not a fixed size. A scene prompt is about two
+  // kilobytes and a test prompt a couple of hundred bytes, so any constant threshold
+  // is wrong for one of them — the first version of this used 200 and silently never
+  // fired for short prompts. Half is a wide floor: the composer either still holds our
+  // prompt or has been cleared to nothing.
+  const STILL_OURS = Math.max(4, Math.floor(prompt.trim().length * 0.5));
   const found = await waitFor(async () => {
     const text = String(await cdp.eval(PROBE_TEXT) || "");
     if (text) lastText = text;
@@ -658,6 +680,30 @@ async function render(cdp, args, prompt) {
     // words only once nothing is still moving.
     const busy = await cdp.eval(PROBE_BUSY);
     const working = WORKING_PATTERNS.some((re) => re.test(text));
+
+    // DID THE PROMPT EVEN GO? Nothing answered, nothing generating, and our text
+    // still in the composer means the click was dropped. Every probe below reads that
+    // state as "still thinking" and waits out the whole deadline for an answer to a
+    // question that was never asked.
+    //
+    // Guarded three ways so a healthy render can never trip it: the page must be idle,
+    // there must be no response at all, and the composer must still hold a prompt-sized
+    // block of text. A successful send clears the composer within a second, so the
+    // 25-second grace is enormous headroom rather than a fine margin.
+    if (!busy && !working && Date.now() - sentAt > SEND_STUCK_MS
+        && !(await cdp.eval(PROBE_HAS_RESPONSE))
+        && Number(await cdp.eval(PROBE_COMPOSER_TEXT)) >= STILL_OURS) {
+      if (resends < SEND_RETRIES) {
+        resends += 1;
+        sentAt = Date.now();
+        await pressSend(cdp);
+        return null;                      // give the second push its own grace period
+      }
+      return { verdict: "no_image",
+               text: `the prompt never left the composer — sent ${resends + 1} time(s) `
+                     + `with the send control enabled and no reply, so this render was `
+                     + `never actually asked for` };
+    }
 
     const images = JSON.parse(await cdp.eval(PROBE_IMAGES) || "[]");
     if (images.length && !busy && !working) return { images };
@@ -745,6 +791,25 @@ async function render(cdp, args, prompt) {
 //     first real sheet with references failed with "no file input in the page".
 //   * once opened, TWO inputs appear. One of them is Drive. `querySelector` takes
 //     whichever comes first in the DOM, which is a coin flip on the one that matters.
+// Click send, falling back to Enter. Separate because it has to happen more than
+// once: the live app sometimes drops the click silently — the button stays enabled and
+// blue, nothing is shown anywhere, and the prompt just stays in the composer.
+async function pressSend(cdp) {
+  const clicked = await cdp.eval(`(() => {
+    const b = document.querySelector(
+      'button[aria-label*="Send" i]:not([disabled]), button.send-button:not([disabled]), ' +
+      '[data-test-id="send-button"]:not([disabled])');
+    if (b) { b.click(); return true; }
+    return false;
+  })()`);
+  if (!clicked) {
+    // No send button we recognise: press Enter, which the composer also honours.
+    await cdp.key("keyDown", "Enter", "Enter", 13);
+    await cdp.key("keyUp", "Enter", "Enter", 13);
+  }
+  return clicked;
+}
+
 async function attachRefs(cdp, refs, budgetMs) {
   const deadline = Date.now() + Math.min(90000, budgetMs);
 

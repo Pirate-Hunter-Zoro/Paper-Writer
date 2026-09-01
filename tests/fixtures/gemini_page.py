@@ -40,6 +40,15 @@ Query string picks the behaviour, so one fixture covers the whole contract:
     ?scenario=silent        never produces anything, to exercise the timeout
     ?scenario=empty         answers with a completely empty response bubble — the
                             live hang that burned two ten-minute timeouts
+    ?scenario=slowreply     the send LANDS and the composer clears, but nothing is
+                            answered for six seconds. The only thing telling this
+                            apart from a dropped send is that the composer emptied —
+                            so this is the scenario that proves the composer check is
+                            what prevents a duplicate submission.
+    ?scenario=sendlost      the first send click is silently DROPPED and the prompt
+                            stays in the composer, as the live app does under load.
+                            The driver must notice and send again rather than wait
+                            out its whole deadline.
     ?scenario=uploadfail    the upload ERRORS: chips appear (so "a chip appeared" is
                             satisfied) carrying the real app's error markup, and the
                             send button does nothing. This is the live failure of
@@ -52,6 +61,7 @@ Query string picks the behaviour, so one fixture covers the whole contract:
 
 import struct
 import sys
+import json
 import threading
 import zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -229,9 +239,33 @@ document.getElementById("send").addEventListener("click", async () => {
   // The live app does NOT disable this button when an attachment fails; it just
   // drops the click. Reproducing the real behaviour, not a plausible one.
   if (window.__uploadDoomed) return;
+
+  // Drop the FIRST click only, leaving the prompt sitting in the composer. Measured
+  // on the live app 2026-09-01: the send button stays enabled and blue, no error is
+  // shown anywhere, and the prompt is simply never submitted. 65 renders died that
+  // way in one day, each burning its full 420s deadline -- about 7.6 hours.
+  if (SCENARIO === "sendlost" && !window.__sendDropped) {
+    window.__sendDropped = true;
+    return;
+  }
+
   const editor = document.querySelector('.ql-editor');
   const prompt = editor.innerText;
   window.__prompt = prompt;               // so the test can assert what was received
+  // THE COMPOSER CLEARS. This is what makes "the prompt is still sitting there" a
+  // usable signal, and the fixture kept its text for a long time -- which is why an
+  // earlier attempt at this check fired on every healthy render and broke 13 of the
+  // 21 browser tests. Verified against the real page: in a dump of a REFUSED render
+  // (so the prompt definitely went) the text appears only under "You said", never in
+  // the composer.
+  editor.innerText = "";
+  fetch("/submitted").catch(() => {});     // server-side count; see the Handler
+
+  // A quiet gap between the send landing and anything appearing. The composer is
+  // already empty here, which is the ONLY signal separating this from a dropped
+  // send — a driver that re-sends on silence alone submits the prompt twice.
+  if (SCENARIO === "slowreply") await new Promise((r) => setTimeout(r, 6000));
+
   respond('<div class="you">' + prompt + '</div>');
   busy(true);
 
@@ -311,10 +345,31 @@ ACCOUNT_OUT = '<a href="/signin">Sign in</a>'
 
 
 class Handler(BaseHTTPRequestHandler):
+    # Reset by the test rig between scenarios; see `/submitted` in do_GET.
+    submissions = 0
+
     def log_message(self, *args):
         pass                                    # a quiet fixture
 
     def do_GET(self):
+        # How many prompts were actually SUBMITTED. Counted on the server because the
+        # driver runs as a subprocess and takes Chrome down with it — by the time a
+        # test can assert anything, the page is gone. A double submission bills a
+        # second render and can return a different picture than the one the critic is
+        # about to judge, so "exactly once" needs to be checkable.
+        if self.path.startswith("/submitted"):
+            Handler.submissions += 1
+            self.send_response(204)
+            self.end_headers()
+            return
+        if self.path.startswith("/state"):
+            body = json.dumps({"queries": Handler.submissions}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path.startswith("/img"):
             from urllib.parse import parse_qs, urlparse
             q = parse_qs(urlparse(self.path).query)
