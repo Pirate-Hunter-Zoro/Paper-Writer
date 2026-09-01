@@ -770,6 +770,13 @@ and it had **two causes, both now addressed**.
   Vitiate ("ashen-lilac skin over a narrow ridged skull") and Nefarid ("grey-white
   skin"), who were both being described by accident.
 
+- **A bug I introduced tonight: identity clauses said twice.** Adding "hair" to
+  `colouring_of` made it overlap with `signature_marks`, because a hair clause that
+  mentions a braid or a buzz cut matches both. Satele Shan, Orgus Din and Jaric Kaedan
+  each carried the same sentence twice in their identity line, differing only in
+  capitalisation — which is how it went unnoticed. Deduped case-insensitively.
+  Repetition in a prompt is not emphasis; it is noise competing with the reference.
+
   **This is the lever to pull on before any more prompt wording.** The age and hair
   lines are cheap and stay, but if identity is still drifting in a week, look at cast
   size per picture first.

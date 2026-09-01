@@ -1084,7 +1084,19 @@ def _costume_line(name, spec, chapter_num=None):
     bits = [b for b in (who_is, age) if b]
     who = f"{name} ({', '.join(bits)})" if bits else name
     line = f"{who}: {costume}." if costume else f"{who}: as in the reference."
-    always = colouring_of(spec) + signature_marks(spec)
+    # DEDUPED, because the two lists overlap now. `colouring_of` gained "hair" after
+    # Kira Carsen was drawn blonde four times, and a hair clause that also mentions a
+    # braid or a buzz cut is picked up by `signature_marks` as well — so Satele Shan,
+    # Orgus Din and Kaedan each had the same sentence twice in their identity line,
+    # differing only in capitalisation. Repetition in a prompt is not emphasis; it is
+    # noise competing with the reference picture.
+    always, seen = [], set()
+    for clause in colouring_of(spec) + signature_marks(spec):
+        key = clause.lower().rstrip(".")
+        if key in seen:
+            continue
+        seen.add(key)
+        always.append(clause)
     if always:
         line += f" Always: {'; '.join(always)}."
     return line

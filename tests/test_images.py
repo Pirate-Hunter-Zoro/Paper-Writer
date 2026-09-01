@@ -2171,3 +2171,41 @@ class ALengthCapMustNotEatTheColourItCarries(unittest.TestCase):
                                   "somebody who has spent a decade outdoors in hard "
                                   "country under two suns and never once complained."}
         self.assertEqual(illustration.colouring_of(rambling), [])
+
+
+class AnIdentityClauseIsNotSaidTwice(unittest.TestCase):
+    """`colouring_of` gained "hair" after Kira Carsen was drawn blonde four times with a
+    correct sheet attached. That made the two clause sources overlap: a hair clause
+    mentioning a braid or a buzz cut is picked up by `signature_marks` as well.
+
+    Satele Shan, Orgus Din and Jaric Kaedan each ended up with the same sentence twice
+    in their identity line, differing only in capitalisation. Repetition in a prompt is
+    not emphasis — it is noise competing with the reference picture for attention."""
+
+    BRAIDED = {"appearance": "Human female, fifty-six, fair-skinned, blue-grey eyes and "
+                             "brown-black hair worn in a pair of tight braided "
+                             "ponytails.",
+               "age": "56", "costumes": ["olive attire"]}
+
+    def test_the_clause_appears_once(self):
+        line = illustration._costume_line("Satele", self.BRAIDED, 1)
+        self.assertEqual(line.lower().count("braided ponytails"), 1,
+                         f"clause repeated in: {line}")
+
+    def test_both_sources_still_contribute(self):
+        """Deduping must not silence one of the two lists — skin from `colouring_of`
+        and a discrete marking from `signature_marks` are different facts."""
+        spec = {"appearance": "Human male, forty-five, fair skin reddened across the "
+                              "cheekbones, and a pale vertical scar through the left "
+                              "eyebrow.",
+                "age": "45", "costumes": ["robes"]}
+        line = illustration._costume_line("Kaedan", spec, 1)
+        self.assertIn("fair skin reddened", line)
+        self.assertIn("scar", line)
+
+    def test_case_differences_still_count_as_duplicates(self):
+        """The two sources disagree about capitalisation, which is exactly how this
+        slipped through unnoticed."""
+        line = illustration._costume_line("Satele", self.BRAIDED, 1)
+        lowered = line.lower()
+        self.assertEqual(lowered.count("brown-black hair"), 1)
