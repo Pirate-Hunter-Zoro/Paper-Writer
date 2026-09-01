@@ -478,7 +478,8 @@ def _raise_for(result, note):
     if kind == "quota":
         note(f"Gemini is rate-limiting this session: {reason[:200]}")
         raise QuotaExceeded(f"gemini session limit: {reason[:300]}",
-                            retry_after=config.IMAGE_QUOTA_BACKOFF_SEC)
+                            retry_after=config.IMAGE_QUOTA_BACKOFF_SEC,
+                            source="image")
     if kind in ("not_signed_in", "setup"):
         raise NotSignedIn(reason)
     if kind == "refused":

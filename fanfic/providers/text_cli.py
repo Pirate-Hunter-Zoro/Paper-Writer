@@ -196,7 +196,8 @@ def produce(prompt, out_path, role, log_fn=None):
                 # hammering a billing ceiling four times in nine seconds is what
                 # parked chapter 6 of the first real novel.
                 note(f"model spend/quota ceiling reached: {detail[:200]}")
-                raise QuotaExceeded(f"{NAME} allowance ceiling: {detail[:300]}")
+                raise QuotaExceeded(f"{NAME} allowance ceiling: {detail[:300]}",
+                                    source="model")
             last_err = f"{config.CLI_BIN} exited {proc.returncode}: {detail}"
             # An unexplained failure is retried. The classification is only expensive
             # in one direction — a retried deterministic failure costs one call, a
