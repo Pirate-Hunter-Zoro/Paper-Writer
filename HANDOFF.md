@@ -519,10 +519,20 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   a test pins that — it is fine detail a reference carries well, and a bare `"eye"` in
   the marker list would drag it back into every anchored prompt. A droid's single eye is
   the opposite: the whole face, and a broad flat colour the model defaults.
-  **Residual risk, small and known:** his locked sheet still *shows* the bolt, so from
-  ch4 the sheet and the costume text disagree about it. The critic follows the text it
-  is given — that is exactly what the ch06 rejection demonstrated — so this should be
-  right, but if bolt complaints reappear after chapter 4, re-render his sheet.
+  **The residual risk landed, and the remedy was not the one written here.** At 04:25
+  `ch19_4` was rejected because the render showed the bolt in chapter 19 — the prompt
+  said "chest plate clear", and the model followed the SHEET instead, which still had
+  it. Re-rendering the sheet would not have helped: **a sheet is drawn from the BASE
+  costume**, and his base was the bolted "Captive" state, so every re-render would put
+  the bolt back.
+
+  Fixed properly: the base is now the free state — what he looks like in 43 of 46
+  chapters — and the bolted period is a dated entry `from_chapter 1`, which the ch4 entry
+  then supersedes. The sheet was deleted so it re-locks bolt-free.
+
+  **The general rule, worth knowing before repairing any other character:** the base
+  costume is not just "chapter one's outfit", it is *what the reference sheet will show
+  for the whole book*. Put the dominant state there and date the exceptions.
 
 - **The painterly-sheet experiment is aimed at the wrong failure mode.** The theory
   was that photoreal source art trips the "real people" classifier, to be tried if
