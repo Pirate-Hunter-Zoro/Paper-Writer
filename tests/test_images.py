@@ -294,6 +294,24 @@ class BackendTests(unittest.TestCase):
         self.assertNotIn("--ref", calls[-1], "the last try must drop the references")
         self.assertTrue(out.exists(), "a picture must still be produced")
 
+    def test_a_browser_that_did_not_come_up_is_a_wait_not_a_human_errand(self):
+        """`NotSignedIn` means a person has to run the login script. A browser that
+        failed to start means try again in a moment, and conflating them is expensive:
+        NotSignedIn puts the book into the stall machinery, whose DOUBLING backoff
+        outlives the transient cause by hours.
+
+        Seen live 2026-09-01: the scribe sat at a 600-second backoff over a startup
+        race with the illustrator, while the same driver run by hand at that instant
+        started Chrome and rendered a picture."""
+        for kind in ("profile_busy", "browser_unavailable"):
+            with self.subTest(kind=kind):
+                self._driver(_FakeProc({"ok": False, "kind": kind,
+                                        "reason": "Chrome devtools never came up"}))
+                with self.assertRaises(QuotaExceeded) as caught:
+                    images.generate("x", self.tmp / f"{kind}.png", references=None)
+                self.assertNotIsInstance(caught.exception, images.NotSignedIn)
+                self.assertEqual(getattr(caught.exception, "source", None), "busy")
+
     def test_a_refused_upload_with_no_references_is_not_retried_forever(self):
         """Nothing to shed means nothing to retry — it is a plain failure."""
         self._driver(_FakeProc({"ok": False, "kind": "bad_reference",

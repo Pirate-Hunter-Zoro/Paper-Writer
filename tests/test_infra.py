@@ -291,7 +291,7 @@ class AQuotaSaysWhichBackendHitIt(unittest.TestCase):
         self.assertLessEqual(wait, config.IMAGE_BUSY_BACKOFF_SEC + 2)
         self.assertLess(wait, config.IMAGE_QUOTA_BACKOFF_SEC,
                         "contention must clear faster than a real rate limit")
-        self.assertIn("other daemon", log)
+        self.assertIn("browser is not available", log)
         self.assertNotIn("image quota/rate limit reached", log,
                          "contention is not a ceiling and must not claim to be one")
 
