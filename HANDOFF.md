@@ -365,10 +365,18 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   "before any scene uses it", fails, parks it, and moves on to the scenes anyway, which
   then draw those characters from prose with no sheet to anchor them.
 
-  That outlives the outage. **When uploads recover, check `sheets/` against the bible's
-  character list** — `ls state/series/<sid>/book/1/sheets/*.png | wc -l` versus the
-  `characters` key — and re-queue any scene that was drawn while its character had no
-  sheet (delete the image and its `.retry`; the illustrator redraws from rung 0).
+  That outlives the outage. **When uploads recover:**
+  1. Check `sheets/` against the bible's character list —
+     `ls state/series/<sid>/book/1/sheets/*.png | wc -l` versus the `characters` key.
+  2. Run **`scripts/unanchored-scenes.sh`** for the list of kept pictures that were
+     drawn from prose alone, and redraw the ones that matter: `rm` the `.png` and its
+     `.retry` and the illustrator picks the slot up again from rung 0.
+
+  That script exists because **scene images carry no `.sources` sidecar** — sheets do,
+  scenes do not — so nothing in the artifacts records whether a picture was conditioned
+  on reference art. The log does ("conditioned on N reference picture(s)"), and the
+  script reads it. At 00:40Z the count was **82 kept with reference art, 24 from prose
+  alone**, most of the latter from this evening's outage.
 
   **What the outage looks like while it lasts, so you can recognise it:** each slot
   spends 3 attempts x 420s per ladder rung timing out, reaches rung 3 in about an hour,
