@@ -2083,14 +2083,39 @@ class AgeIsNotDecoration(unittest.TestCase):
         self.assertEqual(
             illustration.mature_cast([("Y", {"costumes": []})]), [])
 
+    def test_the_age_is_spelled_not_numeralled(self):
+        """Iteration two, and the reason is a measured failure of iteration one.
+
+        The first version said "Grand Master Satele Shan is 56" and she was drawn "late
+        twenties to mid thirties" anyway, with that line demonstrably in the prompt.
+        Numerals carry almost nothing to a diffusion model. Words, and concrete things
+        to draw, are the lever that is left."""
+        self.assertEqual(illustration.age_in_words(56), "fifty-six")
+        self.assertEqual(illustration.age_in_words(60), "sixty")
+        self.assertEqual(illustration.age_in_words(45), "forty-five")
+
+    def test_an_age_carries_marks_that_can_actually_be_drawn(self):
+        self.assertIn("lined", illustration.age_marks(56))
+        self.assertIn("grey", illustration.age_marks(60))
+        self.assertNotEqual(illustration.age_marks(65), illustration.age_marks(45),
+                            "sixty-five and forty-five must not look the same")
+
+    def test_no_stray_pronoun_in_the_line(self):
+        """An earlier draft produced "Orgus Din is 60 — in her/his sixties"."""
+        prompt = illustration.build_scene_prompt(
+            "x", [("Orgus", self.ORGUS)], anchored=True, chapter_num=1)
+        line = [l for l in prompt.split("\n") if "Age is NOT" in l][0]
+        self.assertNotIn("her/his", line)
+        self.assertIn("sixty", line)
+
     def test_the_instruction_reaches_an_anchored_prompt(self):
         prompt = illustration.build_scene_prompt(
             "They stand on a ridge.",
             [("Satele", self.SATELE), ("Alyn", self.ALYN)],
             anchored=True, chapter_num=1)
         self.assertIn("Age is NOT optional", prompt)
-        self.assertIn("Satele is 56", prompt)
-        self.assertNotIn("Alyn is 19", prompt)
+        self.assertIn("Satele is fifty-six", prompt)
+        self.assertNotIn("Alyn is", prompt)
 
     def test_a_young_only_cast_gets_no_age_line(self):
         prompt = illustration.build_scene_prompt(
