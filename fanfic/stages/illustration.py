@@ -1108,8 +1108,13 @@ _AGE_MUST_SHOW_FROM = 45
 
 
 # A thing without a face does not have an age you can draw on it.
-_MACHINE_WORDS = ("droid", "astromech", "chassis", "servo", "plating", "actuator",
-                  "sensor eye", "photoreceptor", "dome")
+# Unambiguous machine words only. "dome" and "plating" were in this list and both are
+# false friends: Sella Voit is a human "dome administrator ... weathered by dome light",
+# and plated armour is worn by people all through this book. Of the original list only
+# "astromech" and "sensor eye" ever matched anything, and "dome" also caught a woman who
+# should keep her age.
+_MACHINE_WORDS = ("droid", "astromech", "chassis", "servomotor", "photoreceptor",
+                  "sensor eye", "restraining bolt", "optical sensor")
 
 # No human is older than this. Past it the number is measuring something else — a droid's
 # service life, a Sith alchemist's unnatural span — and human ageing marks do not apply.

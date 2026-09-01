@@ -2257,3 +2257,36 @@ class AThingWithoutAFaceHasNoAgeToDraw(unittest.TestCase):
         line = [l for l in prompt.split("\n") if "Age is NOT" in l][0]
         self.assertIn("Satele", line)
         self.assertNotIn("T7-O1", line)
+
+
+class MachineWordsMustNotCatchPeople(unittest.TestCase):
+    """The first version of the machine guard listed "dome" and "plating".
+
+    Sella Voit is a human woman — a "dome administrator ... weathered by dome light" —
+    and plated armour is worn by people all through this book. Of the original list only
+    "astromech" and "sensor eye" ever matched anything real, while "dome" also caught a
+    woman who should keep her age. A guard that excludes the wrong people is a quieter
+    bug than the one it was written to fix."""
+
+    HUMAN_IN_A_DOME = {
+        "appearance": "Human woman in her fifties, thickset and short, weathered by "
+                      "dome light; grey-streaked dark hair scraped back off a lined "
+                      "face.",
+        "age": "52", "costumes": ["olive coverall"]}
+    PLATED_HUMAN = {
+        "appearance": "Human female, fifty, fair-skinned, grey-streaked hair.",
+        "age": "50", "costumes": ["grey plated shoulders and forearm guards"]}
+    DROID = {"appearance": "T7-series astromech on three legs, a single blue sensor "
+                           "eye in the dome.",
+             "age": "200", "costumes": ["grey chassis"]}
+
+    def test_a_person_in_a_dome_still_ages(self):
+        self.assertTrue(illustration.ages_visibly(self.HUMAN_IN_A_DOME))
+        self.assertEqual(illustration.mature_cast([("Sella", self.HUMAN_IN_A_DOME)]),
+                         [("Sella", 52)])
+
+    def test_plated_armour_does_not_make_someone_a_machine(self):
+        self.assertTrue(illustration.ages_visibly(self.PLATED_HUMAN))
+
+    def test_the_actual_droid_is_still_caught(self):
+        self.assertFalse(illustration.ages_visibly(self.DROID))

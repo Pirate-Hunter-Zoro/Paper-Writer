@@ -786,6 +786,14 @@ and it had **two causes, both now addressed**.
   characters in front of me, applied to a cast I did not re-check.** Ten characters
   matched `mature_cast`; nine were people and I only looked at those.
 
+  *And then the fix had the same flaw, caught by finally doing the audit.* The first
+  machine-word list included "dome" and "plating" — but Sella Voit is a human "dome
+  administrator ... weathered by dome light", and plated armour is worn by people all
+  through this book. Of that list only "astromech" and "sensor eye" ever matched
+  anything real. Tightened to unambiguous machine words, and **an audit of all fifty
+  identity lines now comes back clean.** Run that audit after touching the prompt
+  builder; it is three lines of Python and it catches what reasoning does not.
+
 - **A bug I introduced tonight: identity clauses said twice.** Adding "hair" to
   `colouring_of` made it overlap with `signature_marks`, because a hair clause that
   mentions a braid or a buzz cut matches both. Satele Shan, Orgus Din and Jaric Kaedan
