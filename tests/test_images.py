@@ -801,18 +801,32 @@ class ColouringIsAFactNotALikeness(unittest.TestCase):
         self.assertIn("warm brown skin", line)
         self.assertIn("Always:", line)
 
-    def test_hair_and_eye_colour_stay_out(self):
-        """The guard against creeping back into the appearance paragraph. Those are the
-        fine detail a reference carries well; skin tone is a broad-area property the
-        model overrides wholesale. Two older tests enforce this and should keep doing
-        so."""
+    def test_eye_colour_stays_out_but_hair_colour_no_longer_does(self):
+        """This reverses half of what this test used to assert, on evidence.
+
+        Eye colour stays out: it is fine detail a reference carries, and nothing has
+        ever failed on it. **Hair colour was let back in** after Kira Carsen came back a
+        golden blonde four separate times with a flawless auburn reference sheet
+        attached — three views including a head close-up — while her prompt said nothing
+        about hair at all. A broad flat area of colour is not a jaw; the model fills it
+        from its own defaults unless told."""
         spec = {"appearance": "Human female, nineteen. Warm brown skin, grey-green "
                               "eyes, dark brown hair cropped to the jaw.",
                 "age": "19", "costumes": ["tunic"]}
         line = illustration._costume_line("Alyn Tenar", spec, 1)
         self.assertIn("warm brown skin", line)
+        self.assertIn("dark brown hair", line)
         self.assertNotIn("grey-green eyes", line)
-        self.assertNotIn("brown hair", line)
+
+    def test_a_clause_does_not_arrive_as_a_fragment(self):
+        """Clauses inherit the conjunction that joined them; a list of facts reading
+        "and very short dark brown hair" is sloppy in the prompt."""
+        spec = {"appearance": "Human male, forty-five, fair skin, and very short dark "
+                              "brown hair in a buzz cut.", "age": "45",
+                "costumes": ["robes"]}
+        for clause in illustration.colouring_of(spec):
+            self.assertFalse(clause.lower().startswith(("and ", "with ", "plus ")),
+                             f"fragment leaked into the prompt: {clause!r}")
 
     def test_a_long_clause_is_a_description_not_a_fact(self):
         spec = {"appearance": "Her skin carries the particular weathering of somebody "
@@ -1445,7 +1459,12 @@ class TheLadderCarriesOnAcrossVisits(unittest.TestCase):
                                 "costumes": ["a battered field jacket"]})]
         anchored = illustration.build_scene_prompt(
             "Luz argues with her mother", cast, anchored=True)
-        self.assertNotIn("brown hair", anchored)
+        # Probed with BUILD, not hair colour. Hair colour deliberately survives the
+        # trim now — Kira came back blonde four times with a correct sheet attached —
+        # so it is no longer a witness for "the appearance paragraph was dropped".
+        self.assertNotIn("broad shoulders", anchored)
+        self.assertIn("brown hair", anchored,
+                      "hair colour is a stated fact now, not trimmed detail")
         self.assertIn("Luz Noceda (18)", anchored)
         self.assertIn("battered field jacket", anchored)
         self.assertIn("attached reference pictures", anchored)
@@ -1901,16 +1920,18 @@ class ARefusedUploadGetsTheWordsBack(unittest.TestCase):
     All six references were refused and she came back a golden blonde three times."""
 
     KIRA = {"appearance": "Human female, twenty, fair-skinned and freckled, with dark "
-                          "red hair kept short and pushed back, blue eyes.",
+                          "red hair kept short and pushed back, blue eyes, and a "
+                          "compact wiry build.",
             "age": "20", "costumes": ["rust-brown jacket, grey plated shoulders"]}
 
-    def test_the_trim_removes_the_hair_and_the_fallback_restores_it(self):
+    def test_the_trim_removes_the_appearance_and_the_fallback_restores_it(self):
+        """Probed with BUILD, not hair: hair colour now survives the trim on purpose."""
         anchored = illustration.build_scene_prompt(
             "Kira on a walkway.", [("Kira Carsen", self.KIRA)], anchored=True)
         unanchored = illustration.build_scene_prompt(
             "Kira on a walkway.", [("Kira Carsen", self.KIRA)], anchored=False)
-        self.assertNotIn("red hair", anchored)
-        self.assertIn("red hair", unanchored)
+        self.assertNotIn("compact wiry build", anchored)
+        self.assertIn("compact wiry build", unanchored)
 
     def _shed_refs_prompt(self, prompt_without_refs):
         """Drive the real retry with an upload refusal and capture what got re-asked."""
@@ -2010,8 +2031,9 @@ class AnchoringFollowsWhetherPicturesAreActuallySent(unittest.TestCase):
 
     def test_uploads_on_keeps_the_prompt_trimmed(self):
         """Unchanged behaviour: pictures are coming, so the words stand back."""
-        self.assertNotIn("dark red hair", self._prompt_at(6),
-                         "with uploads on the appearance stays out of the prompt")
+        self.assertNotIn("blue eyes", self._prompt_at(6),
+                         "with uploads on the appearance paragraph stays out "
+                         "(probed with eye colour, which is still trimmed)")
 
     def test_uploads_off_puts_the_words_back(self):
         with_uploads = self._prompt_at(6)

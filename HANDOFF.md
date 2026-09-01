@@ -702,6 +702,28 @@ and it had **two causes, both now addressed**.
   shape (species, sex, skin tone, markings), but no render has tested it yet. Watch the
   next scenes containing Satele or Orgus.
 
+  *One clean before-reading exists.* `ch01_3` was redrawn at 02:14, 40 seconds BEFORE
+  the restart that made the age line live, so it shows the state without it: Kaedan has
+  a head (the new critic rule), Satele has her braids and no fringe (the negation fix),
+  and she still reads about **forty**. That is the gap the age line has to close.
+
+- **Hair colour is a stated fact now too, and this reverses a documented decision.**
+  `colouring_of` excluded hair because "hair and eye colour are the fine detail a
+  reference carries well". **Eye colour still is. Hair colour is not**, and Kira Carsen
+  proves it four times: her sheet is flawless — three views, a large head close-up, dark
+  auburn, freckles, the cheek scar — it was attached (`conditioned on 6 reference
+  picture(s)`), her prompt said nothing about hair, and she came back a golden blonde
+  every time. The critic's words never varied: *"hair colour and cut are the two things
+  a reader recognises Kira by, and neither is present."*
+
+  A broad flat area of colour is not a jaw. It is the same argument that re-admitted
+  skin tone — it does not compete with the reference for the shape of a face, it says
+  which of the model's defaults to stop reaching for — and blonde is the default.
+  `test_eye_colour_stays_out_but_hair_colour_no_longer_does` pins both halves.
+
+  Three older tests used hair as their probe for "the appearance paragraph was trimmed"
+  and now probe build or eye colour instead; the property they assert is unchanged.
+
 **3. The pictures show the quiet moments and skip the action.** Chapter 1 opens with a
 nineteen-year-old holding a breach against Flesh Raiders. Its five illustrations were:
 the breach, her slumped against a fence post, four Masters around a table, her sitting
