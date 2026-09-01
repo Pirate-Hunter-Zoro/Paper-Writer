@@ -26,7 +26,8 @@
 // Writes the PNG/JPEG to --out and prints ONE line of JSON on stdout:
 //
 //   {"ok":true,  "bytes":N, "width":W, "height":H, "mime":"image/png"}
-//   {"ok":false, "kind":"not_signed_in|quota|refused|bad_reference|no_image|transient|setup",
+//   {"ok":false, "kind":"not_signed_in|quota|refused|bad_reference|upload_failed|
+//                        no_image|transient|setup",
 //    "reason":"..."}
 //
 // `kind` is the contract that matters, because the three of them mean three
@@ -256,6 +257,30 @@ const PROBE_BUSY = `(() => {
 const PROBE_HAS_RESPONSE = `(() => document.querySelectorAll(
   'model-response, [data-test-id="model-response"]').length > 0)()`;
 
+// How many attached references FAILED to upload, counted inside the chips.
+//
+// The upload is asynchronous and the chip is optimistic: it appears immediately, sits
+// in a loading state, and only then flips to an error. So this cannot be asked once,
+// right after the chips appear — measured on 2026-09-01, that check ran too early and
+// saw two healthy-looking chips that were errored seconds later, and the render still
+// burned its whole deadline. It has to be asked WHILE waiting for the picture.
+//
+// Scoped inside the chip containers, never document-wide: an error icon elsewhere on
+// the page must not read as a failed upload. A false positive here sheds every
+// reference and returns a picture that looks fine and is of the wrong person — the one
+// failure this project cannot see — so this errs narrow.
+const PROBE_ERRORED_UPLOADS = `(() => {
+  const chips = document.querySelectorAll(
+    'user-query-file-preview, .file-preview, .attachment-container, ' +
+    '[data-test-id="file-chip"], uploader-file-preview, .uploaded-file-chip');
+  let bad = 0;
+  for (const chip of chips) {
+    if (chip.querySelector('.gem-attachment-loading-error, [fonticonname="error"]')
+        || chip.matches('.gem-attachment-loading-error')) bad++;
+  }
+  return bad;
+})()`;
+
 // The newest response as text, for the two outcomes that are not a picture: a refusal
 // and a usage ceiling.
 //
@@ -439,6 +464,25 @@ async function dump(cdp, tag) {
     const text = await cdp.eval(
       `(document.body ? document.body.innerText : "").slice(0, 20000)`);
     writeFileSync(join(DIAG_DIR, `${stamp}-${tag}.txt`), String(text || ""));
+
+    // The composer's MARKUP, not just its text. A failed upload is visible in the
+    // screenshot as a red (!) on a chip, and in the text dump as nothing at all —
+    // the chip contributes only a filename, which looks identical to a healthy one.
+    // Chasing that on 2026-09-01 cost an afternoon of inferring mechanisms from
+    // failure counts. Whatever attribute marks the error, and whatever keeps the
+    // send button disabled, is in here.
+    const markup = await cdp.eval(`(() => {
+      const pick = (sel) => Array.from(document.querySelectorAll(sel))
+        .map(el => el.outerHTML.slice(0, 4000));
+      return JSON.stringify({
+        chips: pick('user-query-file-preview, .file-preview, uploader-file-preview, ' +
+                    '[data-test-id="file-chip"], .uploaded-file-chip, ' +
+                    '.attachment-container'),
+        send: pick('button[aria-label*="Send" i], button.send-button, ' +
+                   '[data-test-id="send-button"]'),
+      }, null, 2);
+    })()`);
+    writeFileSync(join(DIAG_DIR, `${stamp}-${tag}.dom.json`), String(markup || "{}"));
   } catch { /* diagnostics never fail a render */ }
 }
 
@@ -492,11 +536,18 @@ async function render(cdp, args, prompt) {
     const attached = await attachRefs(cdp, args.refs, left());
     if (attached !== true) {
       await dump(cdp, "upload");
-      // A rejected upload never produces a preview chip, so "no preview appeared" and
-      // an explicit "can't help with that image" are one failure wearing two faces.
-      // Both want the same remedy: drop the reference, keep the prompt.
-      const kind = /no attachment preview/.test(String(attached))
-        ? "bad_reference" : "transient";
+      // Three different failures, and they do NOT want the same remedy:
+      //   * the transfer errored          -> `upload_failed`, worth simply trying
+      //                                      again with the references intact
+      //   * no preview ever appeared      -> `bad_reference`, the picture itself is
+      //                                      unwelcome; shed it and keep the prompt
+      //   * anything else                 -> transient
+      // Conflating the first two is what would quietly cost a character their face:
+      // a flaky upload would be treated as a permanently rejected reference and the
+      // scene redrawn from prose, forever, on the strength of one bad second.
+      const said = String(attached);
+      const kind = /failed to upload/.test(said) ? "upload_failed"
+        : /no attachment preview/.test(said) ? "bad_reference" : "transient";
       return { ok: false, kind,
                reason: `could not attach ${args.refs.length} reference picture(s): ${attached}` };
     }
@@ -528,33 +579,25 @@ async function render(cdp, args, prompt) {
     await cdp.key("keyUp", "Enter", "Enter", 13);
   }
 
-  // WHY THE PROMPT SOMETIMES NEVER LEAVES THE COMPOSER — diagnosed, not fixed.
+  // WHY THE PROMPT SOMETIMES NEVER LEAVES THE COMPOSER — now handled in `attachRefs`.
   //
   // When a reference upload fails, Gemini marks the attachment chip with an error and
-  // keeps the send control DISABLED. The prompt then sits here and can never go: no
-  // amount of clicking or pressing Enter helps, because there is nothing enabled to
-  // click. The driver waits out the entire deadline and reports
-  // `no image after Ns; last response text: ""`, which reads as "Gemini said nothing"
-  // and actually means "we were never able to ask".
+  // then IGNORES this click. The prompt sits here and can never go, and the driver
+  // waits out the entire deadline reporting `no image after Ns; last response text:
+  // ""`, which reads as "Gemini said nothing" and actually means "we were never able
+  // to ask".
   //
-  // Evidence, on 2026-08-31: `state/image-diagnostics/2026-08-31T22-05-18Z-timeout.png`
-  // shows five reference chips (valis, t7-o1, lord-scourge, ref1, ref2) each carrying an
-  // error icon, the prompt below them, and the send arrow greyed out. Across that
-  // evening, renders conditioned on references fell 12/hr -> 0/hr while reference-FREE
-  // renders kept working at ~3/hr. Two earlier send-retry schemes were tried and
-  // reverted; both were retrying a click against a control that was disabled.
+  // This comment used to say the send control was DISABLED. It is not: a DOM dump of
+  // the live failure on 2026-09-01 shows this button with no `disabled`, no
+  // `aria-disabled` and no disabled class. The click lands and is dropped. That wrong
+  // mechanism was asserted here for a day and sent two send-retry schemes chasing a
+  // control that was never disabled — a guess written down as fact, and then read back
+  // as evidence. `attachRefs` now catches the errored chip before we ever get here.
   //
-  // THE FIX IS OBVIOUS AND UNTESTABLE HERE: treat "attachments present and send still
-  // disabled" as `bad_reference`, which sheds the references and re-asks with the
-  // prose-anchored prompt — the path already built for exactly this. I wrote it and
-  // backed it out, because `tests/fixtures/gemini_page.py` does not model a failed
-  // upload: the fixture composer keeps its text after a successful send, so the check
-  // fired on every render carrying references and broke 13 of the 21 browser tests.
-  //
-  // To do it properly: first teach the fixture to serve a failed-upload state (errored
-  // chip + disabled send), then write the check against it. Do not ship this without
-  // that fixture — the failure mode is "every reference is silently discarded", which
-  // looks like working software and quietly destroys visual consistency.
+  // Evidence: the 2026-08-31 and 2026-09-01 timeout screenshots under
+  // `state/image-diagnostics/` show the reference chips carrying error icons with
+  // the prompt still in the composer. On both days renders conditioned on
+  // references fell to zero while reference-free renders kept working.
 
   // Wait for a picture. Two conditions, and both are needed: an image large enough to
   // be a render, AND the generation actually finished. Grabbing the first arm alone
@@ -574,6 +617,27 @@ async function render(cdp, args, prompt) {
   const found = await waitFor(async () => {
     const text = String(await cdp.eval(PROBE_TEXT) || "");
     if (text) lastText = text;
+
+    // THE PROMPT MAY NEVER HAVE LEFT THE COMPOSER.
+    //
+    // A reference upload can fail seconds AFTER its chip appears, and Gemini then
+    // ignores the send. Nothing about that is visible from the response side: there is
+    // no response, no busy state and no text, so every probe below reads "still
+    // thinking" and the render waits out its entire deadline before reporting `no
+    // image after Ns; last response text: ""` — 21 minutes per slot across three
+    // attempts, for a question that was never asked.
+    //
+    // Checked only while NOTHING has been answered, which is exactly the shape of this
+    // failure. Once a response exists the render is genuinely under way and the
+    // attachments are the app's business, not ours.
+    if (args.refs.length && !(await cdp.eval(PROBE_HAS_RESPONSE))) {
+      const bad = Number(await cdp.eval(PROBE_ERRORED_UPLOADS));
+      if (bad > 0) {
+        return { verdict: "upload_failed",
+                 text: `${bad} reference upload(s) failed, so the prompt was never ` +
+                       `sent (the attachment chips carry an error icon)` };
+      }
+    }
 
     // ORDER MATTERS HERE, and getting it wrong cost a render that was already on its
     // way. Gemini emitted "I'm just a language model and can't help with that" and
@@ -711,7 +775,31 @@ async function attachRefs(cdp, refs, budgetMs) {
         ).length)()`);
       return Number(n) >= refs.length ? true : null;
     }, Math.max(4000, Math.min(60000, deadline - Date.now())), 500);
-    // KNOWN GAP: a chip that APPEARED is not a chip that UPLOADED.
+    // A CHIP THAT APPEARED IS NOT A CHIP THAT UPLOADED.
+    //
+    // The wait above counts previews and is satisfied at `>= refs.length`. A failed
+    // upload still renders a chip — carrying an error icon — so the count is met, the
+    // driver proceeds, and the prompt then never leaves the composer. The render burns
+    // its whole deadline and reports `no image after Ns; last response text: ""`, which
+    // reads as "Gemini said nothing" and actually means "we were never able to ask".
+    //
+    // MEASURED 2026-09-01, replacing a wrong explanation that stood in this file for a
+    // day. The old comment said Gemini "keeps the send control DISABLED"; it does not.
+    // A DOM dump of the live failure shows the send button carrying no `disabled`, no
+    // `aria-disabled` and no disabled class — the driver's click lands and the app
+    // simply ignores it while an attachment is errored. Two send-retry schemes were
+    // written and reverted against that wrong story; neither could have worked, and
+    // not because the button was unclickable.
+    //
+    // What the failure actually looks like, from `dump()`'s `.dom.json`:
+    //     <gem-attachment class="... gem-attachment-loading-error ...">
+    //       <gem-icon fonticonname="error" ...>
+    // Both markers are checked, because one class name is a thin thing to hang a book
+    // on. `tests/fixtures/gemini_page.py?scenario=uploadfail` serves this exact markup.
+    //
+    // Saying "no attachment preview" routes this to `bad_reference` at the call site,
+    // which sheds the references and re-asks with the prose-anchored prompt — a worse
+    // picture than an anchored one, and enormously better than a parked slot.
     //
     // This counts previews and returns success at `>= refs.length`. When Gemini fails
     // an upload it still renders a chip — with an error icon on it — so the count is
@@ -720,25 +808,24 @@ async function attachRefs(cdp, refs, budgetMs) {
     // the composer and the render times out reporting
     // `no image after Ns; last response text: ""`.
     //
-    // Seen 2026-08-31: `state/image-diagnostics/2026-08-31T22-05-18Z-timeout.png` shows
-    // five chips each carrying an error icon, the prompt below, and the send arrow
-    // greyed out. Reference-carrying renders went 12/hr -> 0/hr while reference-free
-    // ones kept working. Two send-retry schemes were written and reverted before the
-    // cause was found; both were retrying a click against a disabled control.
+    // Seen 2026-08-31 and again 2026-09-01: the screenshots show chips carrying error
+    // icons with the prompt still sitting in the composer, and reference-carrying
+    // renders falling to zero while reference-free ones kept working. On 2026-09-01 a
+    // reference-free render succeeded and a 179-byte, perfectly valid PNG failed to
+    // upload in the same minute — so this is the upload path failing, not the prompt,
+    // not the file, and not its format.
     //
-    // THE FIX, and it is small: after the chips appear, check whether any is in an
-    // error state, and if so return a message matching /no attachment preview/ so the
-    // caller maps it to `bad_reference` — which already sheds the references and
-    // re-asks with the prose-anchored prompt. All of that machinery exists and is
-    // tested; only the detection is missing.
-    //
-    // NOT DONE because it cannot be tested yet: `tests/fixtures/gemini_page.py` has no
-    // failed-upload state, so any check written against a guessed error selector fires
-    // on healthy chips too. An earlier attempt did exactly that and broke 13 of the 21
-    // browser tests. **Teach the fixture to serve an errored chip with a disabled send
-    // first.** The failure mode of getting this wrong is "every reference silently
-    // discarded", which looks like working software.
-    if (ready) return true;
+    if (ready) {
+      // Asked again, and repeatedly, while waiting for the picture: the chip is
+      // optimistic and flips to an error only after the upload actually fails.
+      const errored = Number(await cdp.eval(PROBE_ERRORED_UPLOADS));
+      if (errored > 0) {
+        lastError = `${errored} attachment(s) failed to upload — no attachment ` +
+                    `preview usable (the chips carry an error icon)`;
+        continue;      // another file input may still take them
+      }
+      return true;
+    }
     lastError = "files were set but no attachment preview appeared";
   }
   return lastError || "no file input accepted the references";

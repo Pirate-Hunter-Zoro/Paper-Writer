@@ -40,6 +40,10 @@ Query string picks the behaviour, so one fixture covers the whole contract:
     ?scenario=silent        never produces anything, to exercise the timeout
     ?scenario=empty         answers with a completely empty response bubble — the
                             live hang that burned two ten-minute timeouts
+    ?scenario=uploadfail    the upload ERRORS: chips appear (so "a chip appeared" is
+                            satisfied) carrying the real app's error markup, and the
+                            send button does nothing. This is the live failure of
+                            2026-09-01 — the markup below is copied from the page.
     ?scenario=stuck         claims to be working forever and never produces anything —
                             the other live hang, "Creating your image" for ten minutes
 
@@ -129,10 +133,43 @@ document.getElementById("upload").addEventListener("change", (ev) => {
   for (const f of ev.target.files) {
     const d = document.createElement("div");
     d.className = "file-preview";
-    d.innerHTML = '<img alt="' + f.name + '" width="40" height="40">';
+    if (SCENARIO === "uploadfail") {
+      // Verbatim shape from the live app on 2026-09-01: the chip is PRESENT, so a
+      // check that counts previews is satisfied, and the failure is carried by a
+      // class and an icon name. Note there is no `disabled` anywhere -- the send
+      // button stays clickable and simply ignores the click, which is why every
+      // send-retry scheme written against "the button is disabled" was chasing a
+      // thing that was never in the DOM.
+      // The real chip is OPTIMISTIC: it appears healthy, sits in a loading state,
+      // and flips to an error only once the upload actually fails. A check made the
+      // instant chips appear therefore sees nothing wrong — which is exactly how the
+      // first version of this fix passed its test and changed nothing live.
+      d.innerHTML = '<gem-attachment class="gem-attachment gem-attachment-loading">' +
+                    '<span class="gem-attachment-title">' + f.name + '</span>' +
+                    '</gem-attachment>';
+      setTimeout(() => {
+      d.innerHTML =
+        '<gem-attachment class="gem-attachment gem-attachment-loading-error ' +
+        'gem-attachment-tile" tabindex="0"><mat-basic-chip class="mat-mdc-chip">' +
+        '<span class="gem-attachment-content">' +
+        '<gem-icon fonticonname="error" class="gem-attachment-icon"></gem-icon>' +
+        '<span class="gem-attachment-title">' + f.name + '</span>' +
+        '</span></mat-basic-chip></gem-attachment>';
+      }, 2500);
+    } else {
+      d.innerHTML = '<img alt="' + f.name + '" width="40" height="40">';
+    }
     chips.appendChild(d);
   }
   window.__uploaded = ev.target.files.length;
+  if (SCENARIO === "uploadfail") {
+    // Doomed the moment the file is set, even though the chip does not say so for
+    // another 2.5s. The send below must consult THIS, not the DOM: the driver sends
+    // within a second or two of attaching, well before the error is visible, and the
+    // real app drops that send anyway.
+    window.__uploadDoomed = true;
+    return;                                // nothing is attached to the conversation
+  }
 
   // Reproduce the real app's attachment markup, because it is the source of the
   // nastiest bug this driver has had. gemini.google.com renders an uploaded
@@ -189,6 +226,9 @@ async function blobUrl(src) {
 }
 
 document.getElementById("send").addEventListener("click", async () => {
+  // The live app does NOT disable this button when an attachment fails; it just
+  // drops the click. Reproducing the real behaviour, not a plausible one.
+  if (window.__uploadDoomed) return;
   const editor = document.querySelector('.ql-editor');
   const prompt = editor.innerText;
   window.__prompt = prompt;               // so the test can assert what was received

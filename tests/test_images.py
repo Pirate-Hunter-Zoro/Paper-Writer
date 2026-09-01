@@ -227,6 +227,73 @@ class BackendTests(unittest.TestCase):
         self.assertTrue(out.exists())
         self.assertTrue(any("prose, not on art" in m for m in logged), logged)
 
+    def test_a_failed_upload_is_retried_with_the_references_still_attached(self):
+        """A flaky transfer must not cost a character their face.
+
+        Gemini's uploader fails intermittently — the chip appears, sits loading, then
+        errors, and the app ignores the send. If that were treated as a rejected
+        reference the scene would be redrawn from prose and KEPT, permanently, because
+        a slot that produced an image is done. Detection costs ~5s, so asking again
+        with the sheets attached is nearly free and is what the book wants."""
+        calls = []
+        good = _png()
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            if len(calls) == 1:                       # first try: the upload errors
+                return _FakeProc({"ok": False, "kind": "upload_failed",
+                                  "reason": "2 reference upload(s) failed"})
+            out = Path(cmd[cmd.index("--out") + 1])   # second try: it goes through
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(good)
+            return _FakeProc({"ok": True, "bytes": len(good),
+                              "width": 1024, "height": 1536})
+        original = image_browser.subprocess.run
+        image_browser.subprocess.run = fake_run
+        self.addCleanup(lambda: setattr(image_browser.subprocess, "run", original))
+
+        sheet = self.tmp / "sheet.png"
+        sheet.write_bytes(good)
+        out = self.tmp / "anchored.png"
+        images.generate("orgus din", out, references=[sheet], log_fn=lambda m: None)
+
+        self.assertEqual(len(calls), 2, "should simply ask again")
+        self.assertIn("--ref", calls[1],
+                      "the retry must KEEP the references — that is the whole point")
+        self.assertTrue(out.exists())
+
+    def test_an_upload_that_keeps_failing_finally_sheds_the_references(self):
+        """The floor: a picture drawn from prose beats a slot that never draws."""
+        calls = []
+        good = _png()
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            if "--ref" in cmd:
+                return _FakeProc({"ok": False, "kind": "upload_failed",
+                                  "reason": "2 reference upload(s) failed"})
+            out = Path(cmd[cmd.index("--out") + 1])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(good)
+            return _FakeProc({"ok": True, "bytes": len(good),
+                              "width": 1024, "height": 1536})
+        original = image_browser.subprocess.run
+        image_browser.subprocess.run = fake_run
+        self.addCleanup(lambda: setattr(image_browser.subprocess, "run", original))
+
+        sheet = self.tmp / "sheet.png"
+        sheet.write_bytes(good)
+        out = self.tmp / "shed.png"
+        logged = []
+        images.generate("orgus din", out, references=[sheet], log_fn=logged.append)
+
+        with_refs = [c for c in calls if "--ref" in c]
+        self.assertEqual(len(with_refs), 1 + image_browser._UPLOAD_RETRIES,
+                         f"should try {image_browser._UPLOAD_RETRIES} more times "
+                         f"before giving up anchoring: {len(with_refs)}")
+        self.assertNotIn("--ref", calls[-1], "the last try must drop the references")
+        self.assertTrue(out.exists(), "a picture must still be produced")
+
     def test_a_refused_upload_with_no_references_is_not_retried_forever(self):
         """Nothing to shed means nothing to retry — it is a plain failure."""
         self._driver(_FakeProc({"ok": False, "kind": "bad_reference",
