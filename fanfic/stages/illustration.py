@@ -1051,6 +1051,37 @@ def _costume_line(name, spec, chapter_num=None):
     return line
 
 
+# Above this, an age has to be argued for rather than mentioned. Below it the model's
+# default and the number agree well enough that saying more is noise.
+_AGE_MUST_SHOW_FROM = 45
+
+
+def mature_cast(cast_specs):
+    """(name, age) for everyone old enough that the model will draw them young.
+
+    Parallel to `species_of` and for the identical reason: it is a categorical fact the
+    generator gets wrong by default, prose states it exactly, and a reference picture
+    apparently does not settle it. An image model's prior for an adult — a woman most
+    of all — is somewhere around thirty, and it will quietly overrule a photograph.
+
+    The evidence is the whole reason this exists. Satele Shan is fifty-six, her locked
+    sheet shows a lined, heavy-jawed woman of about that age, and she is the single
+    worst identity failure in the first book: ten of twenty-one `WRONG CHARACTER`
+    verdicts, repeatedly "reads late twenties to early thirties", "a delicate
+    modern-model face and no age lines at all", "roughly mid-thirties" — every time with
+    that sheet attached. Orgus Din, sixty, came back "roughly 45"."""
+    out = []
+    for name, spec in cast_specs:
+        raw = str((spec or {}).get("age") or "").strip()
+        try:
+            years = int(re.sub(r"[^0-9]", "", raw) or 0)
+        except ValueError:
+            continue
+        if years >= _AGE_MUST_SHOW_FROM:
+            out.append((name, years))
+    return out
+
+
 def identity_block(cast_specs, chapter_num=None):
     """The locked designs of everyone in frame — the vision critic's ground truth."""
     return "\n".join(f"  {_character_line(n, s, chapter_num)}"
@@ -1174,6 +1205,18 @@ def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=Non
                              + ", ".join(non_human)
                              + " must be drawn as that species, with the anatomy the "
                                "reference pictures show.")
+            # The same treatment as species, for the same failure. A bare "(woman, 56)"
+            # in a costume line is a number, not an instruction to draw anything, and
+            # the model's prior wins: Satele Shan came back "late twenties to early
+            # thirties" again and again with a correctly-aged sheet attached.
+            older = mature_cast(cast)
+            if older:
+                lines.append(
+                    "Age is NOT optional and NOT young by default: "
+                    + ", ".join(f"{n} is {a}" for n, a in older)
+                    + ". Draw each of them at that age, with the lined skin, heavier "
+                      "features and greying the reference pictures show. A face that "
+                      "reads a decade younger than the number is the wrong person.")
             lines += [f"- {_costume_line(n, s, chapter_num)}" for n, s in cast]
         else:
             lines.append("The characters, drawn exactly as described and instantly "

@@ -2021,3 +2021,57 @@ class AnchoringFollowsWhetherPicturesAreActuallySent(unittest.TestCase):
                             "reference picture will arrive")
         self.assertIn("dark red hair", without,
                       "with no uploads the appearance must be in the words instead")
+
+
+class AgeIsNotDecoration(unittest.TestCase):
+    """The single worst identity failure of the first book, and a bare number was the
+    whole of the prompt's defence against it.
+
+    Satele Shan is fifty-six. Her locked sheet shows a lined, heavy-jawed woman of about
+    that age. She accounts for **ten of twenty-one `WRONG CHARACTER` verdicts** — "reads
+    late twenties to early thirties", "a delicate modern-model face and no age lines at
+    all", "roughly mid-thirties" — every one of them with that correct sheet attached.
+    Orgus Din, sixty, came back "roughly 45".
+
+    All the anchored prompt said was `(woman, 56)`. A number is not an instruction to
+    draw anything, and an image model's prior for an adult is somewhere near thirty. So
+    age gets the same emphatic line species already had, for the same reason: it is a
+    categorical fact the generator defaults wrong on and a picture does not settle."""
+
+    SATELE = {"appearance": "Human female, fifty-six, fine lines at the eyes.",
+              "age": "56", "costumes": ["olive-brown combat attire"]}
+    ORGUS = {"appearance": "Human male, sixty, leathery.",
+             "age": "60", "costumes": ["brown wrap-tunic"]}
+    ALYN = {"appearance": "Human female, nineteen, warm brown skin.",
+            "age": "19", "costumes": ["sandcloth tunic"]}
+
+    def test_the_old_are_named_with_their_ages(self):
+        self.assertEqual(
+            illustration.mature_cast([("Satele", self.SATELE), ("Orgus", self.ORGUS)]),
+            [("Satele", 56), ("Orgus", 60)])
+
+    def test_the_young_are_left_out(self):
+        """Below the threshold the model's default and the number already agree, and
+        saying more is noise competing with the reference."""
+        self.assertEqual(illustration.mature_cast([("Alyn", self.ALYN)]), [])
+
+    def test_an_unparseable_age_is_skipped_rather_than_guessed(self):
+        self.assertEqual(
+            illustration.mature_cast([("X", {"age": "ageless", "costumes": []})]), [])
+        self.assertEqual(
+            illustration.mature_cast([("Y", {"costumes": []})]), [])
+
+    def test_the_instruction_reaches_an_anchored_prompt(self):
+        prompt = illustration.build_scene_prompt(
+            "They stand on a ridge.",
+            [("Satele", self.SATELE), ("Alyn", self.ALYN)],
+            anchored=True, chapter_num=1)
+        self.assertIn("Age is NOT optional", prompt)
+        self.assertIn("Satele is 56", prompt)
+        self.assertNotIn("Alyn is 19", prompt)
+
+    def test_a_young_only_cast_gets_no_age_line(self):
+        prompt = illustration.build_scene_prompt(
+            "She stands on a ridge.", [("Alyn", self.ALYN)],
+            anchored=True, chapter_num=1)
+        self.assertNotIn("Age is NOT optional", prompt)
