@@ -46,7 +46,7 @@
 //                       in production.
 
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -791,6 +791,26 @@ async function render(cdp, args, prompt) {
 //     first real sheet with references failed with "no file input in the page".
 //   * once opened, TWO inputs appear. One of them is Drive. `querySelector` takes
 //     whichever comes first in the DOM, which is a coin flip on the one that matters.
+// Is another live process holding the Chrome profile?
+//
+// Chrome writes `SingletonLock` into the profile as a symlink whose target is
+// `hostname-pid`. That is a far better answer than reading our own error message: it
+// distinguishes "the other daemon is mid-render" from "Chrome is broken", which look
+// identical from the outside and want opposite responses — wait a moment, versus tell
+// a human. Only a lock naming a LIVE pid counts; Chrome leaves the symlink behind
+// after a crash, and a stale one must not defer the book for ever.
+function profileHeldByAnother() {
+  try {
+    const target = readlinkSync(join(PROFILE, "SingletonLock"));   // "host-1234"
+    const pid = Number(String(target).split("-").pop());
+    if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) return 0;
+    process.kill(pid, 0);          // throws if the process is gone
+    return pid;
+  } catch {
+    return 0;                      // no lock, unreadable, or a dead pid
+  }
+}
+
 // Click send, falling back to Enter. Separate because it has to happen more than
 // once: the live app sometimes drops the click silently — the button stays enabled and
 // blue, nothing is shown anywhere, and the prompt just stays in the composer.
@@ -963,10 +983,25 @@ async function main() {
       catch { return null; }
     }, 25000);
     if (!version) {
-      return { ok: false, kind: "setup",
-               reason: `Chrome devtools never came up on port ${port}. Is another ` +
-                       `Chrome already using the profile at ${PROFILE}? Close it — ` +
-                       `a profile can only be open once.` };
+      return { ok: false,
+               ...(() => {
+                 // Contention is NOT a setup failure. `setup` becomes NotSignedIn,
+                 // which means "a human must act" and puts the book into a stall with
+                 // a DOUBLING backoff — against a sibling daemon that holds the
+                 // profile continuously and never yields. The loser then backs off to
+                 // hours while the winner keeps working, and the scribe is the process
+                 // that eventually binds the book.
+                 const holder = profileHeldByAnother();
+                 return holder
+                   ? { kind: "profile_busy",
+                       reason: `the Chrome profile at ${PROFILE} is in use by pid `
+                               + `${holder} — a profile can only be open once, so this `
+                               + `render waits rather than failing` }
+                   : { kind: "setup",
+                       reason: `Chrome devtools never came up on port ${port}, and `
+                               + `nothing else holds the profile at ${PROFILE}. Chrome `
+                               + `itself may be broken or missing.` };
+               })() };
     }
 
     const targets = await getJson(`http://127.0.0.1:${port}/json/list`);

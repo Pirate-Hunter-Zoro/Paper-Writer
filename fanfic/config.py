@@ -455,6 +455,14 @@ IMAGES_PER_CYCLE = int(os.environ.get("FANFIC_IMAGES_PER_CYCLE", "4"))
 # writing never waits, because writing is a different service entirely.
 IMAGE_QUOTA_BACKOFF_SEC = int(os.environ.get("FANFIC_IMAGE_QUOTA_BACKOFF_SEC", "120"))
 
+# How long to wait when the OTHER daemon is holding the Chrome profile. Short and
+# FIXED, deliberately: this is contention between two of our own processes over a
+# credential that can only be open once, not a failure and not a ceiling. It used to
+# surface as NotSignedIn -> a stall with a doubling backoff, which is the worst possible
+# response — the loser retreats exponentially while the winner renders continuously and
+# never yields, and the loser is the process that binds the book.
+IMAGE_BUSY_BACKOFF_SEC = int(os.environ.get("FANFIC_IMAGE_BUSY_BACKOFF_SEC", "45"))
+
 # How long to idle after the *model* backend reports any allowance ceiling, then try
 # again — forever, until it lifts. Five minutes rather than the half hour this started
 # at, because the ceiling might be a five-hour session cap or a monthly spend cap and
