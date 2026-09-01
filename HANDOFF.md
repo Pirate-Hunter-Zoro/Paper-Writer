@@ -1175,6 +1175,44 @@ ABORTING a healthy render as "never sent", not merely by sending twice.
 Both directions are falsifiable: break the detection and the dropped send times out;
 break the composer check and a healthy slow reply is killed.
 
+## 6j. The revision sweep ran to completion — what it actually yielded
+
+Finished 19:28Z on 2026-09-01. This was the last stage on this book that had never
+run here end to end.
+
+    46 chapters, 77 rounds
+    80 blocking issues found
+    301 edits applied
+    2 chapters still carrying notes
+
+1.7 blocking issues per chapter and 3.9 edits per round. The stopping rule held: every
+round that reported "another round" had found something blocking, and no chapter ran
+past its cap. **31 of 46 chapters needed a second round**, so a single sweep would have
+left about two thirds of the found defects in place — the second pass is not ceremony.
+
+Two chapters end with notes still open. That is the designed floor, not a failure: the
+sweep repairs what it can defend and records what it cannot rather than forcing an edit
+it does not believe in.
+
+### One profile collision, and why it was left alone
+
+Immediately after the sweep the scribe went to render a character sheet for Vitiate — a
+character introduced late — and hit the illustrator holding the Chrome profile, which
+can only be open in one process:
+
+    STALLED: Chrome devtools never came up on port 9731. Is another Chrome already
+    using the profile?
+
+It recovered by itself five minutes later on stall attempt 1 and drew the sheet. The 57
+alarming-looking log lines were one "waiting to retry" message every five seconds during
+a single backoff — **one distinct stall event, ever.**
+
+No lock was added. There is a real design tension here (two daemons, one credential) and
+if it starts costing real time it deserves a proper file lock. On the strength of one
+self-healed incident, adding cross-process locking to a working pipeline would risk a
+deadlock to fix something the existing backoff already handles. Count the events before
+building the mechanism.
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
