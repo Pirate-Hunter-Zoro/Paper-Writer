@@ -1130,6 +1130,51 @@ comment in 6f, discovered the same afternoon.
 The stall self-cleared at 15:16Z when the session limit rolled over, with no
 intervention and nothing lost — that part worked exactly as designed.
 
+## 6i. The OTHER empty-reply failure: the send is dropped and the prompt never goes
+
+6f fixed failed reference uploads. It did not fix everything reporting
+`no image after 420s; last response text: ""`, and the remainder is a separate fault
+with the same symptom — which is exactly why the first one took so long to see.
+
+**Today's cost, counted:** 65 renders died this way, 7.6 hours of wall-clock.
+
+The timeout dump for one of them shows: **no attachments at all**, the prompt sitting in
+the composer, and the send arrow **blue and enabled**. No error anywhere on the page —
+the DOM sweep for tooltips, alerts and snackbars returns only "New chat", "Settings",
+"Submit". The click lands and is silently dropped, and the driver then waits 420 seconds
+for a reply to a question that was never asked.
+
+### The signal, verified rather than assumed
+
+A successful send CLEARS the composer. Checked against a dump of a *refused* render — so
+the prompt definitely went — where the prompt text appears exactly twice, both times
+under "You said" in the conversation, and never in the composer. So:
+
+    idle + nothing answered + our prompt still in the composer  =  it never went
+
+The driver now pushes send again after 25 seconds of that, and gives up quickly if the
+second push also does nothing. **Re-sending usually works**, so this recovers renders
+rather than merely failing faster.
+
+### What the tests had to be taught, twice
+
+The first version used a fixed 200-character floor for "the composer still holds our
+prompt". Real prompts are ~2KB; the test harness passes `--prompt "a red fox"`, nine
+characters. It could not fire, and the test failed. It is measured against what we
+actually typed now.
+
+Worse, the false-positive test was **vacuous and I nearly shipped it**. A double
+submission bills a second render and can return a different picture than the one the
+critic is about to judge — the dangerous direction — but against the plain `ok` fixture
+a reply lands before the first poll, so `!hasResponse` alone carried the test and
+deleting the composer check changed nothing. `?scenario=slowreply` now lands the send,
+clears the composer, and stays silent for six seconds, which is the only shape where the
+composer check is the sole guard. Deleting it now fails the test — and fails it by
+ABORTING a healthy render as "never sent", not merely by sending twice.
+
+Both directions are falsifiable: break the detection and the dropped send times out;
+break the composer check and a healthy slow reply is killed.
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side

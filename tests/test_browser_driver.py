@@ -69,9 +69,19 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
 
+    def page_state(self):
+        """What the fixture SERVER saw. The driver runs as a subprocess and takes
+        Chrome with it, so anything asserted about the page has to be recorded
+        server-side while the render was happening."""
+        import urllib.request
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/state") as r:
+            return json.loads(r.read().decode())
+
     def run_driver(self, scenario, out, refs=(), timeout=45, prompt="a red fox",
                    env_extra=None):
         """Run the driver against one fixture scenario. Returns its parsed JSON."""
+        import gemini_page
+        gemini_page.Handler.submissions = 0        # per-run, so counts are this run's
         env = dict(os.environ)
         env.update(env_extra or {})
         env["GEMINI_PROFILE_DIR"] = str(self.profile)
@@ -238,6 +248,39 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
         out = self.tmp / "healthy.png"
         result = self.run_driver("ok", out, refs=sheets)
         self.assertTrue(result["ok"], f"references were shed on a healthy page: {result}")
+
+    def test_a_dropped_send_is_noticed_and_sent_again(self):
+        """The live app silently drops a send under load.
+
+        The button stays enabled and blue, nothing is shown anywhere, and the prompt
+        just sits in the composer while the driver waits out its whole deadline for an
+        answer to a question that was never asked. On 2026-09-01 that killed 65 renders
+        and burned about 7.6 hours.
+
+        The remedy is simply to push it again — so the render should SUCCEED here, not
+        merely fail faster."""
+        out = self.tmp / "resent.png"
+        result = self.run_driver("sendlost", out, timeout=90)
+        self.assertTrue(result["ok"], f"a dropped send should be re-sent: {result}")
+        self.assertTrue(out.exists())
+
+    def test_a_healthy_send_is_never_sent_twice(self):
+        """The dangerous direction: a false positive submits the prompt a SECOND time,
+        which bills another render and can return a different picture than the one the
+        critic is about to judge.
+
+        Two deliberate choices, both needed to make this discriminate. The grace
+        period is collapsed to 1ms, and the scenario answers only after six seconds of
+        silence. Against the plain `ok` page this test was VACUOUS: a reply lands
+        before the first poll, so "has it replied yet" alone carried it and removing
+        the composer check changed nothing. With a real quiet gap, the cleared composer
+        is the only thing separating a landed send from a dropped one."""
+        out = self.tmp / "once.png"
+        result = self.run_driver("slowreply", out, timeout=60,
+                                 env_extra={"GEMINI_ART_SEND_STUCK_MS": "1"})
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.page_state().get("queries"), 1,
+                         "a healthy render must be submitted exactly once")
 
     def test_a_usage_ceiling_is_reported_as_quota(self):
         result = self.run_driver("quota", self.tmp / "quota.png")
