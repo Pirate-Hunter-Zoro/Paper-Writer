@@ -386,7 +386,27 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   picture per slot per hour, and the ~35 pending slots would all come out as
   establishing shots if this never clears.
 
-  **A mitigation exists and I deliberately did not apply it.** Setting
+  **APPLIED at ~01:30Z: `FANFIC_IMAGE_MAX_UPLOADS=0`. RESTORE IT TO 6 WHEN UPLOADS
+  WORK AGAIN** — test with `scripts/check-browser.sh --live`, whose second render is the
+  reference path. The reason I first held off, and what changed:
+
+  I first left this alone because a temporary mitigation nobody reverts becomes
+  permanent. What changed is that the outage was confirmed TOTAL rather than partial —
+  a live check with ONE reference fails while the identical prompt with none succeeds —
+  so the choice was no longer "wait a bit" but "35 peopleless establishing shots over
+  ~12 hours, or prose-anchored pictures with the cast in them now".
+
+  It needed one code change alongside it, which is a correct invariant regardless:
+  `render_scene` now decides `anchored` from whether pictures will ACTUALLY be attached
+  (`rung < 3 and IMAGE_MAX_UPLOADS > 0`), not merely from whether the ladder wants them.
+  Without that, uploads-off would have trimmed the appearance paragraph out of a prompt
+  with no picture to carry the face — the Kira-as-a-blonde failure exactly (§6z).
+
+  **What it costs while it is on:** no picture is conditioned on a locked reference
+  sheet. `scripts/unanchored-scenes.sh` lists every picture drawn this way; redraw the
+  ones that matter once uploads return.
+
+  **The mitigation, for the record:** Setting
   `FANFIC_IMAGE_MAX_UPLOADS=0` would skip attachment entirely and let renders through at
   once; it needs one correct-anyway code change alongside it, because `anchored` is
   currently `rung < 3` and would trim the appearance paragraph out of a prompt that has

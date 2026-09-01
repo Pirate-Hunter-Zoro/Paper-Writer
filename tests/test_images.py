@@ -1953,3 +1953,71 @@ class ARefusedUploadGetsTheWordsBack(unittest.TestCase):
         written = self._shed_refs_prompt(None)
         self.assertEqual(len(written), 2)
         self.assertIn("ANCHORED", written[1])
+
+
+class AnchoringFollowsWhetherPicturesAreActuallySent(unittest.TestCase):
+    """`anchored` means "reference pictures are attached to this request", and the
+    appearance paragraph is dropped on that promise. `rung < 3` says the ladder still
+    WANTS references; it does not say any will be sent.
+
+    With `FANFIC_IMAGE_MAX_UPLOADS=0` — the escape hatch for a broken upload path —
+    nothing is uploaded at all. Trimming the appearance out of a prompt that then has no
+    picture to carry the face is precisely what drew Kira Carsen as a blonde three times
+    running: no reference, and no words either."""
+
+    # Each call needs its OWN slot: `render_scene` parks a slot on failure, and a
+    # parked slot is not `due`, so a second call against the same k would silently
+    # render nothing and compare against an empty string.
+    _k = iter(range(90, 99))
+
+    def setUp(self):
+        from fanfic import paths
+        from fanfic.infra import storage
+        self.paths, self.storage = paths, storage
+        support.wipe_state()
+        support.stub_model_seams()
+        # A cast with an appearance, or there is no paragraph to trim and both prompts
+        # come out identical — which is a test that cannot fail.
+        storage.save_json({"characters": {"Kira": {
+            "appearance": "Human female, twenty, dark red hair kept short and pushed "
+                          "back, freckled.",
+            "age": "20", "costumes": ["rust-brown jacket"]}}},
+            paths.series_bible_path("s"))
+        sheet = paths.sheet_path("s", 1, "Kira")
+        sheet.parent.mkdir(parents=True, exist_ok=True)
+        sheet.write_bytes(support.PNG)
+
+    def _prompt_at(self, uploads, rung=0):
+        original = config.IMAGE_MAX_UPLOADS
+        config.IMAGE_MAX_UPLOADS = uploads
+        self.addCleanup(lambda: setattr(config, "IMAGE_MAX_UPLOADS", original))
+        seen = {}
+
+        def render(prompt, out_path, references=None, log_fn=None, aspect=None,
+                   prompt_without_refs=None):
+            seen["prompt"] = prompt
+            raise images.Refused("stop here")
+
+        original_render = illustration.render
+        illustration.render = render
+        self.addCleanup(lambda: setattr(illustration, "render", original_render))
+        entry = {"series_id": "s", "book_num": 1, "chapter_num": 1,
+                 "k": next(self._k),
+                 "scene": "Kira stands on a walkway", "characters": ["Kira"],
+                 "orientation": "portrait"}
+        illustration.render_scene(entry, log_fn=lambda _m: None)
+        return seen.get("prompt", "")
+
+    def test_uploads_on_keeps_the_prompt_trimmed(self):
+        """Unchanged behaviour: pictures are coming, so the words stand back."""
+        self.assertNotIn("dark red hair", self._prompt_at(6),
+                         "with uploads on the appearance stays out of the prompt")
+
+    def test_uploads_off_puts_the_words_back(self):
+        with_uploads = self._prompt_at(6)
+        without = self._prompt_at(0)
+        self.assertNotEqual(with_uploads, without,
+                            "with no uploads the prompt must stop pretending a "
+                            "reference picture will arrive")
+        self.assertIn("dark red hair", without,
+                      "with no uploads the appearance must be in the words instead")
