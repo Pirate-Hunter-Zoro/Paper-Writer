@@ -480,6 +480,18 @@ async function dump(cdp, tag) {
                     '.attachment-container'),
         send: pick('button[aria-label*="Send" i], button.send-button, ' +
                    '[data-test-id="send-button"]'),
+        // WHY the upload failed, if the page ever says. An errored chip carries
+        // aria-describedby="cdk-describedby-message-...", and Angular Material puts
+        // the actual sentence in a separate hidden element with that id — so the
+        // reason is in the DOM but nowhere near the chip. Snackbars and alerts are
+        // swept up for the same reason. Text only: these are prose, not markup, and
+        // the whole point is to read them.
+        why: Array.from(document.querySelectorAll(
+          '[id^="cdk-describedby-message"], .mat-mdc-tooltip, [role="tooltip"], ' +
+          '[role="alert"], [role="status"], mat-snack-bar-container, .mdc-snackbar'))
+          .map(el => (el.textContent || "").trim())
+          .filter(t => t)
+          .slice(0, 20),
       }, null, 2);
     })()`);
     writeFileSync(join(DIAG_DIR, `${stamp}-${tag}.dom.json`), String(markup || "{}"));
