@@ -810,6 +810,12 @@ function profileHeldByAnother() {
     return 0;                      // no lock, unreadable, or a dead pid
   }
 }
+// NOTE, measured: this answers "who holds it NOW", and it is consulted only after the
+// 25-second wait for devtools has already failed — by which time the process we lost
+// the race to has often exited and left a stale lock. So a zero here does NOT mean
+// there was no contention. That is why both outcomes are retryable and only the
+// WORDING differs; classifying on this alone would put half the collisions back into
+// the stall machinery.
 
 // Click send, falling back to Enter. Separate because it has to happen more than
 // once: the live app sometimes drops the click silently — the button stays enabled and
@@ -997,10 +1003,11 @@ async function main() {
                        reason: `the Chrome profile at ${PROFILE} is in use by pid `
                                + `${holder} — a profile can only be open once, so this `
                                + `render waits rather than failing` }
-                   : { kind: "setup",
+                   : { kind: "browser_unavailable",
                        reason: `Chrome devtools never came up on port ${port}, and `
-                               + `nothing else holds the profile at ${PROFILE}. Chrome `
-                               + `itself may be broken or missing.` };
+                               + `nothing holds the profile at ${PROFILE} now — most `
+                               + `likely a startup race with the other daemon that has `
+                               + `already cleared` };
                })() };
     }
 

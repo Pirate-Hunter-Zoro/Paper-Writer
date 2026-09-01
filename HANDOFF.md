@@ -1240,10 +1240,29 @@ engine already models as `QuotaExceeded`: no park, no status change, no escalati
     than reporting a ceiling that does not exist. That mistake is 6h, made twice in one
     day; the third branch exists so it is not made a third time.
 
+### The first version of this fix was too clever, and I caught it in production
+
+Classifying on the live `SingletonLock` looked precise, and it shipped, and it did not
+work: the very next collision took the "nothing holds the profile" branch and stalled
+anyway. **The check is consulted only AFTER the 25-second wait for devtools has failed,
+by which time the process we lost the race to has usually exited and left a stale lock.**
+A zero from it does not mean there was no contention. Confirmed by hand at that moment:
+the scribe was sitting at a 600-second backoff while the same driver, run manually,
+started Chrome and rendered a picture in twenty seconds.
+
+So both outcomes are retryable now and only the WORDING differs. `missing_prerequisite()`
+has already proven Chrome, Node and the profile directory exist before any render is
+attempted, so "devtools never came up" is a startup race or a momentary failure — never
+the human errand `NotSignedIn` means.
+
+The lock check is kept, because when it DOES catch a live holder it names the real cause
+in the log, and the comment beside it now records that it under-reports by design.
+
 The general lesson is not "count events before building" — that part was right. It is
 that **"leave it alone" is a decision with an expiry date, and the thing to watch is the
-TREND, not the count.** A self-healing failure and an escalating one look the same at
-n=1.
+TREND, not the count.** A self-healing failure and an escalating one look identical at
+n=1. And the follow-on: a fix that ships is not a fix that works — this one passed its
+tests, went out, and was falsified by the next real event twelve minutes later.
 
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 

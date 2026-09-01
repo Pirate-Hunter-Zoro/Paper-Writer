@@ -97,8 +97,8 @@ def run(log_fn=print):
             # and one of them has it open. Says so plainly, because the version of this
             # that called it a quota sent a reader looking for a limit that did not
             # exist.
-            log_fn(f"the other daemon has the browser profile; waiting {wait}s "
-                   f"(normal contention, nothing parked): {quota}")
+            log_fn(f"the browser is not available this moment; waiting {wait}s "
+                   f"(nothing parked, no rung spent): {quota}")
         else:
             log_fn(f"image quota/rate limit reached; deferring remaining images, "
                    f"retrying in {wait}s (book stays ILLUSTRATING, writing unaffected)")
