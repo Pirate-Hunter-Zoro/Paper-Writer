@@ -65,6 +65,31 @@ Bad: *"Anne, Sasha, Marcy, Sprig, Hop Pop and Polly stand together in the war ro
 An ensemble scene is exactly what a reader opens a crossover for. Draw it. Just draw
 it as a picture rather than a cast list.
 
+## Two faces, not five — this is measured, not taste
+
+**Every named character you list attaches their reference sheet, and fidelity per face
+falls as that list grows.** Measured over the first book's first hundred-odd renders:
+
+    named in frame   renders judged   identity failures
+          1                 9                0
+          2                67               18
+          3                53                6
+          4                17                4
+
+And within a single slot, which is the cleanest evidence there is: `ch14_5` was rejected
+twice with two named characters — Kira drawn blonde, then Satele drawn thirty years too
+young — and then passed with **the same prompt trimmed to one character**, with both
+faces correct. Nothing changed but the number of people sharing the references.
+
+So: **one or two named characters is the target for any picture whose point is a face.**
+Three is a considered choice. Four is a crowd, and the crowd is what erodes them.
+
+This does not mean emptying the frame. Other people can be *in* the picture — bracing,
+turning, half-lit behind — as long as they are not NAMED in `characters`. A name in that
+list is a claim that the render must reproduce that person's locked design; an unnamed
+figure in the background is just staging, and costs nothing. Name the one or two the
+scene is actually about, and let the rest be composition.
+
 **A strong silhouette.** Could you recognise this image as a black shape on white?
 Someone climbing, reaching, falling, shielding, holding something up. Avoid people
 standing in a circle talking, which is what most novel scenes literally are.

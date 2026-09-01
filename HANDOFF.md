@@ -724,9 +724,39 @@ and it had **two causes, both now addressed**.
       reads a decade younger is the wrong person.
 
   Banded at 45 / 55 / 65 so a forty-five-year-old and a sixty-five-year-old do not get
-  the same description. **Also unverified.** If this fails too, the next lever is her
-  locked appearance itself, which still says only "fine lines at the eyes" for a woman
-  of fifty-six — the sheet shows far more than that.
+  the same description.
+
+- **THE REAL MECHANISM, and it is not the wording: identity fails in CROWDED frames.**
+  Found by looking at `ch14_5` rather than at counts. Its three attempts, in order:
+
+      02:33  attempt 1, simplify=0, two named characters -> Kira drawn blonde
+      02:35  attempt 2, simplify=1, two named characters -> Satele drawn thirty too young
+      02:37  attempt 3, simplify=2, cast trimmed to ONE  -> both faces correct, kept
+
+  Same slot, same prompt, same references. The only thing that changed was how many
+  people were sharing them. And the picture that came out has Satele with grey-streaked
+  hair and a lined fifty-something face — the exact thing three weeks of prompt wording
+  had failed to produce.
+
+  Across the whole run, by number of named characters in the slot:
+
+      named   slots   judged   identity failures
+        1       14       9            0
+        2       70      67           18
+        3       61      53            6
+        4       22      17            4
+
+  Nine single-character judgements, zero identity failures. The codebase already
+  suspected this — *"fidelity per face falls as the reference count rises, so a crowded
+  frame that attaches everything makes every face in it worse"* — but nothing acted on
+  it. `prompts/art_direction.md` now targets one or two NAMED characters per picture and
+  explains that unnamed figures in the background are free: a name in `characters` is a
+  claim the render must reproduce a locked design, and every extra claim dilutes the
+  rest.
+
+  **This is the lever to pull on before any more prompt wording.** The age and hair
+  lines are cheap and stay, but if identity is still drifting in a week, look at cast
+  size per picture first.
 
 - **Hair colour is a stated fact now too, and this reverses a documented decision.**
   `colouring_of` excluded hair because "hair and eye colour are the fine detail a
