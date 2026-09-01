@@ -909,6 +909,41 @@ Delete the `.png` and its `.retry` and the illustrator redraws from rung 0.
 
 ---
 
+## 6e. RESULT: identity failures fell about fourfold
+
+The one number this all had to move, measured against a baseline marked before the fix
+set went live:
+
+    before 2026-09-01 06:05    176 renders judged    35 identity failures    19.9%
+    after                       41 renders judged     2 identity failures     4.9%
+
+    P(<= 2 failures in 41 draws at the old 20% rate) = 0.007
+
+**A 0.7% chance of seeing that by luck**, so something real happened. This is the first
+genuine result of the session; everything before it was mechanism.
+
+**What it does NOT establish, and the honest limits matter:**
+
+  * *Not a controlled experiment.* Nine fixes landed in overlapping windows — cast size,
+    species parsing, alien anatomy, the machine declaration, hair colour, spelled ages,
+    the recovered colour cap, the clause dedupe, the face-in-frame critic rule. The drop
+    cannot be attributed to any one of them from this data.
+  * *Cast composition moved too.* Later chapters draw different people, and §6c shows
+    failure rate tracks WHO is in frame. Some of the gain may be that rather than the
+    fixes.
+  * *41 renders is enough to say "real", not enough to rank causes.*
+
+If you want attribution rather than a total, the way to get it is one fix at a time with
+a marked baseline between each — expensive, and probably not worth it now that the rate
+is where it is.
+
+**Strongest independent evidence, for what it is worth:** the cast-size finding, because
+it has a within-slot proof (`ch14_5` failed twice at two named characters and passed at
+one, same prompt); and the droid declaration, because T7-O1 appears in 47 slots and the
+word "droid" was in none of their prompts before it.
+
+---
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
