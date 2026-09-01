@@ -358,6 +358,18 @@ Nothing here is blocking. These are judgements already made; revisit only with e
   `prompt_without_refs` change (ruled out — 44 of 49 occurrences had no reference
   refusal anywhere near them).
 
+  **The compounding part: REFERENCE SHEETS cannot be made either.** Sheet renders upload
+  source art like everything else, so every character the story introduces during the
+  outage is parked without a sheet. At 00:30Z that is **32 sheets against 47 characters**
+  — Yulen Sabb, Hare'en, Corvo Deel and a dozen more. The engine tries to lock a sheet
+  "before any scene uses it", fails, parks it, and moves on to the scenes anyway, which
+  then draw those characters from prose with no sheet to anchor them.
+
+  That outlives the outage. **When uploads recover, check `sheets/` against the bible's
+  character list** — `ls state/series/<sid>/book/1/sheets/*.png | wc -l` versus the
+  `characters` key — and re-queue any scene that was drawn while its character had no
+  sheet (delete the image and its `.retry`; the illustrator redraws from rung 0).
+
   **What the outage looks like while it lasts, so you can recognise it:** each slot
   spends 3 attempts x 420s per ladder rung timing out, reaches rung 3 in about an hour,
   and then renders fine — rung 3 attaches no references, so nothing blocks the send. The
