@@ -754,6 +754,22 @@ and it had **two causes, both now addressed**.
   claim the render must reproduce a locked design, and every extra claim dilutes the
   rest.
 
+- **A length cap was silently eating the colours it existed to carry.** Bela Kiwiiks is
+  a Togruta: *"deep red skin marked with broad white bands across the montrals and down
+  the front of each lek"* — ninety-four characters, against `colouring_of`'s
+  sixty-character cap. So **her skin colour reached no prompt at all**, and `ch18_2`
+  came back with "a pale, ashen white-grey face with the pattern effectively inverted".
+  A filter that drops a fact for being described thoroughly is worse than no filter.
+
+  Cap raised to 100, with a guard against clauses that are not present-tense
+  description. The guard is not optional: at 100 without it, Vitiate's *"original
+  red-skinned Sith body has been gone for over a millennium"* and Lord Nefarid's
+  *"standing behind furniture and in doorways so he is rarely fully visible"* both
+  arrived as their FIRST colour clause. Measured across all 47 characters, the pair
+  recovers twelve real colour facts and admits zero junk — and it incidentally fixes
+  Vitiate ("ashen-lilac skin over a narrow ridged skull") and Nefarid ("grey-white
+  skin"), who were both being described by accident.
+
   **This is the lever to pull on before any more prompt wording.** The age and hair
   lines are cheap and stay, but if identity is still drifting in a week, look at cast
   size per picture first.
