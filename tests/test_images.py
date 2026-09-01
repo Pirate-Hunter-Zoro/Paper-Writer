@@ -2376,3 +2376,47 @@ class AlienAnatomyIsNamed(unittest.TestCase):
         tail = line.split("Always:")[-1]
         clauses = [c.strip().lower().rstrip(".") for c in tail.split(";")]
         self.assertEqual(len(clauses), len(set(clauses)), line)
+
+
+class AMachineIsDeclaredAMachine(unittest.TestCase):
+    """T7-O1 appears in forty-seven illustrations and the word "droid" was in none of
+    their prompts.
+
+    `species_of` declares a non-human species by reading "Togruta female" out of the
+    opening clause — it needs a sex word, and a droid has none. So T7 fell through every
+    net: no species, no sex, just "T7-O1 (200)" and a costume line. The reference sheet
+    was the only thing saying he was a machine, and when it was diluted across a crowded
+    frame the model drew what the words implied. `ch23_5` came back with "a tall bald
+    humanoid alien with a radiating crown" and no droid in the picture at all."""
+
+    T7 = {"appearance": "T7-series astromech, 1.15 metres to the top of the dome, "
+                        "cylindrical body on three legs, a single blue sensor eye.",
+          "age": "200", "costumes": ["grey chassis, utility harness"]}
+    HUMAN = {"appearance": "Human female, nineteen, warm brown skin.",
+             "age": "19", "costumes": ["sandcloth tunic"]}
+
+    def test_a_droid_is_recognised(self):
+        self.assertTrue(illustration.is_machine(self.T7))
+        self.assertFalse(illustration.is_machine(self.HUMAN))
+
+    def test_the_prompt_says_machine(self):
+        prompt = illustration.build_scene_prompt(
+            "x", [("T7-O1", self.T7), ("Alyn", self.HUMAN)],
+            anchored=True, chapter_num=1)
+        self.assertIn("MACHINE, not a person", prompt)
+        self.assertIn("T7-O1", prompt.split("MACHINE")[0].split("\n")[-1])
+
+    def test_a_human_only_cast_gets_no_machine_line(self):
+        prompt = illustration.build_scene_prompt(
+            "x", [("Alyn", self.HUMAN)], anchored=True, chapter_num=1)
+        self.assertNotIn("MACHINE", prompt)
+
+    def test_a_machine_carries_no_age_parenthetical(self):
+        """"T7-O1 (200)" is a number with no face attached, and it is what put an
+        elderly human head on the droid earlier."""
+        line = illustration._costume_line("T7-O1", self.T7, 1)
+        self.assertNotIn("200", line)
+
+    def test_a_person_keeps_theirs(self):
+        line = illustration._costume_line("Alyn", self.HUMAN, 1)
+        self.assertIn("19", line)

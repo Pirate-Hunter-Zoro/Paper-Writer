@@ -1096,7 +1096,9 @@ def _costume_line(name, spec, chapter_num=None):
     costume = costume_for_chapter(spec or {}, chapter_num).rstrip(".")
     if costume and ":" in costume[:24]:
         costume = costume.split(":", 1)[-1].strip()
-    age = str((spec or {}).get("age") or "").strip()
+    # A machine's age is a service life, not something visible on it, and printing
+    # "T7-O1 (200)" invited exactly one reading of a number with no face attached.
+    age = "" if is_machine(spec) else str((spec or {}).get("age") or "").strip()
     # Age survives the trim even though the reference carries a face, because it is the
     # one identity fact a reference can be actively wrong about: the source art is
     # drawn from a whole series and this book starts after its epilogue.
@@ -1155,6 +1157,21 @@ _MACHINE_WORDS = ("droid", "astromech", "chassis", "servomotor", "photoreceptor"
 _HUMAN_LIFESPAN = 110
 
 
+def is_machine(spec):
+    """Whether this character is a machine rather than a person.
+
+    T7-O1 appears in forty-seven illustrations and **the word "droid" was in none of
+    them.** `species_of` declares a non-human species by reading "Togruta female" out of
+    the opening clause — it requires a sex word, and a droid has none, so T7 fell
+    through every net: no species, no sex, just "T7-O1 (200)" and a costume. The only
+    thing telling the model he was a machine was the reference sheet, and when that was
+    diluted across a crowded frame the model drew what the words implied: a person.
+    `ch23_5` came back with "a tall bald humanoid alien with a radiating crown" and no
+    droid of any kind in the picture."""
+    text = str((spec or {}).get("appearance") or "").lower()
+    return any(w in text for w in _MACHINE_WORDS)
+
+
 def ages_visibly(spec):
     """Whether this character has a face that can carry the years.
 
@@ -1163,8 +1180,7 @@ def ages_visibly(spec):
     model did as it was told: it grafted the head of an elderly human man, white hair and
     wrinkles and all, onto the droid's dome. That is my own instruction coming back
     wearing a face it should never have had."""
-    text = str((spec or {}).get("appearance") or "").lower()
-    return not any(w in text for w in _MACHINE_WORDS)
+    return not is_machine(spec)
 
 
 def mature_cast(cast_specs):
@@ -1354,6 +1370,14 @@ def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=Non
             # in a costume line is a number, not an instruction to draw anything, and
             # the model's prior wins: Satele Shan came back "late twenties to early
             # thirties" again and again with a correctly-aged sheet attached.
+            machines = [n for n, sp in cast if is_machine(sp)]
+            if machines:
+                lines.append(
+                    ", ".join(machines)
+                    + (" is" if len(machines) == 1 else " are")
+                    + " a MACHINE, not a person: a droid chassis with no face, no skin "
+                      "and no human features of any kind. Draw the machine in the "
+                      "attached reference pictures.")
             older = mature_cast(cast)
             if older:
                 lines.append(
