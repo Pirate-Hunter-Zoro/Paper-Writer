@@ -804,6 +804,25 @@ and it had **two causes, both now addressed**.
   identity lines now comes back clean.** Run that audit after touching the prompt
   builder; it is three lines of Python and it catches what reasoning does not.
 
+- **Lord Scourge had no species at all in his prompt, and he is in ten illustrations.**
+  `species_of` reads the opening clause of a locked appearance and required the SEX WORD
+  TO BE ITS LAST WORD — the convention being "Togruta female, fifty-five…". Scourge
+  opens *"Sith pureblood male who reads as a hard forty and has for three centuries"*,
+  with no comma until well past "male", so he read as having no species. The emphatic
+  "Species is NOT optional and NOT human by default" line never named him, and `ch20_4`
+  came back giving him a Quarren's curtain of face tentacles.
+
+  Now the sex word may appear anywhere in that clause. Four characters were affected —
+  Scourge (10 slots), Darth Nyriss (2), Laotah and Vitiate (0 each).
+
+  **And the fix immediately regressed three humans, which the audit caught.** Loosening
+  the rule meant labels arrived with adjectives attached, and the old
+  `startswith("human")` check let "Middle-aged human", "Small neat human" and "Old
+  human" through as *species* — which would have put three ordinary people into the
+  "must be drawn as that species" line. Now "human" anywhere disqualifies, and a leading
+  descriptor is stripped so "Elderly Twi'lek" resolves to "Twi'lek".
+  Final audit: eight characters carry a species, every human is blank.
+
 - **Thinly-described minor characters drift, and it is NOT worth fixing in this book.**
   `ch20_3` failed on Lord Kelvath: the sheet shows a light-skinned man with dark hair
   swept back, the render gave a dark-skinned man with close-shorn hair. His entire

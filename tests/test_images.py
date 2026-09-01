@@ -2290,3 +2290,47 @@ class MachineWordsMustNotCatchPeople(unittest.TestCase):
 
     def test_the_actual_droid_is_still_caught(self):
         self.assertFalse(illustration.ages_visibly(self.DROID))
+
+
+class SpeciesSurvivesAnAppearanceThatRamblesFirst(unittest.TestCase):
+    """Lord Scourge is a Sith pureblood and was being declared as nothing at all.
+
+    The convention is "Togruta female, fifty-five…" — species, sex, comma — and the old
+    rule required the sex word to be the LAST word of the opening clause. Scourge opens
+    "Sith pureblood male who reads as a hard forty and has for three centuries", with no
+    comma until well past "male", so he read as having no species. The prompt's emphatic
+    "NOT human by default" line never named him, and he came back wearing a Quarren's
+    curtain of face tentacles — in a character who appears in ten illustrations."""
+
+    SCOURGE = {"appearance": "Sith pureblood male who reads as a hard forty and has for "
+                             "three centuries. Crimson, dark red skin.",
+               "age": "40", "costumes": ["black spiked armour"]}
+    TOGRUTA = {"appearance": "Togruta female, fifty-five, deep red skin.",
+               "age": "55", "costumes": ["olive robes"]}
+
+    def test_a_run_on_opening_still_yields_the_species(self):
+        self.assertEqual(illustration.species_of(self.SCOURGE), "Sith pureblood")
+
+    def test_the_ordinary_convention_still_works(self):
+        self.assertEqual(illustration.species_of(self.TOGRUTA), "Togruta")
+
+    def test_a_human_with_adjectives_is_still_no_species(self):
+        """Loosening the rule made labels arrive with adjectives attached, and a
+        startswith("human") check let "Middle-aged human", "Small neat human" and "Old
+        human" through as species — which would have put three ordinary people into the
+        "must be drawn as that species" line."""
+        for opening in ("Middle-aged human male, fifty",
+                        "Small neat human man, middle years",
+                        "Old human woman, seventy"):
+            self.assertEqual(illustration.species_of({"appearance": opening}), "",
+                             f"{opening!r} is a human")
+
+    def test_a_descriptor_is_stripped_from_a_real_species(self):
+        self.assertEqual(
+            illustration.species_of({"appearance": "Elderly Twi'lek female, sixty"}),
+            "Twi'lek")
+
+    def test_an_opening_with_no_sex_word_guesses_nothing(self):
+        """The guard that stops this inventing species out of clothing."""
+        for opening in ("red cloak, hooded", "brown hair, tall and stooped"):
+            self.assertEqual(illustration.species_of({"appearance": opening}), "")
