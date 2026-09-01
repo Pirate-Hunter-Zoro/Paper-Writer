@@ -795,6 +795,18 @@ and it had **two causes, both now addressed**.
   head-wrap, Braga as an elderly human in goggles — which were previously blamed on the
   model ignoring its references.
 
+  **One of them backfired on a different character, which is worth knowing.** For Lord
+  Scourge "tendrils" genuinely means a braided beard framing the jaw; for Lord Praven it
+  means eyebrows and nothing else. Naming tendrils at all gave Praven the Sith
+  tentacle-beard the model already expects — `ch30_2`, a failure mode he had never had
+  before the markers went in (his earlier failure was a respirator plate, a different
+  thing entirely). Fixed by making his own clause say **"tendrils ONLY where eyebrows
+  would be"** rather than reverting the markers, which are carrying real weight for
+  Kiwiiks, Braga and Scourge.
+  The general point: a word that identifies one alien can mislead about another, because
+  the model brings its own priors to it. Qualify the clause on the character it belongs
+  to.
+
   A caution about auditing, learned twice in ten minutes: my first pass used substring
   matching and reported Satele Shan as having non-human anatomy, because "fin" is inside
   "fine lines". **Use word boundaries before believing an audit**, or it will hand you a
