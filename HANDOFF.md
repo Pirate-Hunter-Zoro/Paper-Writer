@@ -1061,6 +1061,39 @@ prose-anchored pictures instead of anchored ones, rather than a stalled illustra
 the identity weakness the owner asked to fix. That is the thing to watch, and
 `scripts/unanchored-scenes.sh` counts it.
 
+## 6g. A rung that forbids a face was attaching it
+
+Found while reading a timeout dump for 6f, in the prompt itself. A rung-2 render said:
+
+> Kira Carsen is the ONLY person in the picture. Master Bela Kiwiiks is mentioned only
+> to say what is happening around them and **must NOT appear** — no second figure, no
+> silhouette, no face in the background
+
+with **Bela Kiwiiks's locked sheet attached to the request.** The prompt forbids the
+face; the upload supplies it.
+
+The cause is a straightforward drift. `build_scene_prompt` trims the cast as the ladder
+simplifies — rung 1 keeps two characters, rung 2 keeps one — but the reference bundle
+was built ONCE, before the loop, from the untrimmed cast, and never rebuilt. The prompt
+got simpler each rung while the attachments stayed the same.
+
+Two costs, and the second one bites hardest right now:
+
+  * the model is handed a face it was just told not to draw, at the exact rung that
+    exists to *rescue* a picture that already came out wrong;
+  * it spends upload slots on it. Uploads fail intermittently (6f) and every attachment
+    is another chance to fail — so the rung-2 retry was sending the MOST attachments to
+    draw the FEWEST characters.
+
+Fixed with one definition, `illustration.kept_at_rung`, used by both the prompt and the
+bundle so they cannot drift again. The reference list is now rebuilt per rung, and the
+vision critic is handed the same list the generator was — the project's standing rule
+that the two must judge the same document.
+
+Six tests, including one that walks rungs 0-2 and asserts that whoever the prompt still
+costumes is exactly whoever keeps their reference pictures. Reverting either half of the
+fix fails them.
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
