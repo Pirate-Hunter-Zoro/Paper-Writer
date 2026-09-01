@@ -758,6 +758,23 @@ and it had **two causes, both now addressed**.
   lines are cheap and stay, but if identity is still drifting in a week, look at cast
   size per picture first.
 
+  **The catch: chapters 1-32 were art-directed under the OLD guidance, and 88 of their
+  173 slots (51%) name three or more characters.** Scene briefs are chosen once, at
+  chapter acceptance, and stored; re-rendering rebuilds the prompt but not the choice of
+  moment or cast. So half the book's existing slots will keep failing identity on their
+  first attempts.
+
+  **That self-corrects, slowly and at a cost.** A crowded slot fails, descends the
+  ladder, gets trimmed to one character at rung 2, and then renders correctly — which is
+  exactly what `ch14_5` did. So those chapters end up with more single-figure pictures
+  than their briefs intended, after burning two or three extra renders each. It is not
+  wrong, just not what was composed.
+  Re-art-directing ch1-32 would fix the compositions properly and costs roughly 500
+  renders plus discarding ~170 existing pictures, many of them good. **Not done** — the
+  budget could take it (1720 left) but it is a big destructive call and the self-
+  correcting path is acceptable. Worth revisiting if the owner would rather have the
+  intended two-hander compositions than the current ones.
+
 - **Hair colour is a stated fact now too, and this reverses a documented decision.**
   `colouring_of` excluded hair because "hair and eye colour are the fine detail a
   reference carries well". **Eye colour still is. Hair colour is not**, and Kira Carsen
