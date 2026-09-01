@@ -92,8 +92,18 @@ def cycle(log):
                 log(f"rendered {dest.name}")
                 break
     except QuotaExceeded as quota:
-        wait = max(config.IMAGE_QUOTA_BACKOFF_SEC, int(quota.retry_after or 0) + 1)
-        log(f"image quota/rate limit; sleeping {wait}s")
+        # THIRD handler of this exception in the fleet, and the third to need the same
+        # question asked. `QuotaExceeded` means "come back later" and carries `source`
+        # to say who said so; a handler that ignores it reports the wrong cause and
+        # takes the wrong backoff. This one called a busy browser profile a rate limit
+        # and slept 120s over it, which is nearly three times the wait the contention
+        # actually needs. Any new handler must branch here too — see `engine/cycle.py`.
+        if getattr(quota, "source", "image") == "busy":
+            wait = max(config.IMAGE_BUSY_BACKOFF_SEC, int(quota.retry_after or 0) + 1)
+            log(f"the browser is busy elsewhere; waiting {wait}s (nothing parked)")
+        else:
+            wait = max(config.IMAGE_QUOTA_BACKOFF_SEC, int(quota.retry_after or 0) + 1)
+            log(f"image quota/rate limit; sleeping {wait}s")
         return wait
     except RuntimeError as exc:
         # One scene failing costs this cycle. The slot keeps its place in the queue and

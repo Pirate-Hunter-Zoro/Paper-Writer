@@ -1264,6 +1264,30 @@ TREND, not the count.** A self-healing failure and an escalating one look identi
 n=1. And the follow-on: a fix that ships is not a fix that works — this one passed its
 tests, went out, and was falsified by the next real event twelve minutes later.
 
+## 6k. Three handlers of one exception, and all three got it wrong
+
+`QuotaExceeded` means "come back later" and carries `source` to say who said so. There
+are three handlers of it in this fleet and on 2026-09-01 every one of them reported the
+wrong cause and took the wrong wait:
+
+  * `engine/cycle.py` decided model-vs-image by a substring **no raise site has ever
+    produced**, so every Claude session limit was announced as an image quota (6h).
+  * The same function then had no branch for profile contention, so a busy browser
+    became a NotSignedIn stall with a DOUBLING backoff (6j).
+  * `daemons/illustrator.py` called a busy browser profile a rate limit and slept
+    **120 seconds** over a collision that clears in well under one — while the sibling
+    daemon it was waiting for finished and went idle.
+
+None of these were failures of the mechanism. Deferral, backoff and revival all worked
+exactly as designed every time. What failed was the same thing three times: **a handler
+that knows an operation "wants to be retried later" and does not ask WHY.** The why
+decides both the wait and what the log tells a human, and getting it wrong is invisible —
+the system keeps running and the log keeps saying something plausible and false.
+
+If a fourth handler of `QuotaExceeded` is ever added, it must branch on `source`. The
+test for the illustrator one says so in its docstring, and the field exists precisely so
+that no future reader has to infer a cause from a message written elsewhere.
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
