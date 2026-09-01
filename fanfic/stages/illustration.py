@@ -859,6 +859,13 @@ def _character_line(name, spec, chapter_num=None):
     return line + "."
 
 
+# Words that describe a person rather than name their species, and turn up in front of
+# one because a locked appearance opens however its author felt like opening it.
+_NOT_A_SPECIES = {"old", "young", "elderly", "middle-aged", "small", "large", "big",
+                  "tall", "short", "neat", "heavy", "thin", "slight", "ageing",
+                  "aging", "aged", "greying", "graying"}
+
+
 def species_of(spec):
     """The character's species, when it is not human. "" for humans and unknowns.
 
@@ -867,15 +874,34 @@ def species_of(spec):
     with any trailing sex word removed."""
     first = str((spec or {}).get("appearance") or "").split(",")[0].strip()
     words = [w for w in first.split() if w]
-    # The clause must END in a sex word to count. That is the whole convention —
-    # "Togruta female", "Kel Dor male", "Human female" — and requiring it is what stops
-    # this guessing: an appearance opening "red cloak, hooded" or "brown hair, tall"
-    # otherwise yields "red cloak" as a species and puts it in the prompt as one.
-    if not words or words[-1].lower() not in ("male", "female", "man", "woman"):
+    # A sex word must be PRESENT in the opening clause, and the species is whatever
+    # precedes it. Requiring it to be the LAST word was too strict: the convention is
+    # "Togruta female, fifty-five…" but Lord Scourge opens "Sith pureblood male who
+    # reads as a hard forty and has for three centuries" — no comma until well past the
+    # sex word — so he was read as having no species at all, and the prompt's emphatic
+    # "NOT human by default" line never named him. He was rendered with a Quarren's
+    # curtain of face tentacles in a scene he appears in ten times over.
+    #
+    # Requiring the sex word to be present at all is what still stops this guessing: an
+    # appearance opening "red cloak, hooded" or "brown hair, tall" has none, and yields
+    # "" rather than "red cloak" as a species.
+    sexes = ("male", "female", "man", "woman")
+    at = next((i for i, w in enumerate(words) if w.lower().strip(".,") in sexes), None)
+    if at is None:
         return ""
-    label = " ".join(words[:-1]).strip(" .-")
-    if not label or label.lower().startswith("human"):
+    label = " ".join(words[:at]).strip(" .-")
+    # "human" ANYWHERE, not just at the front. Loosening the sex-word rule above meant
+    # labels now arrive with adjectives on them — "Middle-aged human", "Small neat
+    # human", "Old human" — and a prefix check let all three through as though they
+    # were species, which would have put three ordinary people into the prompt's
+    # "must be drawn as that species" line.
+    if not label or "human" in label.lower():
         return ""
+    # Strip a leading descriptor for the same reason: "Elderly Twi'lek" is a Twi'lek.
+    parts = label.split()
+    while len(parts) > 1 and parts[0].lower().strip("-") in _NOT_A_SPECIES:
+        parts = parts[1:]
+    label = " ".join(parts)
     return label if len(label.split()) <= 3 else ""
 
 
