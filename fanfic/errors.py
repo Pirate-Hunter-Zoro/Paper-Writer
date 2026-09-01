@@ -25,15 +25,30 @@ class RevisionNeeded(Exception):
 
 
 class QuotaExceeded(Exception):
-    """The image backend hit a rate limit / quota (HTTP 429, RESOURCE_EXHAUSTED).
+    """A backend hit a rate limit / quota and wants us to come back later.
 
     Deliberately NOT a RuntimeError: a RuntimeError out of an illustration stage
     parks the unit, but a quota hit must never fail a book. It means 'come back
     later' — the engine defers the remaining images, keeps the book in
     ILLUSTRATING, backs off, and retries, so a limited tier just means images
     trickle in over time. Carries the API's retry-after hint in seconds when one
-    is supplied."""
+    is supplied.
 
-    def __init__(self, reason, retry_after=None):
+    `source` says WHICH backend, and it is a field rather than something the reader
+    infers from the message. `engine/cycle.py` has to tell them apart — an image
+    ceiling thins a book while a model ceiling stops it, and only the second is worth
+    telling a human about — and it used to do that by testing for the substring
+    "spend/quota limit" in the message. No raise site has ever produced that string:
+    the text backend raises "... allowance ceiling: ...". So the model-side branch was
+    dead code, and every Claude session limit was announced as "image quota/rate limit
+    reached; deferring remaining images ... writing unaffected" — naming the wrong
+    backend, taking the wrong backoff, and omitting the one line that says a human may
+    need to act. Seen live on 2026-09-01: 44 minutes of that message while the thing
+    actually waiting was the writer.
+
+    Two modules agreeing on a substring is not a contract. This is."""
+
+    def __init__(self, reason, retry_after=None, source="image"):
         super().__init__(reason)
         self.retry_after = retry_after
+        self.source = source

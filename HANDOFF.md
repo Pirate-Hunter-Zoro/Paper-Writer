@@ -1094,6 +1094,42 @@ Six tests, including one that walks rungs 0-2 and asserts that whoever the promp
 costumes is exactly whoever keeps their reference pictures. Reverting either half of the
 fix fails them.
 
+## 6h. Every model ceiling was announced as an image one
+
+At 14:32Z on 2026-09-01 the fleet began logging, every two minutes for 44 minutes:
+
+    image quota/rate limit reached; deferring remaining images, retrying in 120s
+    (book stays ILLUSTRATING, writing unaffected)
+
+None of that was true. The line immediately above it said what had actually happened:
+
+    model spend/quota ceiling reached: You've hit your session limit
+    · resets 10:10am (America/Chicago)
+
+The **writer** had hit its Claude session limit. Writing was the only thing affected,
+and the illustrator was rendering happily throughout.
+
+`engine/cycle.py` tells the two ceilings apart because they mean opposite things — an
+image ceiling thins a book, a model ceiling stops it — and only the second is worth
+telling a human about. It did so by testing `"spend/quota limit" in str(quota)`.
+**Neither backend has ever raised that string.** The text provider raises
+`"... allowance ceiling: ..."` and the image provider `"gemini session limit: ..."`, so
+the model-side branch was dead code from the day it was written. Every model ceiling
+took the image backoff (120s instead of 300s), named the wrong backend, and omitted the
+line that says a human may need to lift the limit.
+
+Fixed with a field: `QuotaExceeded(..., source="model"|"image")`, set at both raise
+sites and read by `cycle`. Two modules agreeing on a substring is not a contract.
+
+Two tests, and reverting to the substring fails the model one. This was found only
+because the monitor surfaced 22 identical events and the message did not match what the
+illustrator was visibly doing — **a log line that names a cause is a claim, and this one
+had been false since it was written.** Same shape as the "send button is disabled"
+comment in 6f, discovered the same afternoon.
+
+The stall self-cleared at 15:16Z when the session limit rolled over, with no
+intervention and nothing lost — that part worked exactly as designed.
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side

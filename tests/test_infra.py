@@ -9,7 +9,9 @@ from pathlib import Path
 
 import support                                                    # noqa: F401
 
-from fanfic import paths, states                                  # noqa: E402
+from fanfic import config, paths, states                                  # noqa: E402
+from fanfic.engine import cycle                                   # noqa: E402
+from fanfic.errors import QuotaExceeded                           # noqa: E402
 from fanfic.infra import journal, storage                         # noqa: E402
 
 
@@ -227,3 +229,54 @@ class TheTruncatedPlanIsRetriedWithTheReason(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class AQuotaSaysWhichBackendHitIt(unittest.TestCase):
+    """An image ceiling thins a book; a model ceiling stops it. Only the second is
+    worth telling a human about, and the two need different backoffs.
+
+    `cycle` used to tell them apart by testing for the substring "spend/quota limit"
+    in the exception message. Neither backend has ever raised that string — the text
+    provider raises "... allowance ceiling: ..." — so the model-side branch was dead
+    code and every Claude session limit was announced as "image quota/rate limit
+    reached; deferring remaining images ... writing unaffected". Live on 2026-09-01
+    that ran for 44 minutes: the wrong backend named, the image backoff taken, and no
+    sign of the one line saying a human may need to act."""
+
+    def setUp(self):
+        support.wipe_state()
+
+    def _deferral(self, quota):
+        """Run one cycle whose only work raises `quota`, and return (wait, log)."""
+        series_id = support.drop("quota-probe")
+        logged = []
+
+        def boom(_records, _record, log_fn=None):
+            raise quota
+        original = cycle.series.advance
+        cycle.series.advance = boom
+        try:
+            wait = cycle.run(log_fn=logged.append)
+        finally:
+            cycle.series.advance = original
+        return wait, " ".join(logged), series_id
+
+    def test_a_model_ceiling_is_named_as_the_model(self):
+        wait, log, _sid = self._deferral(
+            QuotaExceeded("claude allowance ceiling: You've hit your session limit",
+                          source="model"))
+        self.assertIn("MODEL", log,
+                      f"a Claude ceiling must not be reported as an image one: {log}")
+        self.assertNotIn("writing unaffected", log,
+                         "writing is exactly what IS affected")
+        self.assertEqual(wait, config.MODEL_QUOTA_BACKOFF_SEC)
+
+    def test_an_image_ceiling_still_reads_as_images(self):
+        wait, log, _sid = self._deferral(
+            QuotaExceeded("gemini session limit: come back later"))
+        self.assertIn("image quota", log)
+        self.assertEqual(wait, config.IMAGE_QUOTA_BACKOFF_SEC)
+
+
+if __name__ == "__main__":
+    unittest.main()

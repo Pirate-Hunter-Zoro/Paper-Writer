@@ -74,7 +74,10 @@ def run(log_fn=print):
         # Never a failure, from either backend. Nothing is parked, no status changes,
         # and the unit is picked up again on a later cycle — so the run resumes by
         # itself the moment the ceiling lifts, with no re-drop and no lost work.
-        model_side = "spend/quota limit" in str(quota)
+        # The FIELD, not a substring of the message. See `QuotaExceeded`: the old
+        # test never matched anything either backend raised, so every model ceiling
+        # was reported as an image one.
+        model_side = getattr(quota, "source", "image") == "model"
         wait = (config.MODEL_QUOTA_BACKOFF_SEC if model_side
                 else config.IMAGE_QUOTA_BACKOFF_SEC)
         if quota.retry_after:
