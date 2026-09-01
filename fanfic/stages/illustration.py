@@ -957,10 +957,26 @@ _SEX_WORDS = {"male": "man", "man": "man", "female": "woman", "woman": "woman"}
 # out. Skin tone is different in kind: it is a broad-area property the model overrides
 # wholesale rather than a detail it renders imprecisely, and the critic's complaint was
 # never "the eyes are slightly off", it was "several shades lighter than the sheet".
-_COLOUR_SUBJECTS = ("skin", "complexion", "scales", "fur", "feathers")
+# HAIR IS IN THIS LIST NOW, AND IT WAS DELIBERATELY OUT. The original reasoning was
+# that hair and eye colour are fine facial detail a reference picture carries well, so
+# repeating them in words only gives the model a second description to average with the
+# first. That is right about EYE colour, which stays out. It is measurably wrong about
+# hair colour.
+#
+# Kira Carsen is the proof, four times over. Her locked sheet is unambiguous — three
+# views including a large head close-up, dark auburn hair, freckles, the scar on the
+# left cheekbone — and it was attached to the render ("conditioned on 6 reference
+# picture(s)") every time. She came back a golden blonde every time, and the critic's
+# words never changed: "hair colour and cut are the two things a reader recognises Kira
+# by, and neither is present".
+#
+# So hair colour behaves like skin tone rather than like a jaw: it is a broad flat area
+# the model fills from its own defaults, not a shape a photograph settles. Blonde is the
+# default it reaches for; nothing in the prompt said otherwise.
+_COLOUR_SUBJECTS = ("skin", "complexion", "scales", "fur", "feathers", "hair")
 
 
-def colouring_of(spec, limit=1):
+def colouring_of(spec, limit=2):
     """Short colour clauses — skin, eyes, hair — from a locked appearance.
 
     The fourth category to be put back into an anchored prompt, after species, sex and
@@ -983,6 +999,12 @@ def colouring_of(spec, limit=1):
         c = " ".join(clause.split()).strip(" -")
         if not c or len(c) > 60:
             continue
+        # Clauses inherit the conjunction that joined them ("and very short dark brown
+        # hair", "with dark red hair kept short"), which reads as a fragment in a list
+        # of facts. `signature_marks` strips these for the same reason.
+        for lead in ("and ", "with ", "plus ", "but "):
+            if c.lower().startswith(lead):
+                c = c[len(lead):]
         low = c.lower()
         if any(sub in low for sub in _COLOUR_SUBJECTS):
             out.append(c[:1].lower() + c[1:])
