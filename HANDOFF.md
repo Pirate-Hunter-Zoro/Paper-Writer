@@ -197,76 +197,38 @@ commits.
 
 Nothing here is blocking. These are judgements already made; revisit only with evidence.
 
-- **Nearly a third of chapters ship worse than a pass had already made them, and I did
-  NOT change it.** The loop keeps the LAST version, never the best one. At 18 chapters,
-  5 of them (28%) shipped carrying **11 blocking defects a previous pass had already
-  cleared**:
+- **RETRACTED: "a third of chapters ship worse than their best". I misread the
+  trajectory.**
 
-      ch4    3 -> 1 -> 3 -> 4               best 1, shipped 4
-      ch6    7 -> 1 -> 1 -> 2               best 1, shipped 2
-      ch15   3 -> 4 -> 4                    best 3, shipped 4
-      ch16   6 -> 4 -> 4 -> 1 -> 3 -> 4     best 1, shipped 4
-      ch17   7 -> 2 -> 5 -> 5               best 2, shipped 5
+  I spent several hours treating the last number in `ACCEPTED (6 -> 4 -> 1 -> 3 -> 4)`
+  as "defects remaining in the shipped text", built a case that ~11 blocking defects had
+  shipped that an earlier pass had already cleared, called it the biggest known quality
+  leak in the pipeline, and specified an experiment to fix it.
 
-  `_still_improving` compares the *minimum* over its window, so one good pass sustains
-  the loop through the bad passes that follow it — ch16 went 1, then 3, then 4, and
-  shipped the 4; ch17 went 2, then 5, and shipped the 5.
+  **The last number is what the final pass FOUND AND REPAIRED.** The log line says so in
+  words — *"its last pass repaired the 9 defect(s) it found"* — and the journal confirms
+  it: of 38 accepted chapters, **2** carry `outstanding_issues`; the other 36 carry only
+  `unverified_repairs`, meaning every defect found was fixed and nothing has re-read the
+  fix. A high final number means the last pass did a lot of work, not that the chapter
+  shipped broken.
 
-  **I ran the experiment this section used to ask for, and it settles the size of the
-  problem without settling the fix.** The editor was run three times over the same
-  unchanged accepted chapter — no edits between reads, so any variation is the judge:
+  So there is no "ship the best pass instead of the last" leak. The last version is the
+  one with the most repairs applied to it; it is very likely the best version, and the
+  earlier snapshot I proposed shipping instead is the one that still contains what the
+  later pass found.
 
-      ch18 (near-clean)    [0, 1, 1]   spread 1
-      ch17 (shipped 5)     [2, 3, 1]   spread 2
+  **What is actually true, and much narrower:** the final repairs are unread. That is
+  exactly and only what the REVISION sweep exists for, and every chapter is already
+  queued for it. Nothing needs building.
 
-  **The judge is stable to about +-2, and it is not inventing defects.** All three ch17
-  reads named the same core continuity error (Angral's "three more of these"); the
-  rite's-clock contradiction appeared in two of three, and "the Empire has disowned him"
-  in one. The variance is detection *sensitivity* on weaker defects, not disagreement
-  about what is wrong.
+  A caution for whoever reads a trajectory next: `6 -> 4 -> 1 -> 3 -> 4` describes what
+  each pass found in the text it was given, and each pass then edits that text. It is a
+  record of work done, not a quality curve, and the final figure is the size of the last
+  repair rather than the size of the remaining problem.
 
-  That kills the argument this section used to make. I had cited ch18's `1 -> 7 -> 1` as
-  proof the judge was unreliable — **it is not, because those three passes each read
-  DIFFERENT text.** Every pass edits what it reads. Pass 1 really did introduce about six
-  defects and pass 2 really did repair them.
-
-  Testing the shipped-worse cases against the measured +-2 floor:
-
-      ch4    1 -> 4   gap 3   real degradation
-      ch16   1 -> 4   gap 3   real degradation
-      ch17   2 -> 5   gap 3   real degradation
-      ch6    1 -> 2   gap 1   within noise
-      ch15   3 -> 4   gap 1   within noise
-      ch19   2 -> 4   gap 2   within noise
-
-  So of 19 chapters, **3 lost roughly 9 real blocking defects** to later passes; the
-  other three "losses" are measurement noise. Half the leak I was reporting is not there.
-
-  **Still not implemented, and now for a reason the data cannot resolve.** Shipping an
-  earlier snapshot means discarding every later pass's *craft* edits along with its
-  damage, and nothing measures whether that trade is worth it — blocking count is not
-  the only axis the prose is judged on. A defensible rule would be "ship the earlier
-  version only when it measured at least 3 better", which fires on exactly those three
-  chapters, but it needs prose snapshotted per pass and it changes what text ships,
-  which is the most consequential change available in this pipeline.
-  **What would decide it:** take a chapter's best snapshot and its shipped text and have
-  the editor judge them against each other on craft as well as continuity. If the
-  earlier text is not worse to read, the rule is safe.
-
-  **That experiment could not be run, so the missing piece is now in place.** The better
-  version was overwritten by the next pass every time — there was nothing to compare.
-  `paths.pass_snapshot_path` keeps each pass's prose beside the draft now, and
-  `_edit_to_clean` writes one after every pass that applies anything. **Nothing reads
-  them and nothing about what ships changes**; a pass costs a few tens of KB. **Live from
-  chapter 21** — ch20 was accepted three minutes before the deploy — and confirmed on
-  disk: `state/tmp/pass_swtor-jedi-knight_b1_ch21_p0*.md`, one per applied pass.
-  To settle the question when a chapter next ships worse than its best, diff its lowest
-  snapshot against `state/series/<sid>/book/1/chapters/chNN.md` and have the editor
-  judge both on craft as well as continuity.
-  (A clean pass writes none, deliberately — it applied no edits, so it has no new text.)
-
-  (Parsing note for anyone recomputing this: `ACCEPTED holding 1 issue(s)` puts a paren
-  in the line, so match the LAST parenthesised run of digits and arrows, not the first.)
+  (The pass snapshots added tonight are still worth keeping — they make it possible to
+  compare versions at all — but the question they were built to answer turned out to
+  rest on a misreading.)
 
 - **First clean evidence for the pass budget, now that restarts stop corrupting it.**
   Chapter 13 ran `6 -> 3 -> 2 -> 1 -> 2 -> 0` — six passes, the first chapter in the run
