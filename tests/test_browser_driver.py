@@ -287,6 +287,42 @@ class DriverAgainstAFakeGemini(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["kind"], "quota")
 
+    def test_an_unreachable_page_is_not_reported_as_a_lost_login(self):
+        """The only diagnosis in this driver that asks a HUMAN to act.
+
+        "Not signed in" tells somebody to run scripts/gemini-login.sh. It used to fire
+        whenever the page never reached a composer — including when the page never
+        arrived at all. On 2026-09-01 that was wrong 18 times out of 18: every
+        "not signed in" dump was a Chrome network error page reading
+        ERR_NAME_NOT_RESOLVED, while curl on the same machine fetched
+        gemini.google.com in 0.24 seconds. A DNS blip inside the browser, reported as
+        a lost login, with a script for the owner to run.
+
+        Pointing the driver at a dead port is exactly that shape: nothing to connect
+        to, and nothing whatsoever wrong with the session."""
+        import socket
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        dead = probe.getsockname()[1]
+        probe.close()                      # nothing is listening there now
+
+        env = dict(os.environ)
+        env["GEMINI_PROFILE_DIR"] = str(self.profile)
+        env["GEMINI_ART_URL"] = f"http://127.0.0.1:{dead}/"
+        env.pop("GEMINI_ART_HEADFUL", None)
+        proc = subprocess.run(
+            [os.environ.get("FANFIC_NODE_BIN", "node"),
+             str(ROOT / "tools" / "gemini_art.js"),
+             "--out", str(self.tmp / "unreachable.png"),
+             "--prompt", "a red fox", "--timeout", "40"],
+            capture_output=True, text=True, env=env, timeout=180)
+        result = json.loads([l for l in proc.stdout.splitlines() if l.strip()][-1])
+
+        self.assertFalse(result["ok"], result)
+        self.assertNotEqual(result["kind"], "not_signed_in",
+                            f"a dead network is not a lost login: {result}")
+        self.assertEqual(result["kind"], "browser_unavailable", result)
+
     def test_a_guest_session_is_not_mistaken_for_a_refusal(self):
         """THE trap this driver was built around. A signed-out visitor gets a working
         chat on a cut-down model that answers text and declines every picture, in the
