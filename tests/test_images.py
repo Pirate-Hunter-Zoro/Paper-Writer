@@ -2122,3 +2122,52 @@ class AgeIsNotDecoration(unittest.TestCase):
             "She stands on a ridge.", [("Alyn", self.ALYN)],
             anchored=True, chapter_num=1)
         self.assertNotIn("Age is NOT optional", prompt)
+
+
+class ALengthCapMustNotEatTheColourItCarries(unittest.TestCase):
+    """The clause filter silently dropped the facts it existed to deliver.
+
+    Bela Kiwiiks is a Togruta: "deep red skin marked with broad white bands across the
+    montrals and down the front of each lek". Ninety-four characters, against a
+    sixty-character cap — so her skin colour reached no prompt at all, and she was
+    rendered with a pale ashen-grey face and the markings inverted. A filter that drops
+    a fact for being described thoroughly is worse than no filter."""
+
+    KIWIIKS = {"appearance": "Togruta female, fifty-five, deep red skin marked with "
+                             "broad white bands across the montrals and down the front "
+                             "of each lek, blue eyes.",
+               "age": "55", "costumes": ["olive robes"]}
+
+    def test_a_long_colour_clause_survives(self):
+        self.assertIn("deep red skin marked with broad white bands",
+                      " ".join(illustration.colouring_of(self.KIWIIKS)))
+
+    def test_it_reaches_the_costume_line(self):
+        line = illustration._costume_line("Bela Kiwiiks", self.KIWIIKS, 1)
+        self.assertIn("deep red skin", line)
+
+    def test_history_is_not_a_colour(self):
+        """Raising the cap without this put lore into prompts: Vitiate's "original
+        red-skinned Sith body has been gone for over a millennium" was being offered as
+        his current appearance."""
+        lore = {"appearance": "Reads as fifty, and his original red-skinned Sith body "
+                              "has been gone for over a millennium, ashen-lilac skin "
+                              "over a narrow ridged skull."}
+        got = illustration.colouring_of(lore)
+        self.assertTrue(got)
+        self.assertNotIn("has been gone", " ".join(got))
+        self.assertIn("ashen-lilac skin", " ".join(got))
+
+    def test_staging_is_not_a_colour(self):
+        staged = {"appearance": "Stands behind furniture and in doorways so he is "
+                                "rarely fully visible, grey-white skin."}
+        got = illustration.colouring_of(staged)
+        self.assertEqual(got, ["grey-white skin"])
+
+    def test_a_whole_paragraph_is_still_refused(self):
+        """The cap still exists. Past ~100 characters a clause has stopped being a fact
+        and started being the appearance paragraph the anchoring doctrine keeps out."""
+        rambling = {"appearance": "Her skin carries the particular weathering of "
+                                  "somebody who has spent a decade outdoors in hard "
+                                  "country under two suns and never once complained."}
+        self.assertEqual(illustration.colouring_of(rambling), [])

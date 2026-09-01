@@ -976,6 +976,17 @@ _SEX_WORDS = {"male": "man", "man": "man", "female": "woman", "woman": "woman"}
 _COLOUR_SUBJECTS = ("skin", "complexion", "scales", "fur", "feathers", "hair")
 
 
+# A clause about history, conditions or staging is not a description of what this
+# picture should show. Without this guard, raising the length cap put Vitiate's
+# "original red-skinned Sith body has been gone for over a millennium" and Lord
+# Nefarid's "standing behind furniture and in doorways so he is rarely fully visible"
+# into their prompts as though they were colours.
+_NOT_PRESENT_TENSE = re.compile(
+    r"\b(has been|have been|had been|used to|gone for|no longer|rarely|never|"
+    r"before that|after the|once was|so he is|so she is|is replaced|becomes|until)\b",
+    re.I)
+
+
 def colouring_of(spec, limit=2):
     """Short colour clauses — skin, eyes, hair — from a locked appearance.
 
@@ -997,7 +1008,13 @@ def colouring_of(spec, limit=2):
     out = []
     for clause in re.split(r"[;,.—–]", text):
         c = " ".join(clause.split()).strip(" -")
-        if not c or len(c) > 60:
+        # 100, not 60. The tighter cap silently dropped the identity-critical facts it
+        # existed to carry: Bela Kiwiiks is "deep red skin marked with broad white bands
+        # across the montrals and down the front of each lek" — 94 characters — so her
+        # skin colour never reached a prompt at all, and she was rendered pale grey with
+        # the markings inverted. Measured across the whole cast, 100 with the
+        # present-tense guard below recovers twelve real colour facts and admits no junk.
+        if not c or len(c) > 100 or _NOT_PRESENT_TENSE.search(c):
             continue
         # Clauses inherit the conjunction that joined them ("and very short dark brown
         # hair", "with dark red hair kept short"), which reads as a fragment in a list
