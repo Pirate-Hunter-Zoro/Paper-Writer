@@ -2334,3 +2334,45 @@ class SpeciesSurvivesAnAppearanceThatRamblesFirst(unittest.TestCase):
         """The guard that stops this inventing species out of clothing."""
         for opening in ("red cloak, hooded", "brown hair, tall and stooped"):
             self.assertEqual(illustration.species_of({"appearance": opening}), "")
+
+
+class AlienAnatomyIsNamed(unittest.TestCase):
+    """Declaring the SPECIES was not enough on its own.
+
+    Bela Kiwiiks was drawn as a human in a head-wrap, Tol Braga as an elderly human in
+    goggles, and Lord Scourge with a Quarren's curtain of face tentacles — each with a
+    correct reference sheet attached and, latterly, their species declared. The features
+    a reader actually identifies an alien by — montrals, lekku, tendrils, a breath mask —
+    were in nobody's prompt. Sixty-six slot-appearances in the first book carry one."""
+
+    KIWIIKS = {"appearance": "Togruta female, fifty-five, deep red skin, and the tall "
+                             "curved montrals of a mature Togruta above three "
+                             "chevron-striped lekku.",
+               "age": "55", "costumes": ["olive robes"]}
+    BRAGA = {"appearance": "Kel Dor male, sixty-five, orange-yellow skin, a ribbed "
+                           "antiox breath mask covering the lower face.",
+             "age": "65", "costumes": ["cream robes"]}
+    HUMAN = {"appearance": "Human male, forty-five, fair skin, and a pale vertical scar "
+                           "through the left eyebrow.",
+             "age": "45", "costumes": ["robes"]}
+
+    def test_montrals_and_lekku_reach_the_prompt(self):
+        marks = " ".join(illustration.signature_marks(self.KIWIIKS)).lower()
+        self.assertTrue("montral" in marks or "lekku" in marks, marks)
+
+    def test_a_breath_mask_reaches_the_prompt(self):
+        marks = " ".join(illustration.signature_marks(self.BRAGA)).lower()
+        self.assertIn("antiox", marks)
+
+    def test_a_humans_marks_are_not_displaced(self):
+        """The list is longer now; a scar must not be crowded out by it."""
+        marks = " ".join(illustration.signature_marks(self.HUMAN)).lower()
+        self.assertIn("scar", marks)
+
+    def test_the_line_does_not_repeat_itself(self):
+        """Kiwiiks's skin clause now matches BOTH sources — `colouring_of` for "skin"
+        and `signature_marks` for "montral" — so the dedupe has to hold."""
+        line = illustration._costume_line("Kiwiiks", self.KIWIIKS, 1)
+        tail = line.split("Always:")[-1]
+        clauses = [c.strip().lower().rstrip(".") for c in tail.split(";")]
+        self.assertEqual(len(clauses), len(set(clauses)), line)

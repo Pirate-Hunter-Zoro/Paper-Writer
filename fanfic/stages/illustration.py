@@ -927,6 +927,14 @@ _SIGNATURE_MARKERS = (
     # prompt was the "red" of a restraining bolt he should not have been wearing since
     # chapter 3 — but nothing in the prompt ever said blue.
     "sensor eye", "photoreceptor", "optical sensor", "sensor lens", "optic",
+    # NON-HUMAN ANATOMY, for the same reason as the droid's eye above. These are the
+    # features a reader identifies an alien by, and the model does not take them off a
+    # reference picture: Bela Kiwiiks was drawn as a human in a head-wrap, Tol Braga as
+    # an elderly human in goggles, and Lord Scourge with a Quarren's curtain of face
+    # tentacles — each with their sheet attached. Declaring the SPECIES was not enough;
+    # the anatomy has to be named too. 66 slot-appearances in this book carry one.
+    "tendril", "montral", "lekku", "head-tail", "antenna", "breath mask", "antiox",
+    "spur", "frill", "mandible", "carapace",
 )
 
 # How many of them reach the prompt. Two, because the point is a silhouette cue, not a
