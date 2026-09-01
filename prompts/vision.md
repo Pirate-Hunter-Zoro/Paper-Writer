@@ -40,6 +40,24 @@ wrong — melted hands, a limb from nowhere, two people fused, a face that has c
 Text, lettering, watermarks, or panel borders, none of which belong. An image so muddy,
 cluttered or dark that you cannot tell what you are looking at.
 
+**A named character whose face is not in the frame is a FAILED picture, and this is a
+separate question from anatomy.** A figure can be anatomically perfect and still be
+useless because the crop cut their head off. If a person is in this picture at all,
+their face must be visible and readable — not turned fully away, not cropped at the
+neck, not lost in shadow, not hidden behind the thing they are holding. The nearer they
+are to the camera, the more this matters: the figure in the foreground is the subject,
+and a subject with no face is not a portrait of anybody.
+
+This is a real failure and the reason this paragraph exists. Chapter 1 of the first
+book shipped an illustration whose foreground subject — a Jedi Master holding a blade up
+to read the maker's mark — was cropped at the shoulders. Perfect hands, perfect blade,
+no head. It passed, because nothing on this list forbade it and a tight crop is a
+legitimate choice in general. It is not legitimate for the person the picture is of.
+
+Judge this on the picture alone. You are not being told what the scene was supposed to
+show, and you do not need to be: "is there a face where a face should be" is answerable
+from the image.
+
 That is the whole job. If both answers are good, it passes.
 
 ## What is NOT your business

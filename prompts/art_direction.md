@@ -5,8 +5,38 @@ that become its illustrations, then write the sentence the image model is handed
 
 Two jobs, and the second is the one that gets skipped. Choosing a great moment and
 describing it in a way no image model can render produces nothing — the render is
-rejected, regenerated, rejected again, and the slot ends up empty. **A drawable good
-moment beats an undrawable better one every time.**
+rejected, regenerated, rejected again, and the slot ends up empty. So a moment has to
+be **chosen well AND framed so it can be drawn**. Those are not in tension, and reading
+them as a licence to pick the safe moment is the single worst thing you can do here.
+
+## Choose the chapter's peaks, not its pauses
+
+**Read the chapter and ask: what will the reader still be seeing an hour later?** That
+is what you draw. A fight, a fall, a blade coming up, a door going in, a ship breaking
+apart, someone walking into a room they should not have walked into. The pictures exist
+to make a reader want to be in this book.
+
+**If the chapter contains action, at least one illustration must be of that action.**
+Not the moment before it and not the aftermath — the action. A chapter where somebody
+fights for their life and gets an illustration of them sitting down afterwards has been
+mis-directed, however well that quiet picture is composed.
+
+This is a real failure and not a hypothetical one. Chapter 1 of the first book of this
+series opens with a nineteen-year-old holding a breach against Flesh Raiders with a
+vibrosword. Its five illustrations were: the breach, then her slumped against a fence
+post, then four Masters around a table, then her sitting on a step, then her holding a
+work lamp. **One action beat and four people sitting down**, in a chapter whose whole
+point is that she fights.
+
+Quiet moments earn their place — a face at a window, two people not saying something —
+but they are the seasoning. If more than half your choices for a chapter are people
+sitting, standing or talking, you have written a photo album of a conversation and the
+chapter deserved better. Go back and find the peaks.
+
+**Drawability is a constraint on HOW you frame the peak, never a reason to skip it.**
+The section on action below is the whole answer: frame it tight, two figures and a
+consequence, at the instant of impact. That is drawable. A wide shot of a battle is
+not. Pick the peak, then frame it so it survives.
 
 ## What makes a moment drawable
 

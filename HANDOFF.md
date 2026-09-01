@@ -662,6 +662,51 @@ delete the image and its `.retry` and the illustrator redraws it from rung 0.
 
 ---
 
+## 6d. Owner feedback on the art, 2026-09-01 — three real defects
+
+Read chapter 1 and its pictures. The prose was fine; the art was not. All three
+complaints were correct and all three had different causes.
+
+**1. A foreground subject with no head.** `ch01_3`: Jaric Kaedan holds a blade up to
+read the maker's mark, and the frame cuts him off at the shoulders. Perfect hands,
+perfect blade, no face. **The vision critic passed it** — its craft list covered
+generative anatomy failures (melted hands, fused bodies) and said nothing about a crop,
+and a tight crop is legitimate in general. `prompts/vision.md` now fails a named
+character whose face is not in frame, as a question separate from anatomy. It is
+answerable from the image alone, so it does NOT require handing the critic the staging
+description — which was removed for good reason and must stay removed (it nitpicked
+props until slots were skipped).
+
+**2. Satele Shan reads about thirty-five.** Her locked design is fifty-six with lined
+eyes. This is the run's worst recurring identity failure — ten of twenty-one
+`WRONG CHARACTER` verdicts — and it is not fixed. See §6a for the negation half of it.
+
+**3. The pictures show the quiet moments and skip the action.** Chapter 1 opens with a
+nineteen-year-old holding a breach against Flesh Raiders. Its five illustrations were:
+the breach, her slumped against a fence post, four Masters around a table, her sitting
+on a step, her holding a work lamp. **One action beat and four people sitting down.**
+
+Two separate causes, and both are fixed:
+
+  * *Selection.* `prompts/art_direction.md` opened with "a drawable good moment beats an
+    undrawable better one every time" — written after undrawable briefs produced empty
+    slots, and overcorrected into always choosing the safe moment. It now leads with
+    choosing the chapter's peaks, requires that **a chapter containing action gets at
+    least one illustration of that action**, and says drawability constrains HOW a peak
+    is framed, never whether it is picked.
+  * *Rendering.* The one action beat that WAS chosen, `ch01_1`, rendered as an empty
+    yard — debris, no Alyn, no Flesh Raiders. It failed down the ladder to the
+    empty-room rung. **19 of 106 pictures (18%) are empty rooms and every one of them
+    had a brief naming characters.** I had earlier looked at two of those, found them
+    atmospheric, and called them "fine, not damage" — that was generalising from two
+    scenes that happened to work as establishing shots. `ch01_1` is a total loss.
+
+**Redraw list.** The 19: ch01_1, ch01_4, ch03_1, ch03_2, ch06_5, ch08_2, ch14_5, ch18_1,
+ch18_2, ch18_4, ch18_5, ch19_4, ch19_5, ch19_6, ch20_1, ch20_3, ch20_4, ch20_5, ch21_1.
+Delete the `.png` and its `.retry` and the illustrator redraws from rung 0.
+
+---
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
