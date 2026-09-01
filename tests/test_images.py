@@ -2420,3 +2420,22 @@ class AMachineIsDeclaredAMachine(unittest.TestCase):
     def test_a_person_keeps_theirs(self):
         line = illustration._costume_line("Alyn", self.HUMAN, 1)
         self.assertIn("19", line)
+
+
+class AClauseDoesNotEndOnItsConjunction(unittest.TestCase):
+    """Prell's locked appearance reads "grey-streaked hair scraped back and, after the
+    ridge, full of grit". The comma after "and" splits the clause so it finishes on the
+    conjunction, and the prompt carried "grey-streaked hair scraped back and" — untidy
+    rather than misleading, but it costs nothing to strip."""
+
+    def test_a_trailing_conjunction_is_removed(self):
+        spec = {"appearance": "Human woman, grey-streaked hair scraped back and, after "
+                              "the ridge, full of grit."}
+        self.assertEqual(illustration.colouring_of(spec),
+                         ["grey-streaked hair scraped back"])
+
+    def test_a_conjunction_inside_the_clause_survives(self):
+        """Only a TRAILING one goes; "salt and pepper" is not a dangling conjunction."""
+        spec = {"appearance": "Human man, salt and pepper hair cut close."}
+        self.assertEqual(illustration.colouring_of(spec),
+                         ["salt and pepper hair cut close"])

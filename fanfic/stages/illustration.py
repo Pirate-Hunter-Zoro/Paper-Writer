@@ -1056,6 +1056,10 @@ def colouring_of(spec, limit=2):
         for lead in ("and ", "with ", "plus ", "but "):
             if c.lower().startswith(lead):
                 c = c[len(lead):]
+        # A clause can also END on the conjunction that joined it to the next one, when
+        # the appearance puts a comma after it: Prell's "hair scraped back and, after
+        # the ridge, full of grit" splits into a clause finishing on "and".
+        c = re.sub(r"\s+(and|with|or|but)$", "", c).strip()
         low = c.lower()
         if any(sub in low for sub in _COLOUR_SUBJECTS):
             out.append(c[:1].lower() + c[1:])
