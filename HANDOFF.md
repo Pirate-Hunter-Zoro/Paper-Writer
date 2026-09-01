@@ -766,6 +766,25 @@ and it had **two causes, both now addressed**.
   identity lines now comes back clean.** Run that audit after touching the prompt
   builder; it is three lines of Python and it catches what reasoning does not.
 
+- **T7-O1 was never declared a droid — in forty-seven illustrations.** He appears in
+  more pictures than any other character, and **the word "droid" was in none of their
+  prompts.** `species_of` declares a species by reading "Togruta female" out of the
+  opening clause; it requires a sex word, and a droid has none. So T7 fell through every
+  net at once: no species, no sex, just `T7-O1 (200)` and a costume line. The reference
+  sheet was the only thing saying he was a machine, and when it was diluted across a
+  crowded frame the model drew what the words implied — `ch23_5` came back with "a tall
+  bald humanoid alien with a radiating crown" and no droid in the picture at all.
+
+  Machines are now declared beside the species line: *"T7-O1 is a MACHINE, not a person:
+  a droid chassis with no face, no skin and no human features of any kind."* The age
+  parenthetical is dropped for them too — `T7-O1 (200)` was a number with no face
+  attached, and it is what put an elderly human head on him earlier tonight.
+
+  **The pattern across every identity fix tonight: the checks were all written for
+  people.** Species needs a sex word. Age assumes a face. Skin and hair assume both. A
+  droid satisfies none of those preconditions and so was silently exempt from all of
+  them, in the character with the most screen time in the book.
+
 - **Declaring the species was not enough: the alien ANATOMY was in nobody's prompt.**
   Once Scourge had his species (below), the failure simply moved — `ch20_5` gave him a
   smooth, spur-free face with ordinary ears, missing the braided tendril beard entirely.
