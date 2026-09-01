@@ -1259,6 +1259,34 @@ def _location_line(spec):
     return text + "." if text else ""
 
 
+def kept_at_rung(items, simplify):
+    """Which of a scene's characters survive the simplification ladder at this rung.
+
+    ONE definition, used by both the prompt and the reference list, because they were
+    drifting apart and the drift was invisible. `build_scene_prompt` trims the cast per
+    rung; the reference bundle was built ONCE from the untrimmed cast, before the ladder
+    started. So at rung 2 a render went out saying "Kira Carsen is the ONLY person in
+    the picture. Master Bela Kiwiiks ... must NOT appear — no second figure, no
+    silhouette, no face in the background" with Bela Kiwiiks's locked sheet attached to
+    it. The prompt forbids the face and the upload supplies it.
+
+    Two costs, and the second is the one that hurts right now. It hands the model a face
+    it was just told not to draw. And it spends scarce upload slots on it: uploads fail
+    intermittently (see HANDOFF 6f), every attachment is a chance to fail, and the
+    rung-2 retry — the one that exists to RESCUE a picture that already came out wrong —
+    was sending the most attachments with the fewest characters to draw.
+
+    Positional, matching the trim it mirrors: the ladder keeps the front of the cast,
+    which the art direction orders foreground-first."""
+    if simplify >= 3:
+        return []
+    if simplify >= 2:
+        return list(items[:1])
+    if simplify == 1:
+        return list(items[:2])
+    return list(items)
+
+
 def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=None,
                        simplify=0, location=None, chapter_num=None, anchored=False):
     """The prompt for one scene, written the way an image model reads best.
@@ -1332,7 +1360,7 @@ def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=Non
         # its description explicitly and rung 2 did not, which was an inconsistency
         # rather than a decision.
         dropped = [n for n, _s in cast[1:]]
-        cast = cast[:1]
+        cast = kept_at_rung(cast, simplify)
         who = cast[0][0] if cast else "the character"
         scene = f"{who}, a single clear portrait, in the setting of: {scene}"
         if dropped:
@@ -1343,7 +1371,7 @@ def build_scene_prompt(scene_desc, cast_specs, orientation="portrait", style=Non
                       f"NOT appear — no second figure, no silhouette, no face in the "
                       f"background")
     elif simplify == 1:
-        cast = cast[:2]
+        cast = kept_at_rung(cast, simplify)
         # Keep the first clause of the staging — the subject and its action — and drop
         # the trailing detail, which is where the impossible instructions live.
         scene = scene.split(",")[0].strip() or scene
@@ -1843,7 +1871,8 @@ def render_scene(entry, log_fn=None):
     # or two people in front and the rest staged behind; this is the renderer agreeing
     # with it. The people in front are identified by looking like people, and the ones
     # behind are identified by being where the scene says they are.
-    references = _scene_references(sid, book_num, names)
+    # Built per rung inside the loop below, from the cast that rung actually draws —
+    # see `kept_at_rung`.
     orientation = entry.get("orientation", "portrait")
     aspect = _aspect_for(orientation)
     # Identity ground truth for the critic. Stored at enqueue time; rebuilt from the
@@ -1909,6 +1938,12 @@ def render_scene(entry, log_fn=None):
         # no words either.
         will_attach = rung < 3 and config.IMAGE_MAX_UPLOADS > 0
         prompt = _scene_prompt(will_attach)
+        # Rebuilt per rung, NOT once before the ladder: the prompt trims the cast as it
+        # simplifies, and the attachments have to trim with it or the render is told
+        # "this person must NOT appear" while being handed their face. See
+        # `kept_at_rung`.
+        rung_references = _scene_references(
+            sid, book_num, kept_at_rung(names, rung))
         # The SAME scene with the appearance paragraphs left in, held ready in case
         # Gemini refuses the uploads. `anchored=True` drops those paragraphs because a
         # picture describes a face better than prose — true only while the picture is
@@ -1928,14 +1963,14 @@ def render_scene(entry, log_fn=None):
             billed_render(prompt, staged,
                           f"scene:b{book_num}c{entry['chapter_num']}"
                           f"k{entry['k']}:{rung + 1}", sid,
-                          references=(references if rung < 3 else None),
+                          references=(rung_references if rung < 3 else None),
                           log_fn=log_fn, aspect=aspect,
                           prompt_without_refs=prompt_without_refs)
             # The critic is handed exactly what the generator was handed. Anything
             # else and the two of them are judging different documents, which is the
             # one failure mode this pipeline reproduces at every layer it has.
             verdict = vision_verdict(staged, spec_text,
-                                     references=(references if rung < 3 else ()),
+                                     references=(rung_references if rung < 3 else ()),
                                      log_fn=log_fn)
         except (QuotaExceeded, NotSignedIn):
             # Neither is a defect in THIS prompt, so neither may consume a rung of the
@@ -1985,7 +2020,6 @@ def render_scene(entry, log_fn=None):
             culprits = flagged_wrong(verdict, names)
             if culprits:
                 names = culprits + [n for n in names if n not in culprits]
-                references = _scene_references(sid, book_num, names)
                 if log_fn:
                     log_fn(f"scene {dest.name}: {', '.join(culprits)} came out wrong, "
                            f"so the next attempt puts them first and gives them the "

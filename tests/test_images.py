@@ -851,6 +851,74 @@ class TrimmingTheCastMustTrimTheDescription(unittest.TestCase):
         self.assertIn("EMPTY room", prompt)
 
 
+class TheAttachmentsFollowTheCastTheRungDraws(unittest.TestCase):
+    """A rung that forbids a face must not attach it.
+
+    `build_scene_prompt` trims the cast as it simplifies, but the reference bundle was
+    built once, before the ladder started, from the untrimmed cast. So a rung-2 render
+    went out saying "Kira Carsen is the ONLY person in the picture. Master Bela Kiwiiks
+    ... must NOT appear" with Bela Kiwiiks's locked sheet attached to it — the prompt
+    forbidding the face and the upload supplying it.
+
+    It also spends scarce upload slots. Uploads fail intermittently (HANDOFF 6f) and
+    every attachment is another chance to fail, so the rung-2 retry — the one that
+    exists to rescue a picture that already came out wrong — was sending the most
+    attachments for the fewest characters."""
+
+    def test_rung_two_keeps_only_the_character_it_draws(self):
+        self.assertEqual(illustration.kept_at_rung(["Kira", "Bela", "Orgus"], 2),
+                         ["Kira"])
+
+    def test_rung_one_keeps_the_two_it_draws(self):
+        self.assertEqual(illustration.kept_at_rung(["Kira", "Bela", "Orgus"], 1),
+                         ["Kira", "Bela"])
+
+    def test_rung_zero_keeps_everyone(self):
+        self.assertEqual(illustration.kept_at_rung(["Kira", "Bela", "Orgus"], 0),
+                         ["Kira", "Bela", "Orgus"])
+
+    def test_the_empty_room_keeps_nobody(self):
+        self.assertEqual(illustration.kept_at_rung(["Kira", "Bela"], 3), [])
+
+    def test_the_bundle_at_rung_two_carries_only_the_surviving_character(self):
+        """The wiring, not just the helper: the rung-2 bundle must not contain the
+        sheet of the character the prompt has just forbidden."""
+        from fanfic import paths
+        names = ["Kira Carsen", "Master Bela Kiwiiks"]
+        for n in names:
+            sheet = paths.sheet_path("s", 1, n)
+            sheet.parent.mkdir(parents=True, exist_ok=True)
+            sheet.write_bytes(support.PNG)
+
+        full = illustration._scene_references("s", 1, names)
+        trimmed = illustration._scene_references(
+            "s", 1, illustration.kept_at_rung(names, 2))
+
+        self.assertTrue(any("bela" in r.name for r in full),
+                        "the untrimmed bundle should carry her — that was the bug")
+        self.assertFalse(any("bela" in r.name for r in trimmed),
+                         f"rung 2 forbids her face and must not attach it: "
+                         f"{[r.name for r in trimmed]}")
+        self.assertTrue(any("kira" in r.name for r in trimmed),
+                        "the character actually being drawn keeps their anchor")
+
+    def test_the_prompt_and_the_helper_cannot_drift(self):
+        """The point of one definition: whoever the prompt still names is exactly
+        whoever keeps their reference pictures."""
+        cast = [("Kira Carsen", {"appearance": "Human female, twenty", "age": "20",
+                                 "costumes": ["jacket"]}),
+                ("Master Bela Kiwiiks", {"appearance": "Togruta female, fifty",
+                                         "age": "50", "costumes": ["robes"]})]
+        for rung in (0, 1, 2):
+            prompt = illustration.build_scene_prompt(
+                "Kira listens while Bela speaks", cast, simplify=rung, anchored=True)
+            kept = [n for n, _ in illustration.kept_at_rung(cast, rung)]
+            for name, _spec in cast:
+                drawn = f"- {name}" in prompt
+                self.assertEqual(drawn, name in kept,
+                                 f"rung {rung}: {name} costumed={drawn} kept={name in kept}")
+
+
 class ColouringIsAFactNotALikeness(unittest.TestCase):
     """The fourth category restored to an anchored prompt, after species, sex and
     discrete markings, for the identical reason each time.
