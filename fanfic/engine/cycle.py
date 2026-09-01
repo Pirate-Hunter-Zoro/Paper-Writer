@@ -77,8 +77,10 @@ def run(log_fn=print):
         # The FIELD, not a substring of the message. See `QuotaExceeded`: the old
         # test never matched anything either backend raised, so every model ceiling
         # was reported as an image one.
-        model_side = getattr(quota, "source", "image") == "model"
+        source = getattr(quota, "source", "image")
+        model_side = source == "model"
         wait = (config.MODEL_QUOTA_BACKOFF_SEC if model_side
+                else config.IMAGE_BUSY_BACKOFF_SEC if source == "busy"
                 else config.IMAGE_QUOTA_BACKOFF_SEC)
         if quota.retry_after:
             wait = max(wait, int(quota.retry_after) + 1)
@@ -90,6 +92,13 @@ def run(log_fn=print):
                    f"retrying every {wait}s until it lifts. Raise the limit (or wait "
                    f"for the period to roll over) and the run continues on its own: "
                    f"{quota}")
+        elif source == "busy":
+            # Not a ceiling and not a fault: the two daemons share one browser profile
+            # and one of them has it open. Says so plainly, because the version of this
+            # that called it a quota sent a reader looking for a limit that did not
+            # exist.
+            log_fn(f"the other daemon has the browser profile; waiting {wait}s "
+                   f"(normal contention, nothing parked): {quota}")
         else:
             log_fn(f"image quota/rate limit reached; deferring remaining images, "
                    f"retrying in {wait}s (book stays ILLUSTRATING, writing unaffected)")

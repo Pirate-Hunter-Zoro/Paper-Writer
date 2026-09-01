@@ -480,6 +480,14 @@ def _raise_for(result, note):
         raise QuotaExceeded(f"gemini session limit: {reason[:300]}",
                             retry_after=config.IMAGE_QUOTA_BACKOFF_SEC,
                             source="image")
+    if kind == "profile_busy":
+        # Our own sibling daemon has the profile open. "Come back shortly" is exactly
+        # what QuotaExceeded means to the engine — no park, no status change, no stall
+        # escalation — so it is the right shape even though nothing is rate-limited.
+        # `source="busy"` keeps the log line honest about which of the three it is.
+        note(f"waiting for the browser profile: {reason[:160]}")
+        raise QuotaExceeded(reason, retry_after=config.IMAGE_BUSY_BACKOFF_SEC,
+                            source="busy")
     if kind in ("not_signed_in", "setup"):
         raise NotSignedIn(reason)
     if kind == "refused":

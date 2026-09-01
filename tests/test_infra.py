@@ -271,6 +271,30 @@ class AQuotaSaysWhichBackendHitIt(unittest.TestCase):
                          "writing is exactly what IS affected")
         self.assertEqual(wait, config.MODEL_QUOTA_BACKOFF_SEC)
 
+    def test_profile_contention_waits_briefly_and_says_what_it_is(self):
+        """The two daemons share one Chrome profile, which can only be open once.
+
+        This used to arrive as `setup` -> NotSignedIn -> a STALL with a DOUBLING
+        backoff. That is the worst available response: the loser retreats
+        exponentially while the winner renders continuously and never yields, and the
+        loser is the process that eventually binds the book. Seen live on 2026-09-01,
+        the scribe sat in "waiting to retry" for eight minutes after the revision sweep
+        finished, with the illustrator holding the profile throughout.
+
+        It is not a ceiling either, so it must not claim to be one — the fixed short
+        wait and an honest line, not the quota message."""
+        wait, log, _sid = self._deferral(
+            QuotaExceeded("the Chrome profile is in use by pid 123",
+                          retry_after=config.IMAGE_BUSY_BACKOFF_SEC, source="busy"))
+        # `cycle` waits one second past any retry_after hint, deliberately.
+        self.assertGreaterEqual(wait, config.IMAGE_BUSY_BACKOFF_SEC)
+        self.assertLessEqual(wait, config.IMAGE_BUSY_BACKOFF_SEC + 2)
+        self.assertLess(wait, config.IMAGE_QUOTA_BACKOFF_SEC,
+                        "contention must clear faster than a real rate limit")
+        self.assertIn("other daemon", log)
+        self.assertNotIn("image quota/rate limit reached", log,
+                         "contention is not a ceiling and must not claim to be one")
+
     def test_an_image_ceiling_still_reads_as_images(self):
         wait, log, _sid = self._deferral(
             QuotaExceeded("gemini session limit: come back later"))

@@ -1207,11 +1207,43 @@ It recovered by itself five minutes later on stall attempt 1 and drew the sheet.
 alarming-looking log lines were one "waiting to retry" message every five seconds during
 a single backoff — **one distinct stall event, ever.**
 
-No lock was added. There is a real design tension here (two daemons, one credential) and
-if it starts costing real time it deserves a proper file lock. On the strength of one
-self-healed incident, adding cross-process locking to a working pipeline would risk a
-deadlock to fix something the existing backoff already handles. Count the events before
-building the mechanism.
+**That judgement lasted eight minutes and was wrong.** A second collision at 19:37:15
+did not clear: the stall backoff DOUBLED to 600s (attempt 2) while the illustrator went
+on rendering, and the scribe sat in "waiting to retry" doing nothing. One event was not
+grounds to build; two, with an escalating backoff, is a different picture — and the
+process losing the race is the one that eventually BINDS THE BOOK.
+
+### Why it was the worst possible response
+
+The driver reported contention as `kind: "setup"`, which `_raise_for` turns into
+`NotSignedIn` — "a human must act". Nobody had to act; a sibling process simply had the
+profile open. That misclassification put the book into the stall machinery, whose
+doubling backoff is exactly wrong here: **the loser retreats exponentially while the
+winner renders continuously and never yields.** Left alone it converges on the scribe
+waiting hours between attempts.
+
+### The fix, and why it is not a lock
+
+Still no cross-process lock — that is a deadlock risk in exchange for solving a problem
+that only needs the right *classification*. Contention is "come back shortly", which the
+engine already models as `QuotaExceeded`: no park, no status change, no escalation.
+
+  * The driver distinguishes contention from a broken Chrome by reading Chrome's own
+    `SingletonLock`, a symlink whose target is `hostname-pid`, and checking that the pid
+    is ALIVE. A stale lock from a crash must not defer a book for ever, and "the other
+    daemon is mid-render" and "Chrome is missing" want opposite responses while looking
+    identical from outside. New kind: `profile_busy`.
+  * That maps to `QuotaExceeded(source="busy")` with a short FIXED wait
+    (`FANFIC_IMAGE_BUSY_BACKOFF_SEC`, 45s) instead of a doubling stall.
+  * `cycle` grew a third branch that says what is actually happening — "the other daemon
+    has the browser profile; waiting 45s (normal contention, nothing parked)" — rather
+    than reporting a ceiling that does not exist. That mistake is 6h, made twice in one
+    day; the third branch exists so it is not made a third time.
+
+The general lesson is not "count events before building" — that part was right. It is
+that **"leave it alone" is a decision with an expiry date, and the thing to watch is the
+TREND, not the count.** A self-healing failure and an escalating one look the same at
+n=1.
 
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
