@@ -1227,6 +1227,39 @@ class ADeferredSceneDoesNotStopTheQueue(unittest.TestCase):
             log_fn=lambda _m: None)
         self.assertEqual(scenes[0]["characters"], ["Stanford Pines"])
 
+    def test_the_worker_waits_briefly_for_a_busy_browser_not_a_quota_period(self):
+        """The THIRD handler of QuotaExceeded in this fleet, and the third that had to
+        be taught to ask `source`.
+
+        A busy browser profile and a Gemini rate limit are both "come back later" and
+        want very different waits. This handler called contention a rate limit and slept
+        120 seconds over a collision that clears in well under one — while the sibling
+        daemon it was waiting for finished and went idle."""
+        from fanfic.daemons import illustrator
+        original = illustration.render_scene
+        pending = illustration.pending_scene_entries
+        illustration.pending_scene_entries = lambda: [
+            {"series_id": "q", "book_num": 1, "chapter_num": 1, "k": 1,
+             "characters": [], "scene": "s"}]
+
+        def busy(entry, log_fn=None):
+            raise QuotaExceeded("the Chrome profile is in use by pid 7",
+                                retry_after=config.IMAGE_BUSY_BACKOFF_SEC,
+                                source="busy")
+        illustration.render_scene = busy
+        logged = []
+        try:
+            wait = illustrator.cycle(logged.append)
+        finally:
+            illustration.render_scene = original
+            illustration.pending_scene_entries = pending
+
+        self.assertLessEqual(wait, config.IMAGE_BUSY_BACKOFF_SEC + 2)
+        self.assertLess(wait, config.IMAGE_QUOTA_BACKOFF_SEC,
+                        "contention must clear faster than a real ceiling")
+        self.assertTrue(any("browser is busy" in m for m in logged),
+                        f"must not call contention a rate limit: {logged}")
+
     def test_the_worker_renders_past_an_entry_it_cannot_draw(self):
         from fanfic.daemons import illustrator
         drawn = []
