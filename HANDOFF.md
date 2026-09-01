@@ -770,6 +770,22 @@ and it had **two causes, both now addressed**.
   Vitiate ("ashen-lilac skin over a narrow ridged skull") and Nefarid ("grey-white
   skin"), who were both being described by accident.
 
+- **A worse bug I introduced tonight: I told the render to draw a droid as an old man.**
+  T7-O1's `age` is 200, so the new age line said *"T7-O1 is 200 — deeply lined and
+  weathered, grey or white hair, an old face"* — and `ch03_1` came back with the head of
+  an elderly human man, white hair and wrinkles, grafted onto the astromech's dome. The
+  model did exactly as instructed.
+
+  Two guards now, because the number alone cannot tell you: `ages_visibly` reads the
+  appearance for machine words (droid, astromech, chassis, sensor eye, dome), and ages
+  past a human lifespan (110) are skipped because the number has stopped describing a
+  face. Species is deliberately NOT the test — Tol Braga is a sixty-five-year-old Kel
+  Dor and his face shows it, so he keeps the line.
+
+  The lesson is the shape of the mistake, not the mistake: **a rule written from the
+  characters in front of me, applied to a cast I did not re-check.** Ten characters
+  matched `mature_cast`; nine were people and I only looked at those.
+
 - **A bug I introduced tonight: identity clauses said twice.** Adding "hair" to
   `colouring_of` made it overlap with `signature_marks`, because a hair clause that
   mentions a braid or a buzz cut matches both. Satele Shan, Orgus Din and Jaric Kaedan

@@ -1107,6 +1107,27 @@ def _costume_line(name, spec, chapter_num=None):
 _AGE_MUST_SHOW_FROM = 45
 
 
+# A thing without a face does not have an age you can draw on it.
+_MACHINE_WORDS = ("droid", "astromech", "chassis", "servo", "plating", "actuator",
+                  "sensor eye", "photoreceptor", "dome")
+
+# No human is older than this. Past it the number is measuring something else — a droid's
+# service life, a Sith alchemist's unnatural span — and human ageing marks do not apply.
+_HUMAN_LIFESPAN = 110
+
+
+def ages_visibly(spec):
+    """Whether this character has a face that can carry the years.
+
+    T7-O1 is two hundred years old and is an astromech. The age line told the render
+    "T7-O1 is 200 — deeply lined and weathered, grey or white hair, an old face", and the
+    model did as it was told: it grafted the head of an elderly human man, white hair and
+    wrinkles and all, onto the droid's dome. That is my own instruction coming back
+    wearing a face it should never have had."""
+    text = str((spec or {}).get("appearance") or "").lower()
+    return not any(w in text for w in _MACHINE_WORDS)
+
+
 def mature_cast(cast_specs):
     """(name, age) for everyone old enough that the model will draw them young.
 
@@ -1128,7 +1149,8 @@ def mature_cast(cast_specs):
             years = int(re.sub(r"[^0-9]", "", raw) or 0)
         except ValueError:
             continue
-        if years >= _AGE_MUST_SHOW_FROM:
+        if years >= _AGE_MUST_SHOW_FROM and years <= _HUMAN_LIFESPAN \
+                and ages_visibly(spec):
             out.append((name, years))
     return out
 

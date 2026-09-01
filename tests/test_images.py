@@ -2209,3 +2209,51 @@ class AnIdentityClauseIsNotSaidTwice(unittest.TestCase):
         line = illustration._costume_line("Satele", self.BRAIDED, 1)
         lowered = line.lower()
         self.assertEqual(lowered.count("brown-black hair"), 1)
+
+
+class AThingWithoutAFaceHasNoAgeToDraw(unittest.TestCase):
+    """My own instruction came back wearing a face it should never have had.
+
+    T7-O1 is two hundred years old and is an astromech droid. The age line said
+    "T7-O1 is 200 — deeply lined and weathered, grey or white hair, an old face", and the
+    render did exactly that: it replaced the droid's dome with the head of an elderly
+    human man, white hair and wrinkles and all, grafted onto the chassis.
+
+    Two guards, because the number alone cannot tell you: a machine has no face to age,
+    and past a human lifespan the number is measuring something other than a face."""
+
+    T7 = {"appearance": "T7-series astromech, 1.15 metres to the top of the dome, "
+                        "cylindrical body on three legs, a single blue sensor eye.",
+          "age": "200", "costumes": ["grey chassis"]}
+    SATELE = {"appearance": "Human female, fifty-six, fair-skinned with fine lines.",
+              "age": "56", "costumes": ["olive attire"]}
+    ANCIENT = {"appearance": "Human male who has extended his life by Sith alchemy.",
+               "age": "300", "costumes": ["black robes"]}
+
+    def test_a_droid_gets_no_age_line(self):
+        self.assertEqual(illustration.mature_cast([("T7-O1", self.T7)]), [])
+
+    def test_ages_visibly_reads_the_appearance_not_the_number(self):
+        self.assertFalse(illustration.ages_visibly(self.T7))
+        self.assertTrue(illustration.ages_visibly(self.SATELE))
+
+    def test_an_impossible_human_age_is_skipped_too(self):
+        """A three-hundred-year-old is not a face with three hundred years of lines on
+        it; the number has stopped describing ageing."""
+        self.assertEqual(illustration.mature_cast([("X", self.ANCIENT)]), [])
+
+    def test_a_non_human_who_still_has_a_face_keeps_the_line(self):
+        """The guard is about machines and impossible spans, not about species. A Kel
+        Dor of sixty-five still has a face that shows it."""
+        braga = {"appearance": "Kel Dor male, sixty-five, orange-yellow skin creased "
+                               "into deep folds around the eyes.",
+                 "age": "65", "costumes": ["cream robes"]}
+        self.assertEqual(illustration.mature_cast([("Braga", braga)]), [("Braga", 65)])
+
+    def test_the_droid_is_absent_from_a_mixed_prompt(self):
+        prompt = illustration.build_scene_prompt(
+            "x", [("T7-O1", self.T7), ("Satele", self.SATELE)],
+            anchored=True, chapter_num=1)
+        line = [l for l in prompt.split("\n") if "Age is NOT" in l][0]
+        self.assertIn("Satele", line)
+        self.assertNotIn("T7-O1", line)
