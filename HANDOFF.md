@@ -804,6 +804,25 @@ and it had **two causes, both now addressed**.
   identity lines now comes back clean.** Run that audit after touching the prompt
   builder; it is three lines of Python and it catches what reasoning does not.
 
+- **Thinly-described minor characters drift, and it is NOT worth fixing in this book.**
+  `ch20_3` failed on Lord Kelvath: the sheet shows a light-skinned man with dark hair
+  swept back, the render gave a dark-skinned man with close-shorn hair. His entire
+  locked design is *"Small neat human man, middle years, close-cut hair, clean-shaven"* —
+  **no skin colour, no hair colour**. His sheet was invented from that, so nothing in
+  words pins what a render must reproduce, and the sheet is the only anchor.
+
+  **28 of 50 characters have no skin colour in their locked design**, which sounds
+  systemic and is not. Measured by how often they actually appear: those 28 account for
+  67 of 490 slot-appearances, and **47 of those 67 are T7-O1**, a droid with no skin to
+  describe. Excluding him it is 20 appearances spread across 27 bit parts, one or two
+  each. Enriching nineteen sheets by hand would buy almost nothing.
+
+  What this does say: for a FUTURE book, a *principal* described this thinly would be a
+  real problem, and the plan gate does not currently require a skin colour. Worth adding
+  in the shape of the negation gate (§6a) — with a machine exemption, since `ages_visibly`
+  already knows a droid when it sees one. Not built; the measurement says it is not
+  urgent for this run.
+
 - **A bug I introduced tonight: identity clauses said twice.** Adding "hair" to
   `colouring_of` made it overlap with `signature_marks`, because a hair clause that
   mentions a braid or a buzz cut matches both. Satele Shan, Orgus Din and Jaric Kaedan
