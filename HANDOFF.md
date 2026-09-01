@@ -807,6 +807,19 @@ and it had **two causes, both now addressed**.
   the model brings its own priors to it. Qualify the clause on the character it belongs
   to.
 
+- **A phrase can fight the fact it qualifies, and Orgus Din's did for seven verdicts.**
+  His mark reached the prompt as *"Short grey hair **grown out** from decades of a shaved
+  scalp so that it stands up in an untidy brush"*. "Grown out" literally means "has grown
+  longer", three words after "short" — and he was repeatedly rendered with "long, wavy
+  grey hair falling several inches past the ear". Rewritten so the unambiguous facts lead
+  and the history is dropped: the prompt now carries "short grey hair" and "standing up
+  in a stiff untidy brush over a scalp shaved for decades" as separate clauses.
+
+  **Audited the whole cast for the same shape and found no pattern** — Bengel Morr's
+  "skin gone dull and patchy" and Nyriss's "tendrils thinned to string" both describe
+  genuine current states, not contradictions. Orgus was the outlier. The only other hit
+  was Prell's clause ending on a dangling "and", now stripped in code.
+
   A caution about auditing, learned twice in ten minutes: my first pass used substring
   matching and reported Satele Shan as having non-human anatomy, because "fin" is inside
   "fine lines". **Use word boundaries before believing an audit**, or it will hand you a
