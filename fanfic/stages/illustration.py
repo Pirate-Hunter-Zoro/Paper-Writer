@@ -1684,7 +1684,15 @@ def render_scene(entry, log_fn=None):
                 chapter_num=entry.get("chapter_num"),
                 anchored=anchored)
 
-        prompt = _scene_prompt(rung < 3)
+        # A prompt is only "anchored" if reference pictures are ACTUALLY going to be
+        # attached. `rung < 3` says the ladder still wants them; it does not say they
+        # will be sent. With `FANFIC_IMAGE_MAX_UPLOADS=0` — the escape hatch for a
+        # broken upload path — nothing is uploaded, and trimming the appearance
+        # paragraph out of a prompt that has no picture to carry the face is the exact
+        # combination that drew Kira Carsen as a blonde three times: no reference, and
+        # no words either.
+        will_attach = rung < 3 and config.IMAGE_MAX_UPLOADS > 0
+        prompt = _scene_prompt(will_attach)
         # The SAME scene with the appearance paragraphs left in, held ready in case
         # Gemini refuses the uploads. `anchored=True` drops those paragraphs because a
         # picture describes a face better than prose — true only while the picture is
@@ -1693,7 +1701,7 @@ def render_scene(entry, log_fn=None):
         # and had nothing left to go on: Kira Carsen, whose locked design is dark red
         # hair and whose prompt says nothing about hair, came back a golden blonde
         # three times in a row.
-        prompt_without_refs = _scene_prompt(False) if rung < 3 else prompt
+        prompt_without_refs = _scene_prompt(False) if will_attach else prompt
         # From rung 3 the prompt has taken the people out, so the critic must be told
         # that too. Handing it the locked cast while the prompt asked for an empty room
         # is the generator/judge document mismatch this project has recorded three
