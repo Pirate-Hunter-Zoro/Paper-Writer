@@ -1,6 +1,7 @@
 # Handoff — the live SWTOR run
 
-Written 2026-08-31 midday, mid-run, for whoever picks up the monitoring next.
+Written 2026-08-31 midday mid-run; updated through 2026-09-02, when book 1
+finished. §1 is the current state; §6f-§6m are the day the picture path was fixed.
 
 The README describes the design. **This file describes the run in progress and the
 things that only became true last night**, which is the half the README does not have.
@@ -19,12 +20,27 @@ named **Alyn Tenar** — a light-side Jedi Knight, nineteen, female.
     prompt      ~/Library/Mobile Documents/com~apple~CloudDocs/Books/_inbox/swtor-jedi-knight.md
     state       state/series/swtor-jedi-knight/
     outline     46 chapters
-    at handoff  9 chapters accepted (~44k words), 22 reference sheets, 39 scene images
-                (ch10 was mid-edit when the daemons were restarted on the morning of
-                 the 31st to deploy fix 13; it resumes from the draft on disk)
-    allowance   ~$179 of list-price-equivalent usage (a meter, not a bill)
+    allowance   ~$1,273 of list-price-equivalent usage (a meter, not a bill — no API
+                key is in use anywhere in this project)
 
-Three launchd units are loaded and running: `scribe`, `illustrator`, `binder`.
+### BOOK 1 IS FINISHED. `series/swtor-jedi-knight` is SERIES_COMPLETE.
+
+Bound and delivered 2026-09-02 00:25Z:
+
+    Tempered — 46 chapters, 273,275 words, 255 illustrations, 28 MB
+    state/series/swtor-jedi-knight/book/1/tempered.epub
+    -> ~/Library/Mobile Documents/com~apple~CloudDocs/Books/
+           star-wars-the-old-republic/tempered/tempered.epub
+
+Validated: `mimetype` first and stored, and all 255 images declare `image/jpeg` in the
+OPF, matching their actual bytes. Zero pending picture slots; two chapters end with
+revision notes still open, which is the sweep's designed floor rather than a defect
+(§6j).
+
+The daemons are still loaded and idle. **Nothing is waiting on a human.** Dropping
+another prompt in the inbox starts the next book; the fleet is inert until then.
+
+Three launchd units are loaded: `scribe`, `illustrator`, `binder`.
 
 **The single most useful command:**
 
