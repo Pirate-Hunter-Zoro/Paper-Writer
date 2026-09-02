@@ -869,6 +869,63 @@ class TrimmingTheCastMustTrimTheDescription(unittest.TestCase):
         self.assertIn("EMPTY room", prompt)
 
 
+class ASlotThatIsOnlyEverRefusedStillTerminates(unittest.TestCase):
+    """The ladder's termination argument has a hole, and the book falls in it.
+
+    A rejection costs a rung, so a slot that renders badly walks down to the empty
+    room and finishes. A REFUSAL deliberately costs nothing — it is a classifier
+    firing, not a verdict on the composition, and Lord Praven's sheet was refused
+    twice and drawn on the third attempt from an identical prompt.
+
+    But a slot that is ONLY ever refused then never moves at all, and the book waits
+    on it: `pending_scene_entries` counts parked slots, so the book is not illustrated
+    until every one resolves. Two slots on this book sat at rung 1 with visits=8,
+    refused every time and retried hourly, with nothing in the design to ever end it.
+
+    So parks advance the rung as well, slowly enough to keep the probabilistic reading
+    for the first few visits and surely enough that the bottom rung — an empty room,
+    which always renders — is reached."""
+
+    def setUp(self):
+        support.wipe_state()
+        self.dest = paths.scene_image_path("s", 1, 4, 2)
+        self.dest.parent.mkdir(parents=True, exist_ok=True)
+
+    def _park_at(self, rung, visits):
+        illustration.storage.atomic_write_text(json.dumps(
+            {"rung": rung, "visits": visits, "next_at": 0,
+             "reason": "Gemini declined to draw this prompt"}),
+            Path(str(self.dest) + ".retry"))
+
+    def _rung_now(self):
+        """The production function, not a copy of its arithmetic. An earlier version
+        of this test reimplemented the formula and would have passed against the bug
+        it was written to catch."""
+        return illustration.starting_rung(self.dest)
+
+    def test_the_first_couple_of_parks_leave_the_composition_alone(self):
+        """A refusal is probabilistic; do not throw away a good composition over two
+        unlucky visits."""
+        self._park_at(rung=0, visits=2)
+        self.assertEqual(self._rung_now(), 0)
+
+    def test_repeated_parks_walk_the_slot_down_the_ladder(self):
+        self._park_at(rung=1, visits=8)
+        self.assertGreater(self._rung_now(), 1,
+                           "eight parks at the same rung is not a ladder")
+
+    def test_it_reaches_the_rung_that_always_renders(self):
+        """The empty room. A hole in the book is not one of the outcomes on offer, and
+        neither is waiting for ever."""
+        self._park_at(rung=1, visits=99)
+        self.assertEqual(self._rung_now(), illustration._BOTTOM_RUNG)
+
+    def test_a_rung_already_earned_is_never_walked_back(self):
+        """A rejection that cost a rung must not be undone by the visit arithmetic."""
+        self._park_at(rung=4, visits=1)
+        self.assertEqual(self._rung_now(), 4)
+
+
 class TheAttachmentsFollowTheCastTheRungDraws(unittest.TestCase):
     """A rung that forbids a face must not attach it.
 
