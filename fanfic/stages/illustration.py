@@ -87,6 +87,14 @@ def _retry_state(dest):
     return {}
 
 
+# The bottom of the simplification ladder, and how many PARKS (not attempts) it takes
+# to fall one rung when nothing else is moving the slot. Three parks is nine attempts
+# at the same composition; rung 4 is a single-clause picture of an empty room, which
+# has never failed to render.
+_BOTTOM_RUNG = 4
+_PARKS_PER_RUNG = 3
+
+
 def attempts_so_far(dest):
     """The ladder rung this slot has already reached, across every cycle.
 
@@ -113,6 +121,18 @@ def visits_so_far(dest):
         return max(0, int(state.get("visits") or state.get("attempts") or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def starting_rung(dest):
+    """Which rung this slot asks at when it comes back.
+
+    The rung it already earned, or one forced by how many times it has been PARKED —
+    whichever is further down. See the long note in `render_scene` for why parks have
+    to count: a slot that is only ever refused never earns a rung, and the book waits
+    on parked slots, so without this it retries the same refused composition for
+    ever."""
+    return max(attempts_so_far(dest),
+               min(_BOTTOM_RUNG, visits_so_far(dest) // _PARKS_PER_RUNG))
 
 
 def due(dest, now=None):
@@ -1887,7 +1907,24 @@ def render_scene(entry, log_fn=None):
     # The rung the NEXT attempt asks at. Advanced by a rejection — the picture came out
     # and was wrong, so ask for less — but NOT by a refusal, which is a classifier
     # firing rather than a verdict on the composition. See `images.Refused`.
-    rung = prior
+    #
+    # EXCEPT that a slot which is ONLY ever refused would then never move, and the
+    # book waits on it: `pending_scene_entries` counts parked slots, so a book is not
+    # illustrated until every slot resolves. Two slots on this book reached visits=8
+    # still sitting at rung 1, refused every time on third-party-content grounds and
+    # retried hourly for ever — the ladder's termination argument does not hold for a
+    # failure that never costs a rung.
+    #
+    # A refusal is probabilistic and that is why it is free WITHIN a visit: Lord
+    # Praven's sheet was refused twice and drawn on the third attempt from an
+    # identical prompt. Across visits the evidence changes. Three parks is nine
+    # attempts at the same composition, and at that point "the classifier is being
+    # unlucky" stops being the better reading than "this composition is refused".
+    #
+    # So visits advance the rung too, slowly, and the bottom rung is an empty room
+    # with nobody in it — which always renders. That is what guarantees the book
+    # finishes rather than waiting for ever on a picture the vendor will not draw.
+    rung = starting_rung(dest)
     for attempt in range(1, attempts + 1):
         # Ask for LESS each time, rather than asking for the same thing again. A
         # composition the model already failed at is not improved by repetition; the

@@ -1331,6 +1331,36 @@ JPEG extension (irrelevant), the substring `spend/quota limit` (never emitted), 
 now a "lost login" that was DNS. The mechanisms were all fine. **The stories about them
 were wrong, and the stories were what got written down.**
 
+## 6m. The ladder could not terminate for a slot that was only ever refused
+
+With 253 of 254 pictures drawn, the last two slots would not finish. Both sat at
+**rung 1 with visits=8**, refused every time on third-party-content grounds, retried
+hourly, with nothing in the design that would ever end it.
+
+`pending_scene_entries` counts parked slots — "a book is illustrated when it is empty" —
+so the book could not leave ILLUSTRATING and could not bind. Two pictures the vendor
+will not draw were going to hold a 273,000-word novel indefinitely.
+
+The gap is precise, and the code states the argument it violates. A rejection costs a
+rung, which is "the whole mechanism by which a slot that will not render can be retried
+for ever and still terminate". A **refusal costs nothing** — deliberately, and for a
+good reason: it is a classifier firing rather than a verdict on the composition, and
+Praven's sheet was refused twice and drawn on the third attempt from an identical
+prompt. But a slot that is ONLY ever refused therefore never moves, and the termination
+argument silently does not apply to it.
+
+Parks now advance the rung as well: one rung per three parks, floored at whatever the
+slot has already earned. Three parks is nine attempts at the same composition, which
+keeps the probabilistic reading for the first few visits and still guarantees the slot
+reaches rung 4 — a single-clause picture of an empty room, which has never failed to
+render.
+
+**The test for this was vacuous when I first wrote it** and I caught it only by running
+the falsification: it recomputed the rung formula inside the test file instead of calling
+the code, so it passed happily against the very bug it was written for. The rung
+calculation is now a named function, `starting_rung`, and the test calls it. Reverting
+the fix fails two of the four.
+
 ## 6a. The single biggest cause of identity failures was our own prompts saying "no"
 
 **Ten of the twenty-one `[WRONG CHARACTER]` verdicts in this run are Satele Shan's side
