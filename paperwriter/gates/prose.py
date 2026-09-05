@@ -37,12 +37,19 @@ _ABBREVIATIONS = {
 }
 
 # A stop that is part of a number (3.14), an initial (J. R. Smith), or an ellipsis is
-# never a boundary either.
+# never a boundary either; `_ends_on_abbreviation` handles those.
+#
+# `*` and `_` ride with the opening bracket class, and that is not cosmetic. A
+# structured abstract runs its labels in as bold text — "...of the record. **Methods.**
+# We assembled..." — and without them the boundary after "record." is not a boundary at
+# all, because the next character is an asterisk rather than a capital. Two sentences
+# then merge across every label in the abstract, which both hides real long sentences
+# and invents fake ones. JMIR, BMJ and PLOS all want structured abstracts.
 _SENTENCE_END = re.compile(r"""
     (?<=[.!?])                # a terminator
     ["'’”)\]]*      # closing quotes or brackets ride with it
     \s+                       # whitespace is what makes it a boundary
-    (?=[\"'‘“(\[]*[A-Z0-9])   # the next sentence starts capitalised
+    (?=[\"'‘“(\[*_]*[A-Z0-9])  # the next sentence starts capitalised
 """, re.VERBOSE)
 
 
@@ -70,9 +77,12 @@ def _ends_on_abbreviation(chunk):
     # A single letter followed by a stop is an initial: "J. R. Smith".
     if len(last) == 1 and last.isalpha():
         return True
-    # A number followed by a stop is a decimal that lost its fraction, or a list
-    # marker. Either way it is not the end of a sentence.
-    if last.replace(".", "").isdigit():
+    # A bare integer followed by a stop is a list marker — "1. First item" — and not a
+    # sentence end. A DECIMAL followed by a stop is the opposite: "reached 0.657." ends
+    # a sentence, and gluing it to the next one is how a results section full of
+    # reported figures measures as long, welded prose. The dot inside the token is what
+    # separates the two cases.
+    if last.replace(".", "").isdigit() and "." not in last:
         return True
     return False
 
@@ -154,17 +164,39 @@ def strip_structure(text):
     """The prose of a Markdown block: no headings, tables, fences, or comments.
 
     Everything that measures prose measures this, so a section is judged on the
-    sentences a reader actually reads."""
-    body = _HTML_COMMENT_RE.sub("", text or "")
-    kept, in_fence = [], False
-    for line in body.splitlines():
-        if _FENCE_RE.match(line):
+    sentences a reader actually reads.
+
+    **Structure is blanked, not deleted, so every offset is preserved.** The result is
+    the same length as the input and identical to it everywhere prose survives, which
+    buys two things that matter more than the tidiness of dropping the lines:
+
+    A sentence's raw substring is a substring of the ORIGINAL text, character for
+    character. Edit anchors are matched that way, so an anchor drawn from stripped text
+    that had lines removed would be a repair that silently never applies.
+
+    And a heading no longer joins the paragraph after it. A heading carries no
+    terminator, so deleting the line glues "Results" onto the first sentence beneath it
+    — which on a real manuscript produced one 133-word "sentence" that was actually a
+    title block plus everything following. Blanked, the heading is whitespace, and
+    whitespace is a boundary."""
+    body = list(text or "")
+    for match in _HTML_COMMENT_RE.finditer(text or ""):
+        for i in range(match.start(), match.end()):
+            if body[i] != "\n":
+                body[i] = " "
+
+    offset, in_fence = 0, False
+    for line in (text or "").splitlines(keepends=True):
+        bare = line.rstrip("\n")
+        fence = bool(_FENCE_RE.match(bare))
+        drop = fence or in_fence or _HEADING_RE.match(bare) or _TABLE_RE.match(bare)
+        if fence:
             in_fence = not in_fence
-            continue
-        if in_fence or _HEADING_RE.match(line) or _TABLE_RE.match(line):
-            continue
-        kept.append(line)
-    return "\n".join(kept)
+        if drop:
+            for i in range(offset, offset + len(bare)):
+                body[i] = " "
+        offset += len(line)
+    return "".join(body)
 
 
 def paragraphs(text):

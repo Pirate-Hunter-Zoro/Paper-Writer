@@ -31,9 +31,12 @@ Those exemptions are declared here rather than guessed at, and the ledger can ad
 own: an evidence item may list `also_allow` values that are legitimately quotable
 without being findings.
 
-**Rounding is allowed and equality is not.** 0.712 stated as 0.71 is the same number
-and the gate says so, within `config.NUMBER_MATCH_TOLERANCE`. What it will not accept
-is 0.71 when the ledger says 0.72, however small the difference looks.
+**Rounding is allowed and equality is not, and it is judged at the precision the prose
+used.** 0.712 stated as 0.71 is the same number and the gate says so. A delta of
+0.007939 written as 0.008 is the same number too. What it will not accept is 0.71 when
+the ledger says 0.72, however small the difference looks. See `_matches`: a flat
+relative tolerance cannot express this, and gets small effect sizes wrong in the
+direction that matters.
 """
 
 import re
@@ -55,18 +58,40 @@ _NUMBER_RE = re.compile(r"""
     )
     (?:\s*(?P<sci>[eE][-+]?\d+))?
     (?P<pct>\s*%)?
-    (?![\w.]|\s*\))                  # not a version, not "(1)" alone
+    (?![\w]|\.\d)                    # not a word, and not "1.2.3" — a version string
 """, re.VERBOSE)
+#
+# **The trailing lookahead is the single most consequential line in this module, and
+# an earlier version of it was silently switching the gate off.** It read
+# `(?![\w.]|\s*\))`, meaning "reject a match followed by a word character, a full stop,
+# or a closing bracket". Two things followed, and both are invisible:
+#
+#   * A number that ENDS A SENTENCE is followed by a full stop, so it was never
+#     checked. "Discrimination reached 0.812." went straight past.
+#   * A number that closes a parenthetical is followed by ")", so the upper bound of
+#     every confidence interval was never checked either.
+#
+# Between them that is most of the figures in a results section — precisely the ones
+# a reader trusts most. The gate reported a clean section and meant "I looked at the
+# numbers in the middle of sentences".
+#
+# What the exclusion was actually for is a version string, and `\.\d` says that
+# exactly: `1.2.3` matches `1.2` and is then rejected because `.3` follows.
 
 # Spans whose numbers are never findings.
 _SKIP_SPANS = (
     re.compile(r"\[[^\]]*\]"),                       # [1], [12,14] citation markers
+    re.compile(r"\(\s*\d{1,2}\s*\)"),                 # "(1)" — a list marker
     re.compile(r"\((?:19|20)\d{2}[a-z]?\)"),         # (2024) author-year
     re.compile(r"`[^`]*`"),                          # inline code
     re.compile(r"^\s*\|.*$", re.MULTILINE),          # table rows
     re.compile(r"^\s{0,3}#{1,6}\s.*$", re.MULTILINE),  # headings
     re.compile(r"<!--.*?-->", re.DOTALL),            # comments
 )
+
+# A run of digits joined by hyphens: an ORCID, a grant number, a trial registration.
+# Not a measurement, and checking one produces noise on every title page.
+_IDENTIFIER = re.compile(r"\d[\d-]{6,}\d")
 
 # Structural references: the number belongs to a label, not to a result.
 _STRUCTURAL = re.compile(
@@ -113,6 +138,7 @@ class NumberUse:
     raw: str                  # exactly as it appears, e.g. "0.712" or "42,579"
     value: float
     sentence: str             # the sentence it appears in, verbatim — the edit anchor
+    places: int = 0           # decimals the prose wrote, so rounding is judged fairly
     is_percent: bool = False
 
 
@@ -158,7 +184,11 @@ def extract(text):
     anchor of the repair that fixes the number — and `stages.patching` matches an
     anchor character-for-character."""
     from . import prose as prose_mod          # local: avoids a gate import cycle
-    body = text or ""
+    # Structure is blanked rather than deleted, so offsets and raw substrings still
+    # line up with the original. Scanning the blanked text is what keeps an ORCID in a
+    # table, a TRIPOD item number in a comment, and a figure number in a heading from
+    # being read as findings.
+    body = prose_mod.strip_structure(text or "")
     spans = prose_mod.sentence_spans(body)
     skip = _spans_to_skip(body)
 
@@ -180,20 +210,42 @@ def extract(text):
             continue
         if abs(value) < config.NUMBER_CHECK_MIN:
             continue
+        # An identifier is a string of digits with internal hyphens — an ORCID, a grant
+        # number, an NCT registration. It is not a measurement and checking it produces
+        # noise. Judged by what surrounds the match rather than by its value.
+        around = body[max(0, match.start() - 1):match.end() + 1]
+        if "-" in around.replace(match.group(0), "", 1) and _IDENTIFIER.search(
+                body[max(0, match.start() - 20):match.end() + 20]):
+            continue
         raw_sentence, _ = prose_mod.sentence_at(spans, match.start())
         out.append(NumberUse(raw=match.group(0).strip(), value=value,
-                             sentence=raw_sentence,
+                             sentence=raw_sentence, places=_decimals(raw),
                              is_percent=bool(match.group("pct"))))
     return out
 
 
-def _matches(value, allowed, tolerance):
+def _decimals(raw):
+    """How many decimal places the prose actually wrote."""
+    cleaned = raw.replace(",", "").strip()
+    return len(cleaned.split(".")[1]) if "." in cleaned else 0
+
+
+def _matches(value, allowed, tolerance, places=None):
     """Whether a number in prose is one the ledger vouches for.
 
-    Rounding is the whole subtlety. 0.712 written as 0.71 is the same number; 0.71
-    written when the ledger says 0.72 is not. So the comparison is done at the
-    precision the PROSE used: a value quoted to two decimals matches any ledger value
-    that rounds to it, and a value quoted exactly must match exactly.
+    **Rounding is the whole subtlety, and it is checked at the precision the prose
+    used** rather than against a flat relative tolerance. A ledger value matches when
+    it rounds to the written figure at the number of decimals the author wrote. So
+    0.712 may be written 0.71, and a delta of 0.007939 may be written 0.008 — but 0.71
+    against a ledger value of 0.72 is refused, and so is 0.008 against 0.009.
+
+    A flat relative tolerance cannot do this, and the failure is asymmetric in the
+    worst direction. At 0.005 relative, 0.74 against 0.7429 passes comfortably while
+    0.008 against 0.007939 fails, because the same rounding is a larger fraction of a
+    smaller number. Every legitimately rounded effect size in a manuscript is small.
+
+    The relative tolerance is kept as a floor beneath the rounding rule, for a figure
+    written at full precision with a trailing digit lost somewhere.
 
     A percentage is also checked against its proportion, because 71.2% and 0.712 are
     the same finding written two ways and a manuscript uses both."""
@@ -206,6 +258,8 @@ def _matches(value, allowed, tolerance):
     for candidate in candidates:
         for known in allowed:
             if candidate == known:
+                return True
+            if places is not None and round(known, places) == round(candidate, places):
                 return True
             scale = max(abs(known), abs(candidate), 1e-12)
             if abs(candidate - known) / scale <= tolerance:
@@ -227,7 +281,8 @@ def check(text, evidence, tolerance=None):
         return NumberReport(checked=len(uses), matched=0, unsupported=[], passed=True,
                             reasons=[])
 
-    unsupported = [use for use in uses if not _matches(use.value, allowed, tolerance)]
+    unsupported = [use for use in uses
+                   if not _matches(use.value, allowed, tolerance, places=use.places)]
     reasons = []
     if unsupported:
         shown = ", ".join(sorted({u.raw for u in unsupported})[:8])

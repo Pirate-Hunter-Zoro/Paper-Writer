@@ -32,6 +32,17 @@ class ProseSplittingTests(unittest.TestCase):
         self.assertEqual(len(prose.sentences("The AUC was 0.74 on the split. It held.")),
                          2)
 
+    def test_a_sentence_ending_in_a_decimal_still_ends(self):
+        """A results section reports figures at the ends of sentences. Gluing those to
+        the sentence after is how such a section measures as long, welded prose when it
+        is nothing of the kind."""
+        self.assertEqual(
+            prose.sentences("The range runs to 0.657. Discrimination is modest."),
+            ["The range runs to 0.657.", "Discrimination is modest."])
+
+    def test_a_bare_integer_and_a_stop_is_still_a_list_marker(self):
+        self.assertEqual(len(prose.sentences("1. First item here. 2. Second one.")), 2)
+
     def test_headings_and_tables_are_not_prose(self):
         text = "# Results\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nThe model did better."
         self.assertEqual(prose.sentences(text), ["The model did better."])
@@ -62,6 +73,23 @@ class ProseSplittingTests(unittest.TestCase):
 
     def test_collapse_pattern_will_not_match_inside_a_word(self):
         self.assertIsNone(prose.collapse_pattern("rule-based").search("non-rule-based"))
+
+    def test_stripping_structure_preserves_every_offset(self):
+        """Blanked, not deleted. An anchor drawn from stripped text has to be a
+        substring of the original, or the repair it belongs to never applies."""
+        text = "# Results\n\n| a | b |\n\nThe model did better.\n"
+        stripped = prose.strip_structure(text)
+        self.assertEqual(len(stripped), len(text))
+        at = stripped.index("The model")
+        self.assertEqual(text[at:at + 21], "The model did better.")
+
+    def test_a_heading_does_not_join_the_paragraph_below_it(self):
+        """A heading carries no terminator. Delete the line and it glues onto the
+        first sentence beneath it — which on a real manuscript produced one 133-word
+        sentence that was a title block plus everything after it."""
+        text = "# Title page\n\nThe first real sentence. And a second one.\n"
+        found = prose.sentences(text)
+        self.assertEqual(found, ["The first real sentence.", "And a second one."])
 
 
 class SentenceGateTests(unittest.TestCase):
@@ -231,6 +259,46 @@ class NumberGateTests(unittest.TestCase):
         evidence = dict(self.EVIDENCE, also_allow=[32])
         self.assertTrue(numbers.check("We used 32 quantile bins.", evidence).passed)
 
+    def test_rounding_is_judged_at_the_precision_the_prose_used(self):
+        """A flat relative tolerance gets small effect sizes wrong in the direction
+        that matters: 0.74 against 0.7429 passes while 0.008 against 0.007939 fails,
+        because the same rounding is a larger fraction of a smaller number. Every
+        legitimately rounded effect size in a manuscript is small."""
+        evidence = {"items": [{"id": "e.1", "statement": "delta",
+                               "values": [0.007939069768552076]}]}
+        self.assertTrue(numbers.check("The gap was +0.008.", evidence).passed)
+        self.assertFalse(numbers.check("The gap was +0.009.", evidence).passed)
+
+    def test_a_sentence_final_number_is_checked(self):
+        """It was not, for a while, and nothing said so. The trailing lookahead
+        rejected a match followed by a full stop, so every figure that ended a
+        sentence went unchecked — and the gate reported the section clean."""
+        report = numbers.check("Discrimination reached 0.9999.", self.EVIDENCE)
+        self.assertFalse(report.passed)
+        self.assertEqual([u.raw for u in report.unsupported], ["0.9999"])
+
+    def test_the_closing_bound_of_an_interval_is_checked(self):
+        """Same lookahead, same silence: a number followed by ")" was skipped, so the
+        upper bound of every confidence interval in the manuscript went unread."""
+        report = numbers.check("AUC 0.7429 (95% CI 0.7100-0.9999).", self.EVIDENCE)
+        self.assertIn("0.9999", [u.raw for u in report.unsupported])
+
+    def test_a_version_string_is_still_not_a_finding(self):
+        self.assertTrue(numbers.check("We used version 1.2.3 of it.",
+                                      self.EVIDENCE).passed)
+
+    def test_an_orcid_is_not_a_finding(self):
+        text = "Mikey Ferguson 0009-0005-1365-5609 wrote this sentence down."
+        self.assertTrue(numbers.check(text, self.EVIDENCE).passed,
+                        [u.raw for u in numbers.check(text, self.EVIDENCE).unsupported])
+
+    def test_numbers_in_a_heading_or_a_comment_are_not_findings(self):
+        text = ("# Table 4 results for 9999 patients\n\n"
+                "<!-- TRIPOD+AI item 7777 -->\n\n"
+                "The AUC was 0.7429 on the split.\n")
+        self.assertTrue(numbers.check(text, self.EVIDENCE).passed,
+                        [u.raw for u in numbers.check(text, self.EVIDENCE).unsupported])
+
     def test_the_anchor_is_the_sentence_verbatim(self):
         text = "The cohort held.\nThe AUC was\n0.75 on the split.\n"
         report = numbers.check(text, self.EVIDENCE)
@@ -264,22 +332,73 @@ class TerminologyGateTests(unittest.TestCase):
         self.assertTrue(report.passed)
 
     def test_an_undefined_abbreviation_is_caught(self):
-        report = terminology.check("Patients with TRD were included.", self.LOCK)
+        report = terminology.check_manuscript("Patients with TRD were included.",
+                                              self.LOCK)
         self.assertIn("undefined-abbreviation", {d.kind for d in report.defects})
 
     def test_an_expansion_across_a_line_break_still_counts(self):
         """Drafted prose arrives hard-wrapped. A gate that misses the expansion
         reports a defect the editor cannot repair, because nothing is wrong."""
-        report = terminology.check(
+        report = terminology.check_manuscript(
             "Patients with treatment-resistant\ndepression (TRD) were included.",
             self.LOCK)
         self.assertTrue(report.passed, [d.detail for d in report.defects])
 
     def test_expanding_twice_is_a_defect(self):
-        report = terminology.check(
+        report = terminology.check_manuscript(
             "Treatment-resistant depression (TRD) is common. We studied "
             "treatment-resistant depression again.", self.LOCK)
         self.assertIn("redefined", {d.kind for d in report.defects})
+
+    def test_first_use_is_not_checked_at_section_scope(self):
+        """Which section holds an abbreviation's first appearance cannot be known from
+        inside one section. Demanding the expansion in every section is exactly the
+        expanded-twice defect the same gate punishes, so the two rules contradict each
+        other and a writer told to satisfy both oscillates."""
+        section = "Patients with TRD were included in the analysis here."
+        self.assertTrue(terminology.check(section, self.LOCK).passed)
+        self.assertFalse(terminology.check_manuscript(section, self.LOCK).passed)
+
+    def test_an_alias_still_blocks_at_section_scope(self):
+        """A forbidden synonym is a defect wherever it appears."""
+        self.assertFalse(
+            terminology.check("The rule-based approach did worse.", self.LOCK).passed)
+
+    def test_an_abbreviation_inside_its_own_term_is_not_an_alias(self):
+        """The common case, not an edge case: an abbreviation is usually a substring of
+        the term it abbreviates. A lock preferring "ROC AUC" over a bare "AUC" would
+        otherwise flag every correct use, and the repair would replace "AUC" inside
+        "ROC AUC" with "ROC AUC"."""
+        lock = [{"term": "ROC AUC", "aliases": ["AUC", "AUROC"]}]
+        self.assertTrue(terminology.check("Discrimination reached ROC AUC 0.65.",
+                                          lock).passed)
+        self.assertFalse(terminology.check("Discrimination reached AUC 0.65.",
+                                           lock).passed)
+
+    def test_an_abstract_may_expand_an_abbreviation_the_body_expands_again(self):
+        """An abstract is read detached from its paper, so journals expect it to
+        expand its own abbreviations and the body to expand them again. A first-use
+        check spanning both reports every correctly written manuscript as having
+        defined everything twice."""
+        manuscript = (
+            "# Abstract\n\nTreatment-resistant depression (TRD) is common.\n\n"
+            "# Introduction\n\nTreatment-resistant depression (TRD) is common. "
+            "TRD is the outcome here.\n")
+        self.assertTrue(terminology.check_manuscript(manuscript, self.LOCK).passed,
+                        [d.detail for d in
+                         terminology.check_manuscript(manuscript, self.LOCK).defects])
+
+    def test_expanding_twice_inside_the_body_is_still_a_defect(self):
+        manuscript = ("# Introduction\n\nTreatment-resistant depression (TRD) is "
+                      "common.\n\n# Discussion\n\nTreatment-resistant depression "
+                      "recurs often.\n")
+        self.assertFalse(terminology.check_manuscript(manuscript, self.LOCK).passed)
+
+    def test_an_alias_in_the_abstract_is_still_a_defect(self):
+        """Aliases are checked everywhere. A forbidden synonym in an abstract is a
+        defect in the part of the paper most people read."""
+        manuscript = "# Abstract\n\nThe rule-based approach did worse.\n"
+        self.assertFalse(terminology.check_manuscript(manuscript, self.LOCK).passed)
 
     def test_an_empty_lock_disables_the_gate(self):
         self.assertTrue(terminology.check("Anything at all.", []).passed)

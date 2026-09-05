@@ -82,6 +82,40 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(record["status"], states.LEDGER_MERGED)
             self.assertTrue(paths.section_path(pid, 1, record["section_num"]).exists())
 
+    def test_a_hand_written_grounding_is_reused_rather_than_re_derived(self):
+        """Terminology and an estimand are often settled by people. Re-proposing them
+        lets the model drift away from a decision that was already agreed, and every
+        section would then be internally consistent with a vocabulary nobody approved."""
+        from paperwriter.stages import grounding
+
+        support.drop("grounded-paper")
+        # Admit the job so the project directory exists, then plant the grounding.
+        from paperwriter.engine import cycle
+        cycle.run(log_fn=lambda _m: None)
+
+        hand_written = {
+            "estimand": "Discrimination of a twelve-month label on a held-out split, "
+                        "measured by area under the ROC curve.",
+            "venue": "Journal of Fixtures",
+            "reader": "Clinical informatics researchers.",
+            "checklist": {"name": "TRIPOD+AI", "items": []},
+            "conventions": {"person": "we", "tense": "past"},
+            "terminology": [{"term": "hand-locked term", "aliases": ["a synonym"]}],
+        }
+        storage.save_json(hand_written, paths.grounding_path("grounded-paper"))
+
+        called = []
+        real = grounding.propose_grounding
+        grounding.propose_grounding = lambda *a, **k: called.append(1)
+        try:
+            support.run_engine("grounded-paper")
+        finally:
+            grounding.propose_grounding = real
+
+        self.assertEqual(called, [], "the grounding stage re-derived a settled file")
+        on_disk = storage.load_json(paths.grounding_path("grounded-paper"))
+        self.assertEqual(on_disk["terminology"][0]["term"], "hand-locked term")
+
     def test_the_ledger_survives_the_run(self):
         _status, pid = self._run()
         doc = storage.load_json(paths.ledger_path(pid))
