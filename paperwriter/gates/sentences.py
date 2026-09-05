@@ -114,8 +114,19 @@ class SentenceReport:
                 f"{self.emdashes_per_kword:.1f} dashes per 1,000 words")
 
 
-def score(text):
-    """Measure a block of prose against the one-read rule. Returns a SentenceReport."""
+def score(text, section_name=""):
+    """Measure a block of prose against the one-read rule. Returns a SentenceReport.
+
+    `section_name` exempts the sections that are not prose, using the same list the
+    paragraph gate uses. A keyword list is semicolon-separated by convention and would
+    fail the weld check every time; a title page is one 100-word noun phrase; a
+    reference list is neither sentences nor paragraphs. Measuring them produces noise,
+    and a gate that fires on every manuscript is a gate somebody switches off."""
+    if section_name and section_name.strip().lower() in config.PARAGRAPH_EXEMPT_SECTIONS:
+        return SentenceReport(
+            words=0, count=0, mean=0.0, median=0.0, stdev=0.0, longest=0,
+            long_share=0.0, semicolons_per_kword=0.0, emdashes_per_kword=0.0,
+            passed=True)
     body = prose.strip_structure(text)
     sents = prose.sentences(body)
     n_words = prose.word_count(body)

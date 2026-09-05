@@ -148,9 +148,45 @@ def _validate(grounding):
     return errors
 
 
+def existing(project_id):
+    """A grounding already on disk that still passes the gate, or None.
+
+    **Grounding is reused, not re-derived**, and that matters more than it looks.
+    Terminology and an estimand are frequently settled by people rather than by this
+    harness — a coauthor rules on what the outcome is called, a supervisor fixes the
+    estimand, a journal dictates the reader. Re-proposing them on the next run gives
+    the model a chance to drift away from a decision that was already made and already
+    agreed, and nothing downstream would notice: every section would be internally
+    consistent with a vocabulary nobody approved.
+
+    So a valid grounding on disk is ground truth, exactly as frozen evidence is. To
+    re-derive one, delete `state/project/<id>/grounding.json` — which is a deliberate
+    act, and should be, because it invalidates every section written under the old
+    vocabulary.
+
+    Hand-writing the file is therefore a supported workflow rather than a hack. For a
+    paper whose vocabulary and estimand already exist, it is the right one."""
+    doc = storage.load_json(paths.grounding_path(project_id))
+    if not isinstance(doc, dict) or not doc:
+        return None
+    errors = _validate(doc)
+    if errors:
+        return None
+    return doc
+
+
 def run(project_rec, log_fn=None):
     """Produce and gate the grounding, then persist it. Returns the grounding dict."""
     pid = project_rec["project_id"]
+
+    committed = existing(pid)
+    if committed is not None:
+        if log_fn:
+            log_fn(f"{pid}: grounding already on file and still valid — "
+                   f"{len(committed.get('terminology', []))} locked term(s), "
+                   f"reusing rather than re-deriving")
+        return committed
+
     proposal = paths.grounding_proposal_path(pid)
     attempts = max(1, config.GATE_MAX_ATTEMPTS)
     feedback, errors, grounding = "", [], None

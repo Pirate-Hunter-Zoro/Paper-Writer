@@ -33,11 +33,12 @@ somebody will publish.
 8. [The stages, end to end](#the-stages-end-to-end)
 9. [Robustness: nothing fails, everything stalls](#robustness-nothing-fails-everything-stalls)
 10. [Running it](#running-it)
-11. [Configuration reference](#configuration-reference)
-12. [Watching a run](#watching-a-run)
-13. [Working in this repository](#working-in-this-repository)
-14. [Code layout](#code-layout)
-15. [Known limits and honest caveats](#known-limits-and-honest-caveats)
+11. [The workflow: "here are results, write me a paper"](#the-workflow-here-are-results-write-me-a-paper)
+12. [Configuration reference](#configuration-reference)
+13. [Watching a run](#watching-a-run)
+14. [Working in this repository](#working-in-this-repository)
+15. [Code layout](#code-layout)
+16. [Known limits and honest caveats](#known-limits-and-honest-caveats)
 
 ---
 
@@ -438,6 +439,127 @@ harness admits it on the next cycle once the file has stopped changing, and writ
 `_STATUS.md` beside it so progress is legible without a terminal.
 
 ---
+
+## The workflow: "here are results, write me a paper"
+
+This is the section to point an assistant at. It is what was actually done to produce
+`Research-Journey/paper1-trd-prediction/reserve/manuscript_reserve.md`, and it is
+repeatable for a new set of results.
+
+**Say this, or something like it:**
+
+> Read the workflow in Paper-Writer's README. My results are in `<path>`. The target is
+> `<journal>`. Write the paper.
+
+### What happens, in order
+
+**1. Freeze the evidence.** Every number the paper may use is harvested out of the
+results tree into one ledger: a statement, the exact values it licenses, and the file it
+came from. Full precision, never rounded — a section may round a ledger value, and the
+gate cannot expand a rounded one back.
+
+Numbers from the *literature* go in too, each sourced to its reference. A cited figure is
+still a figure the reader will check.
+
+The ledger then stops tracking the analysis. That is the point rather than a limitation:
+a rerun mid-draft that moves an AUC must not silently change what a written Methods
+section claims. Re-freezing is deliberate — delete the corpus directory under
+`state/evidence/` and the next cycle re-mines it.
+
+**2. Write the grounding by hand, if the decisions already exist.** Terminology, the
+estimand, the reader, the reporting checklist, the prose conventions, and what the paper
+explicitly does *not* claim. `state/project/<id>/grounding.json`.
+
+The harness will propose one if there is none. Do not let it, when a coauthor has already
+ruled on what the outcome is called: `stages.grounding.run` reuses a valid file on disk
+and only proposes when there is nothing there.
+
+Get the **aliases** right, because that is the half that does the work. They are the
+words that must *never* appear, not the approved ones. Ask what a fluent writer would
+reach for on a sentence where the locked term feels repetitive, and forbid that.
+
+**3. Plan the argument before any prose.** Claims with ids, each resting on evidence ids
+that exist, exactly one marked headline, kinds that vary, and at least one limitation.
+Then a section list, then a paragraph plan in which **every paragraph declares the
+sentence it opens on**. A paragraph nobody can write a topic sentence for does not belong
+in the paper, and deleting it now costs nothing.
+
+**4. Draft one section at a time, and gate each one before moving on.** The gates are
+cheap, they take milliseconds, and a defect found in section three is a defect that does
+not propagate into section four's assumptions.
+
+**5. Assemble, then run the whole-manuscript audit.** Three checks only exist at document
+scope: a reference cited nowhere, an abbreviation expanded twice in the body, and the
+prose statistics for the paper as a whole.
+
+**6. Deliver into the analysis repository**, alongside the evidence ledger and the
+grounding that produced it. A draft nobody can trace back to its numbers is a draft
+somebody has to re-check by hand.
+
+### Gating a section by hand
+
+The daemon shells out to `claude`, so a Claude session driving it end to end would be a
+session calling itself. The honest arrangement is to split the spine: **the model's half
+is done directly and the harness does the deterministic half.** Propose/dispose, with a
+person or a session as the proposer.
+
+```python
+from paperwriter.gates import numbers, paragraphs, sentences, terminology, citations
+
+text = open("draft/04-results.md").read()
+sentences.score(text, section_name="Results")        # density, welds, filler, hedges
+paragraphs.check(text, section_name="Results")       # topic and concluding sentences
+numbers.check(text, evidence)                        # every figure traces to the ledger
+terminology.check(text, lock)                        # one name per thing
+citations.check(text, references)                    # markers resolve, claims sourced
+```
+
+Section scope for all five. At manuscript scope use `terminology.check_manuscript` and
+`citations.check_manuscript`, which add the checks that only exist across a whole
+document.
+
+### What to expect the gates to catch
+
+On a real redraft of a 15,000-word manuscript, in order of how much they were worth:
+
+- **Nothing wrong with the numbers.** 192 figures, every one traceable. That is a real
+  result and worth stating: the number gate is insurance, and this manuscript did not
+  need to claim on it.
+- **Density, everywhere.** The submitted draft ran a mean of 28.8 words per sentence with
+  28% of sentences past 35 words and the longest at 133. The Results section was worst,
+  at 36.1. The redraft runs 16.5 and 2%.
+- **Welds.** 9.5 semicolons and 7.2 em-dashes per thousand words, against a ration of 2
+  each. The redraft uses 0.2 and 0.
+- **A borrowed claim with no citation**, twice, both of them back-references to work
+  cited in an earlier paragraph. Both were right to flag: a sentence saying what prior
+  work found carries its marker even when the marker appeared before.
+- **A terminology lock that was itself wrong.** The lock forbade "treatment resistance"
+  as an alias for TRD, and this paper turns on the distinction between the construct and
+  the label. The fix was to the lock, not to the prose. Expect this: a lock written
+  before drafting will have one or two entries that only look wrong once a sentence
+  needs them.
+
+### And when the gate is the thing that is broken
+
+Writing this paper found six defects in the gates themselves, and they are worth knowing
+about because the class of failure repeats:
+
+**A gate that is silently off is worse than no gate.** The number pattern rejected any
+figure followed by a full stop or a closing bracket, so every sentence-final number and
+every upper confidence bound went unchecked. The gate reported clean sections and meant
+"I looked at the numbers in the middle of sentences".
+
+**A gate that contradicts itself teaches oscillation.** Terminology demanded that every
+section expand its abbreviations and that no manuscript expand one twice. Both cannot
+hold at section scope. First-use is now a manuscript-scope check.
+
+**A splitter's edge cases are the measurement.** A sentence ending in a decimal was glued
+to the next one, which inflated measured sentence length across every results section in
+the project. A heading with no terminator glued itself to the paragraph below.
+
+If a gate fires on something that is plainly correct, suspect the gate first. Each of
+those six was found by pointing the gates at real prose, and none of them would have
+shown up on a fixture.
 
 ## Configuration reference
 

@@ -1,12 +1,14 @@
-"""The drop folder is usually inside a synced tree, so the local filesystem is not the
-authority on what is there.
+"""The drop folder may be on a mount, so the local filesystem is not always prompt.
 
 Two silent failure modes, both of which would look like "nothing happened":
 
-  * a sync client evicts a prompt's contents, so a `*.md` glob stops seeing a job that is
-    definitely still there;
-  * a prompt is observed mid-write or mid-sync, and admitting it truncated would
-    freeze canon against half a brief while looking perfectly successful.
+  * a prompt is observed mid-write, and admitting it truncated would freeze evidence
+    against half a brief while looking perfectly successful;
+  * a directory listing hangs rather than failing, which is worse than an error
+    because there is nothing in the log to notice.
+
+The eviction machinery this module used to test — iCloud placeholder files and
+`brctl` — is gone with the Mac mini it was written for. See `infra/inbox.py`.
 """
 
 import os
@@ -64,10 +66,9 @@ class SettleTests(unittest.TestCase):
 
 
 class ScanDeadlineTests(unittest.TestCase):
-    """The worst failure this system has produced: enumerating a synced drop folder
-    from a launchd agent blocked in `open()` forever — no error, no log, no progress,
-    lock still held — because macOS denies it in a way Homebrew Python waits on rather
-    than raising. Everything else in this design fails loudly; that failed in silence."""
+    """The worst failure this design can have: a listing that blocks forever — no
+    error, no log, no progress, lock still held. Everything else here fails loudly.
+    An unresponsive mount fails in silence, which is why the listing has a deadline."""
 
     def setUp(self):
         support.wipe_state()
@@ -79,7 +80,6 @@ class ScanDeadlineTests(unittest.TestCase):
         support.drop("real")
         listing = inbox.scan(config.INBOX_DIR, ".md")
         self.assertEqual([p.name for p in listing.jobs], ["real.md"])
-        self.assertEqual(listing.evicted, [])
 
     def test_an_empty_folder_and_an_unreadable_one_are_distinguishable(self):
         """`[]` means no work; `None` means the question is still open. Conflating them
@@ -114,8 +114,8 @@ class ScanDeadlineTests(unittest.TestCase):
         finally:
             inbox.os.listdir = original_glob
             inbox.SCAN_TIMEOUT_SEC = original_timeout
-        self.assertTrue(any("Full Disk Access" in m for m in messages),
-                        "the operator must be told the actual cause")
+        self.assertTrue(any("hung filesystem" in m for m in messages),
+                        "the operator must be told this is a hang, not an empty queue")
 
     def test_a_timeout_backs_off_rather_than_retrying_every_cycle(self):
         original_timeout, inbox.SCAN_TIMEOUT_SEC = inbox.SCAN_TIMEOUT_SEC, 1
@@ -154,53 +154,3 @@ class ScanDeadlineTests(unittest.TestCase):
             inbox.scan = original
 
 
-class EvictionTests(unittest.TestCase):
-    def setUp(self):
-        support.wipe_state()
-        config.INBOX_DIR.mkdir(parents=True, exist_ok=True)
-
-    def test_placeholder_naming_matches_what_a_sync_client_writes(self):
-        self.assertEqual(inbox.placeholder_for(Path("/x/foo.md")).name,
-                         ".foo.md.icloud")
-
-    def test_an_evicted_job_is_seen_and_requested_not_ignored(self):
-        """The real filename is what the caller cares about, not the stub."""
-        (config.INBOX_DIR / ".swtor-jedi-knight.md.icloud").write_text(
-            "stub", encoding="utf-8")
-        self.assertEqual(inbox.evicted_names(config.INBOX_DIR),
-                         ["swtor-jedi-knight.md"])
-
-        asked = []
-        original = inbox.request_download
-        inbox.request_download = lambda p, log_fn=None: asked.append(Path(p).name) or True
-        try:
-            requested = inbox.materialise_evicted(config.INBOX_DIR, ".md")
-        finally:
-            inbox.request_download = original
-        self.assertEqual(asked, ["swtor-jedi-knight.md"])
-        self.assertEqual(requested, ["swtor-jedi-knight.md"])
-
-    def test_a_stub_is_never_itself_admitted_as_a_job(self):
-        """`.foo.md.icloud` is dot-prefixed, so `is_job_file` rejects it even if a
-        glob ever reached it — a job named ".swtor" would be nonsense."""
-        stub = config.INBOX_DIR / ".swtor-jedi-knight.md.icloud"
-        stub.write_text("stub", encoding="utf-8")
-        self.assertFalse(admission.is_job_file(stub))
-
-        records = journal.load_records()
-        admission.register_inbox(records, log_fn=lambda _m: None)
-        self.assertEqual(records, {})
-
-    def test_a_missing_brctl_is_patience_not_a_crash(self):
-        original = inbox.BRCTL
-        inbox.BRCTL = "/nonexistent/brctl"
-        try:
-            self.assertFalse(
-                inbox.request_download(config.INBOX_DIR / "x.md",
-                                        log_fn=lambda _m: None))
-        finally:
-            inbox.BRCTL = original
-
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)

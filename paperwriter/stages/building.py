@@ -29,7 +29,7 @@ import re
 import subprocess
 
 from .. import config, paths
-from ..gates import citations, numbers, prose, sentences
+from ..gates import citations, numbers, prose, sentences, terminology
 from ..infra import storage
 from ..memory import store
 
@@ -161,6 +161,11 @@ def audit(project_rec, paper_num, log_fn=None):
     nums = numbers.check(text_, memory.evidence_document())
     if not nums.passed:
         notes += [f"NUMBERS: {reason}" for reason in nums.reasons]
+
+    terms = terminology.check_manuscript(text_, memory.terminology)
+    if not terms.passed:
+        notes += [f"TERMINOLOGY: {d.detail}" for d in terms.defects
+                  if d.kind != "alias"]
 
     sent = sentences.score(text_)
     notes.append(f"PROSE: {sent.brief()}")

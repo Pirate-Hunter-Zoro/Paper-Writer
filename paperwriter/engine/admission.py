@@ -35,10 +35,8 @@ def is_job_file(path):
 def register_inbox(records, log_fn=print):
     """Admit or revive every prompt file currently in the drop folder.
 
-    The folder usually lives in a synced tree so a phone can drive the harness, so two
-    things happen before anything is read: any file the sync client has evicted is
-    requested back, and a file
-    that is still settling is left for a later cycle. Mutates `records`."""
+    A file that is still settling is left for a later cycle, because a prompt observed
+    mid-write is worse than a prompt not yet seen. Mutates `records`."""
     if not config.INBOX_DIR.exists():
         return
     revived_any = False
@@ -49,13 +47,12 @@ def register_inbox(records, log_fn=print):
     listing = inbox.scan(config.INBOX_DIR, ".md", log_fn=log_fn)
     if listing is None:
         return
-    inbox.materialise(config.INBOX_DIR, listing.evicted, log_fn=log_fn)
 
     for path in listing.jobs:
         if not is_job_file(path):
             continue
         if not inbox.is_settled(path):
-            continue                    # mid-write or mid-sync; try again next cycle
+            continue                    # mid-write; try again next cycle
         project_id = paths.slug(path.stem)
         existing = records.get(journal.project_key(project_id))
 

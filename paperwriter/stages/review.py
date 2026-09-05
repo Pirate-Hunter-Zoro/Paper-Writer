@@ -235,9 +235,11 @@ def run_gates(prose, section, memory, references=None):
     evidence = memory.evidence_document()
 
     read = readability.score(prose)
-    sent = sentences.score(prose)
+    sent = sentences.score(prose, section_name=heading)
     para = paragraphs.check(prose, section_name=heading)
     nums = numbers.check(prose, evidence)
+    # Section scope: alias rules only. "Expanded once" is a manuscript-level claim and
+    # is checked in `stages.building.audit`.
     terms = terminology.check(prose, memory.terminology)
     cites = citations.check(prose, references if references is not None
                             else memory.references)
