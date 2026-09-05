@@ -1,132 +1,109 @@
-# Novel/Series Prompt Template
+# <working title of the paper>
 
-Copy this file, fill in every field, and drop the filled copy into `inbox/`. One file is one
-job. The engine reads the fields below to research, plan, and write. Anything you leave to the
-agent, say so explicitly ("agent's choice") rather than leaving it blank — a blank field is
-treated as an omission the coverage/planning validators may reject.
+Copy this file into the drop folder, fill it in, and the harness picks it up on its next
+cycle. Everything below is read by deterministic code before any model runs, so the
+shapes matter: keep the headings, keep the lists as lists.
 
-Fields marked **(required)** must be answered or the job will park in `FAILED` at planning.
-Fields marked *(optional)* fall back to the stated default.
+Delete the guidance lines as you go. What you leave behind is the job.
 
 ---
 
-## Title
-*(optional — default: the agent proposes one)*
+## Evidence
 
-> A working title, or leave it to the agent.
+<!-- The corpus name(s) this paper draws on. ONE line. Split a genuinely separate
+     second body of evidence with a `+`. This becomes a directory under state/evidence/
+     and is shared by every job naming it, so a programme of three papers off one
+     analysis gathers once. Everything after this first line is description and is
+     ignored by the parser. -->
 
-## Source universe(s)
-**(required)**
+TRD-EHR primary analysis
 
-> Name every source universe involved. For a crossover, list all of them and say how they meet
-> (shared world? portal? one universe visiting another?). Be specific enough that research knows
-> exactly which wikis to mine.
->
-> Examples: "Star Wars: The Old Republic — Sith Warrior class story"; "The Owl House + Gravity
-> Falls + Amphibia + She-Ra and the Princesses of Power crossover"; "RWBY".
+<!-- Point PAPER_SOURCE_DIRS at the directories the gathering stage may read. Set it in
+     the environment or in the service file, colon-separated:
 
-## Canon anchor point
-**(required)**
+       PAPER_SOURCE_DIRS=~/TRD-EHR/results:~/Research-Journey/paper1/references
 
-> Where in canon does this story sit? What does it continue, branch from, or replace? Name the
-> exact events, seasons, or expansions it must stay consistent with, and the point after which
-> you are inventing.
->
-> Examples: "Begins immediately after RWBY Volume 9 and finishes the story the show hasn't";
-> "Follows the SWTOR Sith Warrior through the class story, then KOTFE and KOTET"; "Set after The
-> Owl House finale, all four casts adults".
-
-## Premise / logline
-**(required)**
-
-> Two to five sentences: what is this story actually about? The central conflict, the stakes, the
-> engine that drives it. Enough that a stranger understands the book's spine.
-
-## Series shape
-**(required)**
-
-> How many books, and what is the target length and reading difficulty of each?
->
-> - **Number of books**: e.g., 1 (standalone), or 3 (trilogy).
-> - **Per-book length**: a target word count or a comparison ("about the length of Deathly
->   Hallows, ~198k words").
-> - **Reading difficulty**: default is the *Harry Potter* band (easy, upper-elementary to
->   middle-grade reading ease). Say if you want it lighter or more literary.
-> - **Arc across books** *(only if more than one book)*: one line on what each book covers and how
->   the series resolves.
-
-## Main characters to feature
-**(required)**
-
-> The canon characters that must appear and matter. Note any relationships or pairings you want
-> honored (or explicitly avoided). List any original characters, with a one-line description each
-> — for OCs, give appearance detail so a reference sheet can be locked.
->
-> **If this is a straight novelization, say so here with the line `Original characters: none.`**
-> That one line changes a real rule: by default the planner must invent this book's biggest
-> villain, because a crossover whose ceiling is a villain the reader already knows the limits of
-> has nowhere to escalate. For a novelization that is exactly backwards — the canon villain is
-> what the reader came for — so the declaration lets the primary antagonist be a canon character.
-> Without it, an invented antagonist will be planned and placed above the source's own.
-
-## Tone, genre, and rating
-**(required)**
-
-> The feel (e.g., "hopeful adventure with real stakes"; "grimdark"; "cozy slice-of-life with a
-> mystery"), the genre, and a content rating ceiling (e.g., "PG-13: peril and some violence, no
-> explicit content"). The rating is a hard boundary the critics enforce.
-
-## Must-hit beats and hard constraints
-*(optional — default: agent's choice within canon)*
-
-> Anything that must happen, must be true, or must never happen. Specific scenes you want,
-> character fates to honor or avoid, canon rules that are non-negotiable, ships that must/mustn't
-> sail. Keep these to genuine requirements — the more you pin, the less room the story has to
-> breathe.
-
-## Narrative voice
-*(optional — default: third-person limited, past tense, rotating among the main cast)*
-
-> Point of view and tense. Note if you want a single POV character, a fixed rotation, or omniscient.
-
-## Illustrations
-*(optional — defaults: a few scene illustrations per chapter plus a cover; style drawn from the
-source material's own look)*
-
-> How many images per chapter, roughly. Any art-style direction (e.g., "match the show's
-> animation style"; "painterly book-illustration style"). Characters are auto-locked to reference
-> sheets regardless.
+     Those trees are read-only ground truth. Nothing here ever writes into them. -->
 
 ---
 
-## Worked example (delete this section in your filled copy)
+## Claims
 
-**Title:** *(agent's choice)*
+<!-- What this paper argues, one bullet each. These are the denominator of the evidence
+     coverage gate: if the frozen evidence cannot support 85% of them, the job parks and
+     gathers more rather than drafting on numbers nobody has.
 
-**Source universe(s):** RWBY.
+     Write them as claims, not topics. "Model comparison" is a heading. "The embedded
+     representation discriminates better than the feature representation on the
+     held-out split" is a claim.
 
-**Canon anchor point:** Begins the instant RWBY Volume 9 ends — Team RWBY back from the Ever After
-— and tells the war-for-Remnant story the show hasn't released yet. Must stay consistent with
-everything through V9: the Relics, the Maidens, Salem's immortality, Ozpin's curse, Atlas fallen.
+     Include the limitation you already know a reviewer will raise. A limitation planned
+     now is one the paper can answer. -->
 
-**Premise:** With Atlas gone and Salem's forces closing on Vacuo, Team RWBY must reunite the
-scattered Huntsmen, recover the last Relic, and confront the truth that Salem cannot simply be
-killed. The story is the endgame: how do you win a war against an enemy who can't die?
+- The embedded representation discriminates treatment resistance better than the typed
+  feature vector on a held-out split.
+- Performance is stable across the six largest demographic subgroups.
+- The signal in the embedded representation is sparse rather than diffuse: six narrative
+  concepts carry nearly all of it.
+- The outcome label counts antidepressant trials and is not adequacy-verified, so it is
+  a proxy for the consensus definition rather than the definition itself.
 
-**Series shape:** 2 books, each ~180k words, *Harry Potter* reading band. Book 1 rallies Vacuo and
-recovers the Relic of Creation; Book 2 resolves the Salem problem and the fate of Remnant.
+---
 
-**Main characters:** Ruby, Weiss, Blake, Yang (core POVs); Jaune, Ren, Nora, Oscar/Ozpin; Salem
-and Cinder as antagonists. Honor the show's established relationships; no forced romances.
+## Venue
 
-**Tone, genre, rating:** Hopeful epic fantasy-adventure with real loss and real stakes. PG-13 —
-battlefield peril and death, no explicit content.
+<!-- The target journal, and its word limit. The limit is parsed out of this section —
+     the first number followed by "word" wins — and it becomes a hard ceiling the
+     outline gate enforces. Omit it if you genuinely do not know; a wrong number plans
+     the manuscript to the wrong length. -->
 
-**Must-hit beats:** Salem cannot be defeated by force alone; the resolution must engage her
-immortality directly. Keep Ruby's silver-eye powers consistent with canon limits. No character
-resurrections.
+JMIR Mental Health. 4,000 word limit for an Original Paper, excluding abstract,
+references and tables.
 
-**Narrative voice:** Third-person limited, past tense, rotating among the four core members.
+<!-- Optional: a reference .docx supplying the journal's styles, for the pandoc build.
+     Any path ending in .docx in this section is picked up. -->
 
-**Illustrations:** Three to four scene illustrations per chapter plus a cover, in a painterly style
-that echoes RWBY's own character designs.
+formats/JMIR_template.docx
+
+---
+
+## Reporting checklist
+
+<!-- Named, never inferred. Inferring it from the study design produces an outline that
+     places the wrong obligations, and asking costs one line. `none` is a valid answer
+     if you say why. -->
+
+TRIPOD+AI
+
+---
+
+## Scope
+
+<!-- How many papers this job is. One unless you say otherwise, and one is the normal
+     case — a single paper is the degenerate case of the same machinery, not a special
+     path. Say "2 papers" here only if the evidence genuinely supports two separable
+     arguments, because two papers arguing one finding is a duplicate submission. -->
+
+1 paper.
+
+---
+
+## Anything the harness cannot work out
+
+<!-- Free prose. Read by the grounding and planning stages, ignored by the parsers.
+     Useful things to put here:
+
+       - Terminology you already know must be locked, and the synonyms that must never
+         appear. The grounding stage will propose a lock; telling it what you already
+         know saves a round.
+       - Author list, affiliations, funding, ethics statement.
+       - What the paper explicitly does NOT claim.
+       - Anything a coauthor has already ruled on. -->
+
+There are exactly two patient representations and they are called the FEATURE
+representation and the EMBEDDED representation. "Rule-based" is not an alias for either
+and must not appear anywhere. Where the point is that no generative model participates,
+the word is "deterministic".
+
+This is secondary analysis of de-identified data and is not human-subjects research, so
+there is no protocol number and no consent waiver to name.

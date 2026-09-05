@@ -1,6 +1,0 @@
-{
-  "name": "fanfic-tools",
-  "private": true,
-  "type": "module",
-  "description": "The browser driver that asks Gemini for pictures. ES modules, and deliberately zero dependencies -- this file exists only so Node stops re-parsing gemini_art.js to discover that, not because anything is installed."
-}

@@ -1,166 +1,129 @@
 """Parsing the dropped prompt file.
 
-The universe list feeds one research call and one canon directory each, so getting
-it wrong is expensive: on 2026-08-04 a prose-y section body was shredded into eight
-junk universes and eight junk research calls.
+Every value here becomes a denominator or a threshold somewhere downstream, so a
+parser that is too generous is a free penalty against a good job and a parser that is
+too literal is a job that cannot be submitted. Both directions are tested.
 """
 
-import unittest
+import support                                                      # noqa: F401
+import unittest                                                     # noqa: E402
 
-import support                                                    # noqa: F401
-
-from fanfic import jobspec                                        # noqa: E402
-
-
-class UniverseParsingTests(unittest.TestCase):
-    def _universes(self, section_body):
-        return jobspec.universes(
-            f"## Source universe(s)\n{section_body}\n\n## Premise\nx\n")
-
-    def test_prose_paragraph_yields_one_clean_universe(self):
-        body = ("Star Wars: The Old Republic\n\nSingle source universe, played as a "
-                "Guardian; mine the wikis, its characters, planets and the era.")
-        self.assertEqual(self._universes(body), ["Star Wars: The Old Republic"])
-
-    def test_colon_is_kept_but_dash_qualifier_dropped(self):
-        self.assertEqual(
-            self._universes("Star Wars: The Old Republic — Sith Warrior class story"),
-            ["Star Wars: The Old Republic"])
-
-    def test_terse_single_and_crossover(self):
-        self.assertEqual(self._universes("RWBY."), ["RWBY"])
-        self.assertEqual(
-            self._universes("The Owl House + Gravity Falls + Amphibia + She-Ra"),
-            ["The Owl House", "Gravity Falls", "Amphibia", "She-Ra"])
-
-    def test_no_universe_section_yields_nothing(self):
-        self.assertEqual(jobspec.universes("# Job\n\n## Premise\nsomething\n"), [])
+from paperwriter import jobspec                                     # noqa: E402
 
 
-class ImpliedEntityTests(unittest.TestCase):
-    """Every entity here is a denominator term in the canon-coverage gate, so an
-    entity no fact could ever match is a free penalty against a good job."""
+class SectionTests(unittest.TestCase):
 
-    def test_a_hyphenated_name_survives_intact(self):
-        """Without hyphen support "She-Ra and the Princesses of Power" scanned as the
-        word "She", then "Princesses", then "Power" — one correctly spelled show
-        turned into three denominator terms no canon fact can match. Hyphenated names
-        are ordinary in this domain, so the pattern has to admit them."""
-        entities = jobspec.implied_entities(
-            "## Main characters to feature\nAdora and She-Ra, plus Obi-Wan Kenobi\n")
-        self.assertIn("She-Ra", entities)
-        self.assertIn("Obi-Wan Kenobi", entities)
-        self.assertNotIn("Princesses", entities)
+    def test_sections_are_split_on_headings(self):
+        secs = jobspec.sections("# Title\nbody one\n\n## Venue\nbody two\n")
+        self.assertEqual(secs["title"], "body one")
+        self.assertEqual(secs["venue"], "body two")
 
-    def test_a_list_header_is_stripped_down_to_the_name_it_carries(self):
-        """"From Gravity Falls: Dipper Pines" is a heading plus a name. No wiki has a
-        page for "From Gravity Falls", and the gate would count it as a miss."""
-        entities = jobspec.implied_entities(
-            "## Main characters to feature\n"
-            "From Gravity Falls: Dipper Pines, Mabel Pines\n")
-        self.assertNotIn("From Gravity Falls", entities)
-        self.assertIn("Gravity Falls", entities)
-        self.assertIn("Dipper Pines", entities)
-
-    def test_stripping_a_header_does_not_discard_the_name_behind_it(self):
-        """The lone-word-opening-a-line rule judges the SPAN as it appeared, not what
-        is left after the scaffolding comes off — otherwise "From She-Ra" at the start
-        of a line loses the name along with the preposition."""
-        entities = jobspec.implied_entities(
-            "## Main characters to feature\nFrom She-Ra: Adora and Catra\n")
-        self.assertIn("She-Ra", entities)
-
-    def test_names_come_from_characters_and_anchor_sections(self):
-        entities = jobspec.implied_entities(
-            "## Main characters to feature\nRuby Rose and Weiss Schnee\n\n"
-            "## Canon anchor point\nAfter the fall of Atlas\n\n"
-            "## Tone\nNothing here should be picked up\n")
-        self.assertIn("Ruby Rose", entities)
-        self.assertIn("Weiss Schnee", entities)
-        self.assertIn("Atlas", entities)
-
-    def test_stopwords_are_not_entities(self):
-        self.assertEqual(jobspec.implied_entities("## Main characters\nThe And\n"), [])
-
-    def test_a_name_split_across_a_wrapped_line_is_one_clean_entity(self):
-        """"Jedi\\nOrder" could never match "Jedi Order" in a canon fact."""
-        entities = jobspec.implied_entities(
-            "## Main characters\nthe Jedi\nOrder stands on Tython\n")
-        self.assertIn("Jedi Order", entities)
-        self.assertFalse([e for e in entities if "\n" in e])
-
-    def test_prose_opening_a_sentence_or_a_bold_run_is_not_an_entity(self):
-        entities = jobspec.implied_entities(
-            "## Main characters\nKira Carsen hides a secret. This is a central "
-            "thread. Stay consistent with canon.\n\n"
-            "## Canon anchor point\n**Act 1 — the vengeance.** Grim, patient.\n")
-        self.assertIn("Kira Carsen", entities)
-        for prose in ("This", "Stay", "Act", "Grim"):
-            self.assertNotIn(prose, entities)
-
-    def test_a_multiword_name_survives_the_same_position(self):
-        """"Master Orgus Din" is a name wherever it appears, sentence-initial or not."""
-        entities = jobspec.implied_entities(
-            "## Main characters\nShe trains hard. Master Orgus Din guides her.\n")
-        self.assertIn("Master Orgus Din", entities)
+    def test_section_matching_finds_a_partial_header(self):
+        secs = jobspec.sections("## Target journal\nJMIR\n")
+        self.assertEqual(jobspec.section_matching(secs, "journal"), "JMIR")
 
 
-class ArtDirectionTests(unittest.TestCase):
-    """The style block is stamped on every image prompt, so it has to come from the
-    job — otherwise a Star Wars novelization gets the previous fic's anime styling."""
+class CorpusTests(unittest.TestCase):
 
-    def test_reads_from_the_style_label_onward(self):
-        style = jobspec.art_direction(
-            "## Illustrations\n**One illustration per chapter**, plus a cover. "
-            "Style: **painterly digital illustration in the key-art\nstyle of "
-            "*Star Wars: The Old Republic*** — cinematic lighting.\n")
-        self.assertTrue(style.startswith("painterly digital illustration"))
-        self.assertIn("Star Wars: The Old Republic", style)
-        self.assertNotIn("*", style)                    # emphasis stripped
-        self.assertNotIn("\n", style)                   # wrapped lines collapsed
-        self.assertNotIn("per chapter", style)          # the count is not the style
+    def test_one_corpus_from_the_first_line(self):
+        self.assertEqual(jobspec.corpora(support.PROMPT), ["fixture analysis"])
 
-    def test_absent_section_falls_back(self):
-        self.assertEqual(jobspec.art_direction("# Job\n\n## Premise\nx\n"), "")
+    def test_prose_after_the_first_line_is_ignored(self):
+        """A prose-y section body shredded into eight junk corpora is eight evidence
+        directories and eight gathering calls."""
+        text = ("## Evidence\n\nTRD-EHR primary analysis\n\nThis is the extract we "
+                "pulled in June, and it covers everything, plus the reference PDFs.\n")
+        self.assertEqual(jobspec.corpora(text), ["TRD-EHR primary analysis"])
+
+    def test_a_plus_splits_a_genuine_second_corpus(self):
+        text = "## Evidence\n\nTRD-EHR + PSYCH-ASR pilot\n"
+        self.assertEqual(jobspec.corpora(text), ["TRD-EHR", "PSYCH-ASR pilot"])
+
+    def test_commas_do_not_split(self):
+        text = "## Evidence\n\nTRD-EHR, all locales\n"
+        self.assertEqual(jobspec.corpora(text), ["TRD-EHR, all locales"])
+
+    def test_a_job_naming_none_still_gets_a_corpus(self):
+        """A paper written against unnamed evidence is still a paper, and the coverage
+        gate says something more useful about it than a parse error would."""
+        self.assertEqual(jobspec.corpora("# Title\n\nsome text\n"), ["primary"])
 
 
-class RealPromptRegressionTests(unittest.TestCase):
-    """Pin the actual SWTOR job. Guessing at its parsing cost a run once already.
+class ClaimTests(unittest.TestCase):
 
-    Found wherever it currently lives — the drop folder moves between iCloud, the
-    repo, finished/, and failed/, and an earlier version of this class hard-coded one
-    of those paths and silently skipped the moment the file moved."""
+    def test_bullets_become_claims(self):
+        self.assertEqual(len(jobspec.intended_claims(support.PROMPT)), 3)
 
-    def setUp(self):
-        path = support.prompt_fixture("swtor-jedi-knight.md")
-        if path is None:
-            self.skipTest("no real SWTOR prompt on this machine")
-        self.text = path.read_text(encoding="utf-8")
+    def test_a_wrapped_bullet_is_one_claim(self):
+        """Half a claim on its own line is a claim no evidence can cover, and it is a
+        free penalty in the coverage gate's denominator."""
+        claims = jobspec.intended_claims(support.PROMPT)
+        self.assertIn("held-out split", claims[0])
 
-    def test_one_clean_universe(self):
-        self.assertEqual(jobspec.universes(self.text),
-                         ["Star Wars: The Old Republic"])
+    def test_context_prose_is_not_a_claim(self):
+        text = ("## Claims\n\nThis paper matters because nobody has done it.\n\n"
+                "- The model discriminates well on held-out data.\n")
+        self.assertEqual(len(jobspec.intended_claims(text)), 1)
 
-    def test_entities_are_real_names_and_the_gate_is_reachable(self):
-        entities = jobspec.implied_entities(self.text)
-        for name in ("Kira Carsen", "Master Orgus Din", "Lord Scourge",
-                     "Darth Angral", "Grand Master Satele Shan", "Tython",
-                     "Jedi Order"):
-            self.assertIn(name, entities)
-        for prose in ("This", "Stay", "Grim", "Treaty"):
-            self.assertNotIn(prose, entities)
-        self.assertFalse([e for e in entities if "\n" in e])
-        # The floor must be clearable: at 85% over this many entities there has to be
-        # room for the handful of genuinely uncoverable terms ("Act", "Rise", "BBY").
-        tolerated = len(entities) - -(-int(len(entities) * 85) // 100)
-        self.assertGreaterEqual(tolerated, 4, f"{len(entities)} entities is too tight")
 
-    def test_art_direction_is_swtor_key_art_not_the_anime_default(self):
-        style = jobspec.art_direction(self.text)
-        self.assertIn("painterly", style)
-        self.assertIn("key-art", style)
-        self.assertNotIn("cel-shaded", style)
+class VenueTests(unittest.TestCase):
+
+    def test_the_venue_is_the_first_line(self):
+        self.assertEqual(jobspec.venue(support.PROMPT), "Journal of Fixtures.")
+
+    def test_the_word_limit_is_parsed(self):
+        self.assertEqual(jobspec.word_limit(support.PROMPT), 4000)
+
+    def test_a_thousands_separator_is_handled(self):
+        text = "## Venue\n\nJMIR. 4,000 word limit for an Original Paper.\n"
+        self.assertEqual(jobspec.word_limit(text), 4000)
+
+    def test_an_abstract_limit_is_not_a_manuscript_limit(self):
+        """A 'word limit' under 250 is an abstract's, and enforcing it on the whole
+        paper plans a four-paragraph submission."""
+        text = "## Venue\n\nJMIR. 200 word structured abstract.\n"
+        self.assertIsNone(jobspec.word_limit(text))
+
+    def test_no_limit_is_none_rather_than_a_guess(self):
+        self.assertIsNone(jobspec.word_limit("## Venue\n\nJMIR Mental Health.\n"))
+
+    def test_a_reference_docx_is_found(self):
+        self.assertEqual(jobspec.reference_docx(
+            "## Venue\n\nJMIR. Use formats/JMIR_template.docx.\n"),
+            "formats/JMIR_template.docx")
+
+
+class ScopeTests(unittest.TestCase):
+
+    def test_one_paper_is_the_default(self):
+        self.assertEqual(jobspec.paper_count("# Title\n\nnothing else\n"), 1)
+
+    def test_the_fixture_asks_for_one(self):
+        self.assertEqual(jobspec.paper_count(support.PROMPT), 1)
+
+    def test_a_stated_count_is_honoured(self):
+        self.assertEqual(jobspec.paper_count("## Scope\n\n3 papers off one analysis.\n"),
+                         3)
+
+    def test_an_absurd_count_falls_back_to_one(self):
+        self.assertEqual(jobspec.paper_count("## Scope\n\n90 papers.\n"), 1)
+
+
+class ChecklistTests(unittest.TestCase):
+
+    def test_the_checklist_is_read_not_inferred(self):
+        self.assertEqual(jobspec.checklist(support.PROMPT), "TRIPOD+AI")
+
+    def test_an_absent_checklist_is_empty(self):
+        self.assertEqual(jobspec.checklist("# Title\n\nnothing\n"), "")
+
+
+class TitleTests(unittest.TestCase):
+
+    def test_the_first_heading_is_the_title(self):
+        self.assertEqual(jobspec.title(support.PROMPT),
+                         "Does narrative text beat structured features")
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main()
