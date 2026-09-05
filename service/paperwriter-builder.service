@@ -1,0 +1,15 @@
+# The one-shot that builds and delivers finished papers, then exits. Driven by
+# paperwriter-builder.timer.
+#
+# It exists so assembly and delivery can run on their own schedule and stay off the
+# drafting critical path. The author unit does this work inline too, and both call the
+# same `engine.paper.advance`, so they cannot disagree — assembly is a pure function of
+# files on disk and delivery is content-addressed, so running both is idempotent.
+
+[Unit]
+Description=Paper-Writer builder — assemble and deliver finished papers
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Paper-Writer
+ExecStart=%h/Paper-Writer/service/run.sh builder

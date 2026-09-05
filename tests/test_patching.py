@@ -13,7 +13,7 @@ import support                                                    # noqa: F401
 
 import unittest                                                   # noqa: E402
 
-from fanfic.stages import patching                               # noqa: E402
+from paperwriter.stages import patching                               # noqa: E402
 
 CHAPTER = ("The birds stopped first. She held the door and did not move.\n\n"
            "Anne left the spoon on the desk and went down to let her in.\n\n"

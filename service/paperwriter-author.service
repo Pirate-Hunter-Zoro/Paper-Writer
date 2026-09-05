@@ -1,0 +1,28 @@
+# The engine. Self-looping: it runs its own cycle loop and systemd only restarts it if
+# the process genuinely exits.
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp service/paperwriter-*.service service/paperwriter-builder.timer ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now paperwriter-author.service
+#   systemctl --user enable --now paperwriter-builder.timer
+#   journalctl --user -u paperwriter-author -f
+#
+# `%h` is the user's home. Adjust WorkingDirectory if the clone lives elsewhere.
+
+[Unit]
+Description=Paper-Writer author — the manuscript engine
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Paper-Writer
+ExecStart=%h/Paper-Writer/service/run.sh author
+Restart=always
+RestartSec=30
+# The loop swallows its own cycle errors and never exits on one, so a restart here
+# means the process actually died. Thirty seconds is long enough that a crash loop
+# cannot scroll a journal and short enough that a reboot resumes work promptly.
+
+[Install]
+WantedBy=default.target

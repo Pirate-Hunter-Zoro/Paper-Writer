@@ -15,8 +15,8 @@ import os
 import unittest
 from datetime import datetime, timezone
 
-from fanfic import clock, config
-from fanfic.infra import budget
+from paperwriter import clock, config
+from paperwriter.infra import budget
 
 
 def utc(iso):
