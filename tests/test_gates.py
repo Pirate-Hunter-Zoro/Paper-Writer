@@ -67,6 +67,19 @@ class ProseSplittingTests(unittest.TestCase):
                          ["***Table 3.** The counts by group.*",
                           "The model did better here."])
 
+    def test_a_cross_reference_ends_its_sentence(self):
+        """"Table 2." at the end of a sentence is a reference, not a list marker.
+        Reading it as a marker glued the sentence to the next one, so a paragraph of
+        three ordinary sentences measured as one run-on and the long-sentence share
+        was driven by the paper's own cross-references."""
+        text = ("The values are tabulated in Table 2. A paired bootstrap followed. "
+                "The ablation is Figure 9. It reproduced across encoders.")
+        self.assertEqual(len(prose.sentences(text)), 4)
+
+    def test_a_bare_numeral_is_still_a_list_marker(self):
+        text = "A patient needed all of:\n\n1. one thing.\n2. another thing.\n"
+        self.assertEqual(len(prose.sentences(text)), 3)
+
     def test_a_display_equation_is_not_prose(self):
         """Counting one produces a paragraph with no topic sentence on every
         derivation, and a sentence made of LaTeX.
@@ -172,6 +185,43 @@ class SentenceGateTests(unittest.TestCase):
         report = sentences.score(text)
         self.assertFalse(report.passed)
         self.assertTrue(any("semicolon" in r for r in report.reasons))
+
+    def test_a_numeric_range_is_not_a_dash_weld(self):
+        """A dash between two numbers is a range, not a second claim. Counting
+        confidence intervals as welds measured the density of the results rather
+        than of the prose, and no amount of rewriting could bring a Results
+        section under the ration."""
+        text = ("Discrimination reached 0.657 (95% CI 0.643-0.672) against 0.649 "
+                "(0.634-0.664). The band spanned 0.645-0.657 across encoders. "
+                "Index dates spanned 2016-2024 and the deltas ran -0.024 to -0.028.")
+        text = text.replace("-0.672", "\u20130.672").replace("-0.664", "\u20130.664")
+        text = text.replace("0.645-0.657", "0.645\u20130.657")
+        text = text.replace("2016-2024", "2016\u20132024")
+        report = sentences.score(text)
+        self.assertEqual(report.emdashes_per_kword, 0.0)
+        self.assertEqual(report.welded, [])
+
+    def test_a_clause_joining_dash_is_still_a_weld(self):
+        """The ration exists for asides. Excluding ranges must not excuse those."""
+        text = " ".join(["The gap held \u2014 nobody expected that \u2014 across sites."] * 5)
+        report = sentences.score(text)
+        self.assertGreater(report.emdashes_per_kword, 2)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("em-dash" in r for r in report.reasons))
+
+    def test_a_tight_compound_dash_is_not_a_weld(self):
+        """"precision\u2013recall" and "nearest\u2013farthest" are single terms made of two
+        coordinate words. Counting them asked the writer to rename the analysis."""
+        text = " ".join(["A nearest\u2013farthest fusion improved the precision\u2013recall "
+                         "curve for every anchor\u2013neighbor pair we drew."] * 5)
+        report = sentences.score(text)
+        self.assertEqual(report.emdashes_per_kword, 0.0)
+
+    def test_a_spaced_en_dash_is_still_a_weld(self):
+        """Spacing is what separates the aside from the compound, and the aside is
+        the whole reason the ration exists."""
+        text = " ".join(["The gap held \u2013 nobody expected that \u2013 across sites."] * 5)
+        self.assertGreater(sentences.score(text).emdashes_per_kword, 2)
 
     def test_empty_openers_are_named(self):
         text = ("It is worth noting that the gap was small. The cohort held. "

@@ -541,8 +541,8 @@ On a real redraft of a 15,000-word manuscript, in order of how much they were wo
 
 ### And when the gate is the thing that is broken
 
-Writing this paper found six defects in the gates themselves, and they are worth knowing
-about because the class of failure repeats:
+Writing this paper found six defects in the gates themselves, and a later redraft of it
+found three more. They are worth knowing about because the class of failure repeats:
 
 **A gate that is silently off is worse than no gate.** The number pattern rejected any
 figure followed by a full stop or a closing bracket, so every sentence-final number and
@@ -557,9 +557,25 @@ hold at section scope. First-use is now a manuscript-scope check.
 to the next one, which inflated measured sentence length across every results section in
 the project. A heading with no terminator glued itself to the paragraph below.
 
-If a gate fires on something that is plainly correct, suspect the gate first. Each of
-those six was found by pointing the gates at real prose, and none of them would have
-shown up on a fixture.
+**A gate that punishes correct notation teaches the writer to damage the paper.** Three
+of the six were this, and a later redraft found three more of exactly the same kind.
+The dash ration counted en-dashes, so every confidence interval, percentage band and
+year span scored as a weld: a Results section reporting forty intervals measured at
+three times the ration and could not be brought under it by any amount of rewriting,
+because the only remaining repair is to delete the numbers. The same ration counted
+tight compounds, so `precision–recall` and `nearest–farthest` read as asides and the
+suggested fix was to rename the analysis. And the splitter read the integer in
+`Table 2.` as a list marker, so a paragraph of three ordinary sentences measured as one
+38-word run-on, driven by the paper's own cross-references.
+
+All three are now scoped. A dash between two numbers is a range and a tight en-dash
+between two words is a compound; an em-dash is a weld wherever it appears, and an
+en-dash is a weld when it is spaced. An integer is a list marker only when it opens its
+line, or when the line opens with emphasis and a caption label.
+
+If a gate fires on something that is plainly correct, suspect the gate first. All nine
+were found by pointing the gates at real prose, and not one of them would have shown up
+on a fixture.
 
 ## Configuration reference
 
