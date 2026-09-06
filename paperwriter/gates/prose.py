@@ -72,6 +72,13 @@ def word_count(text):
     return len(words(text))
 
 
+# A caption opens its line with emphasis and a label word: "***Table 3.**". A
+# cross-reference in running prose reads the same ("...tabulated in Table 3.") and is a
+# sentence end, so the emphasis at the head of the line is the only thing that tells
+# them apart.
+_CAPTION_LABEL_RE = re.compile(r"[*_]{2,}\s*[A-Za-z][\w ]*\s*$")
+
+
 def _ends_on_abbreviation(chunk):
     """Whether a candidate sentence ends on something that is not a sentence end."""
     # Trailing emphasis is punctuation, not content: "***Table 3.**" ends on the
@@ -93,8 +100,24 @@ def _ends_on_abbreviation(chunk):
     # a sentence, and gluing it to the next one is how a results section full of
     # reported figures measures as long, welded prose. The dot inside the token is what
     # separates the two cases.
+    #
+    # But an integer is only a list MARKER when it opens its line. "Table 2." and
+    # "Figure 9." and "Supplement M2." end sentences, and a cross-reference is the
+    # commonest way a results paragraph ends: "...tabulated in Table 2." Reading the
+    # trailing integer as a marker glued that sentence to the next one, so a paragraph
+    # of three ordinary sentences measured as one 38-word run-on. The check is
+    # therefore what sits BEFORE the number on its own line: nothing but whitespace or
+    # a bullet means a marker, and a word means a reference.
     if last.replace(".", "").isdigit() and "." not in last:
-        return True
+        before = tail[:-1][:-len(last)] if last else tail[:-1]
+        line_head = before.rsplit("\n", 1)[-1]
+        # Nothing but whitespace or a bullet before it: an ordinary list marker.
+        if not line_head.strip(" \t*_-•>)("):
+            return True
+        # Opening emphasis then a word: a caption label, "***Table 3.** ...*". The
+        # emphasis at the head of the line is what separates it from a cross-reference
+        # in running prose, since both read "Table 3." on the page.
+        return bool(_CAPTION_LABEL_RE.match(line_head))
     return False
 
 

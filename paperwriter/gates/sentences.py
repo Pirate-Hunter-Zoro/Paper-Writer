@@ -71,7 +71,39 @@ _HEDGES = (
 # the conventional way to separate the items of an enumeration — and counting it drives
 # a writer away from the bulleted list that fixes the long sentence in the first place.
 _SEMICOLON_RE = re.compile(r";(?![ \t]*(?:\n|$))")
+
+# A dash weld joins two CLAUSES, and that is the only thing this ration is about. The
+# en-dash has two other jobs in a quantitative paper and neither of them is a weld:
+#
+#   * a RANGE, between numbers — "0.643–0.672", "12–22 words", "2016–2024". Every
+#     confidence interval, percentage band, year span, page range and quintile
+#     boundary contains one. Counting them measured the density of the RESULTS rather
+#     than of the prose, so a section reporting forty intervals scored as forty welds
+#     and could not be brought under the ration by any amount of rewriting.
+#   * a COMPOUND, tight between two words — "precision–recall curve",
+#     "nearest–farthest fusion", "anchor–neighbor pair". The dash makes one term out of
+#     two coordinate ones. Renaming the analysis to satisfy the gate is not a prose
+#     improvement.
+#
+# Both were found by pointing the gate at a real manuscript, and both are the same
+# defect: a gate that fires on correct text teaches the writer to damage it.
+#
+# What remains is the aside, and the rule that separates it is typographic rather than
+# semantic, which is what makes it checkable. An EM-dash is always a weld, spaced or
+# not, because the aside is the only job it has. An EN-dash is a weld only when it is
+# spaced, because tight en-dashes are the range and the compound above. A spaced double
+# hyphen is an em-dash somebody could not type.
+_NUMERIC_RANGE_RE = re.compile(
+    r"(?<![\w])[−+-]?[\d][\d,.]*\s?%?\s?[—–]\s?[−+-]?[\d][\d,.]*\s?%?")
+_TIGHT_ENDASH_RE = re.compile(r"(?<=\w)–(?=\w)")
 _EMDASH_RE = re.compile(r"[—–]|(?<=\s)--(?=\s)")
+
+
+def _dash_welds(text):
+    """Dashes that join two clauses. Ranges and tight compounds are not welds."""
+    body = _NUMERIC_RANGE_RE.sub(" ", text)
+    body = _TIGHT_ENDASH_RE.sub("", body)
+    return _EMDASH_RE.findall(body)
 
 
 def _hedge_count(sentence):
@@ -153,11 +185,12 @@ def score(text, section_name=""):
 
     per_kword = 1000.0 / max(n_words, 1)
     semis = len(_SEMICOLON_RE.findall(body)) * per_kword
-    dashes = len(_EMDASH_RE.findall(body)) * per_kword
+    dashes = len(_dash_welds(body)) * per_kword
 
     openers = [(s, phrase) for s in sents if (phrase := _empty_opener(s))]
     hedged = [s for s in sents if _hedge_count(s) >= 2]
-    welded = [s for s in sents if _SEMICOLON_RE.search(s) or _EMDASH_RE.search(s)]
+    welded = [s for s in sents
+              if _SEMICOLON_RE.search(s) or _dash_welds(s)]
 
     report = SentenceReport(
         words=n_words, count=len(sents), mean=round(mean, 2),
