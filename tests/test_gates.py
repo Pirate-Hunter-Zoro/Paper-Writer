@@ -47,6 +47,51 @@ class ProseSplittingTests(unittest.TestCase):
         text = "# Results\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nThe model did better."
         self.assertEqual(prose.sentences(text), ["The model did better."])
 
+    def test_a_list_item_starts_a_new_sentence(self):
+        """A bulleted list is the standard repair for a sentence carrying six things,
+        and its stem ends in a colon. Without this boundary the stem and every bullet
+        merge into one enormous sentence, so the gate reports the repair as worse than
+        the defect it fixes."""
+        text = "A patient needed all three of:\n\n- one thing;\n- two thing;\n- three.\n"
+        found = prose.sentences(text)
+        self.assertEqual(len(found), 4, found)
+        self.assertEqual(found[0], "A patient needed all three of:")
+
+    def test_a_caption_ending_in_emphasis_still_closes(self):
+        """A figure or table caption is written `***Table 3.** ... *` and ends in `.*`.
+        Without emphasis as a closer the caption never terminates and swallows the
+        paragraph beneath it, which on a supplement is most of the apparent long
+        sentences."""
+        text = "***Table 3.** The counts by group.*\n\nThe model did better here.\n"
+        self.assertEqual(prose.sentences(text),
+                         ["***Table 3.** The counts by group.*",
+                          "The model did better here."])
+
+    def test_a_display_equation_is_not_prose(self):
+        """Counting one produces a paragraph with no topic sentence on every
+        derivation, and a sentence made of LaTeX.
+
+        The stem and its continuation stay one sentence, which is correct: "The
+        estimator is: [equation] where a is the sum" is one sentence in mathematical
+        writing, and the equation is simply not words."""
+        text = "The estimator is:\n\n$$\\hat{P} = \\frac{a}{b},$$\n\nwhere a is the sum.\n"
+        self.assertEqual(prose.sentences(text), ["The estimator is: where a is the sum."])
+        self.assertNotIn("frac", prose.strip_structure(text))
+
+    def test_an_image_line_is_not_prose(self):
+        """A results path is not a dozen words of writing."""
+        text = "Before it.\n\n![](../results/a/very/long/path/to/figure_name.png)\n\nAfter."
+        self.assertEqual(prose.sentences(text), ["Before it.", "After."])
+
+    def test_a_blockquote_is_not_the_author_s_prose(self):
+        """Quoted material — a verbatim model output, a reviewer's comment, an example
+        narrative. The author cannot repair a sentence they did not write, and a
+        supplement quoting a 170-word generated narrative would otherwise measure as
+        though it contained a 170-word sentence."""
+        text = "The example follows.\n\n> A very long quoted line goes here.\n\nIt ends."
+        self.assertEqual(prose.sentences(text),
+                         ["The example follows.", "It ends."])
+
     def test_fenced_code_is_not_prose(self):
         text = "Before it.\n\n```\nx = 1. y = 2. z = 3.\n```\n\nAfter it."
         self.assertEqual(len(prose.sentences(text)), 2)
@@ -114,6 +159,13 @@ class SentenceGateTests(unittest.TestCase):
     def test_stacked_hedges_are_counted(self):
         report = sentences.score(self.LONG)
         self.assertEqual(len(report.stacked_hedges), 1)
+
+    def test_a_list_semicolon_is_punctuation_not_a_weld(self):
+        """Semicolons end the items of an enumeration by convention. Counting them
+        pushes a writer away from the list that fixes a long sentence."""
+        text = ("The domains were three:\n\n- depression severity;\n"
+                "- psychiatric comorbidity;\n- health-care utilisation.\n")
+        self.assertEqual(sentences.score(text).semicolons_per_kword, 0.0)
 
     def test_semicolons_are_rationed(self):
         text = " ".join(["The model did better; the gap was small."] * 6)
@@ -196,6 +248,28 @@ class ParagraphGateTests(unittest.TestCase):
         report = paragraphs.check(text)
         self.assertTrue(report.defects)
         self.assertTrue(report.passed, report.reasons)
+
+    def test_a_list_stem_is_not_a_paragraph(self):
+        """A block ending in a colon points at what comes next; its support is the
+        list beneath it. Judging it as an unsupported paragraph would make the gate
+        call the repair for a long sentence a defect."""
+        text = "The domains were three:\n\n- one;\n- two;\n- three.\n"
+        report = paragraphs.check(text)
+        self.assertEqual(report.checked, 0)
+        self.assertTrue(report.passed)
+
+    def test_a_caption_is_not_a_paragraph(self):
+        """A caption has no topic sentence and no concluding sentence by design, and is
+        routinely one or two sentences. Judging it against paragraph shape produces a
+        defect on every figure in a supplement."""
+        text = "***Table S3.** Counts by group. Lower is better.*\n"
+        self.assertEqual(paragraphs.check(text).checked, 0)
+        self.assertEqual(paragraphs.check("**(A) Nearest retrieval**\n").checked, 0)
+
+    def test_a_caption_s_sentences_are_still_measured(self):
+        """Only shape is exempt. A caption a reader cannot parse is a real defect."""
+        long_caption = "***Table 1.** " + " ".join(["word"] * 60) + ".*"
+        self.assertFalse(sentences.score(long_caption).passed)
 
     def test_exempt_sections_are_not_checked(self):
         report = paragraphs.check("One sentence only.", section_name="Abstract")
@@ -286,6 +360,22 @@ class NumberGateTests(unittest.TestCase):
     def test_a_version_string_is_still_not_a_finding(self):
         self.assertTrue(numbers.check("We used version 1.2.3 of it.",
                                       self.EVIDENCE).passed)
+
+    def test_clinical_codes_are_not_findings(self):
+        """A Methods section lists dozens of ICD codes and not one is a measurement.
+        The keyword sits several words back from most of them, so adjacency is the
+        wrong test."""
+        text = ("Depression comprised ICD-9 codes 296.2, 296.3, 300.4, and 311 or "
+                "ICD-10 codes F32 and F33.")
+        report = numbers.check(text, self.EVIDENCE)
+        self.assertTrue(report.passed, [u.raw for u in report.unsupported])
+
+    def test_a_finding_after_a_code_list_is_still_checked(self):
+        """The exemption stops at the sentence boundary, or a results sentence
+        following a Methods sentence would inherit it."""
+        text = ("Depression comprised ICD-9 codes 296.2 and 311. Discrimination "
+                "reached 0.9999.")
+        self.assertFalse(numbers.check(text, self.EVIDENCE).passed)
 
     def test_an_orcid_is_not_a_finding(self):
         text = "Mikey Ferguson 0009-0005-1365-5609 wrote this sentence down."
@@ -414,6 +504,14 @@ class CitationGateTests(unittest.TestCase):
     def test_a_numeric_range_expands(self):
         keys, _styles = citations.keys_used("Several studies agree [3-5].")
         self.assertEqual(keys, {"3", "4", "5"})
+
+    def test_an_interval_is_not_a_citation(self):
+        """Reference numbering starts at 1, so `[0, 1]` is the unit interval. Any paper
+        that mentions a probability writes it, and reading it as a citation invents an
+        unresolved reference 0."""
+        keys, _styles = citations.keys_used("α was chosen from a grid on [0, 1].")
+        self.assertEqual(keys, set())
+        self.assertTrue(citations.check("a value in [0, 1] here.", {"1": {}}).passed)
 
     def test_a_borrowed_claim_with_no_source_is_flagged(self):
         report = citations.check("Prior studies have shown the same pattern.", {})

@@ -24,6 +24,8 @@ cries wolf gets switched off:
   * Small integers that are structure rather than measurement: section numbers, table
     and figure references, "three of the four intervals".
   * Numbers inside a citation marker.
+  * Clinical and terminology codes. ICD-9 296.2 names a diagnosis; a Methods section
+    lists dozens of them and not one is a finding.
   * Numbers the ledger itself is not expected to hold — a p-value threshold of 0.05,
     a 95% confidence level, a random seed.
 
@@ -92,6 +94,31 @@ _SKIP_SPANS = (
 # A run of digits joined by hyphens: an ORCID, a grant number, a trial registration.
 # Not a measurement, and checking one produces noise on every title page.
 _IDENTIFIER = re.compile(r"\d[\d-]{6,}\d")
+
+# A clinical or terminology CODE is an identifier, not a measurement. ICD-9 296.2 is
+# the name of a diagnosis, and a manuscript's Methods section lists dozens of them. The
+# keyword may sit several words back — "ICD-9 codes 296.2, 296.3, 300.4, and 311" — so
+# this looks at a window of preceding text rather than demanding adjacency, which is
+# what `_STRUCTURAL` does and why it cannot cover this case.
+_CODE_KEYWORD = re.compile(
+    r"\b(?:icd|icd-9|icd-10|cpt|hcpcs|loinc|rxnorm|snomed|ndc|atc|drg|"
+    r"codes?|version|seed|port)\b", re.IGNORECASE)
+
+# A sentence boundary. The exemption must not survive one, or a results sentence
+# following a Methods sentence would inherit it.
+_BOUNDARY = re.compile(r"[.!?]\s+(?=[A-Z])")
+
+
+def _in_code_list(before):
+    """Whether the text immediately before a number puts it in a code list.
+
+    The keyword can sit several words back — "ICD-9 codes 296.2, 296.3, 300.4, and
+    311" — so this cannot demand adjacency the way `_STRUCTURAL` does. It also cannot
+    simply forbid full stops in between, because the codes themselves contain them."""
+    matches = list(_CODE_KEYWORD.finditer(before))
+    if not matches:
+        return False
+    return not _BOUNDARY.search(before[matches[-1].end():])
 
 # Structural references: the number belongs to a label, not to a result.
 _STRUCTURAL = re.compile(
@@ -204,6 +231,9 @@ def extract(text):
         # A structural reference: look at the ~24 characters before the number.
         head = body[max(0, match.start() - 24):match.end()]
         if _STRUCTURAL.search(head):
+            continue
+        # A code list: look further back, and stop at the previous sentence.
+        if _in_code_list(body[max(0, match.start() - 120):match.start()]):
             continue
         value = _to_float(raw, match.group("sci"))
         if value is None:

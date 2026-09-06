@@ -123,6 +123,34 @@ class ParagraphReport:
                 f"across {self.checked} checked ({self.share:.0%})")
 
 
+# A figure or table caption, or a panel label. Written `***Table S3.** ...*` or
+# `**(A) Nearest retrieval**`, both of which the parser sees as a paragraph.
+_CAPTION_RE = re.compile(r"^\s*(?:\*{2,3}\s*(?:Table|Figure|Fig\.?|Panel)\b"
+                         r"|\*\*\([A-Za-z0-9]+\))", re.IGNORECASE)
+
+
+def _is_caption(paragraph):
+    """Whether a block is a caption or a panel label rather than a paragraph.
+
+    A caption describes a figure. It has no topic sentence and no concluding sentence
+    by design, and it is routinely one or two sentences long. Judging it against
+    paragraph shape produces a defect on every figure in a supplement, which is how a
+    gate stops being read. Its SENTENCES are still measured — a caption a reader
+    cannot parse is a real defect — only its shape is exempt."""
+    return bool(_CAPTION_RE.match(paragraph))
+
+
+def _introduces_a_list(paragraph):
+    """Whether a block is a stem introducing a list rather than a paragraph.
+
+    A block ending in a colon is, by definition, pointing at what comes next. Its
+    support is the list beneath it, so judging it as a paragraph with no support is
+    both wrong and actively harmful: the writer's repair for a long sentence is to
+    break it into a stem and a list, and this rule is what stops the gate from calling
+    that repair a defect."""
+    return paragraph.rstrip().endswith(":")
+
+
 def _check_one(index, paragraph):
     """Every shape defect in one paragraph."""
     out = []
@@ -200,7 +228,8 @@ def check(text, section_name=""):
 
     blocks = prose.paragraphs(text)
     checkable = [(i + 1, p) for i, p in enumerate(blocks)
-                 if not prose.is_list_item(p)]
+                 if not prose.is_list_item(p) and not _introduces_a_list(p)
+                 and not _is_caption(p)]
 
     defects = []
     for index, paragraph in checkable:

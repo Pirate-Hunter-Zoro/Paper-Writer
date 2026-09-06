@@ -30,6 +30,9 @@ from dataclasses import dataclass, field
 
 from . import prose
 
+# Reference numbering starts at 1, so a marker containing 0 is not a citation. That one
+# rule is what separates `[1, 2]` from the unit interval `[0, 1]`, which appears in any
+# paper that mentions a probability and would otherwise be read as citing reference 0.
 _NUMERIC_MARKER = re.compile(r"\[(\d+(?:\s*[,–-]\s*\d+)*)\]")
 _PANDOC_MARKER = re.compile(r"(?<![\w@])@([A-Za-z][\w:.#$%&+?<>~/-]*)")
 _AUTHOR_YEAR = re.compile(
@@ -99,16 +102,26 @@ def keys_used(text):
     keys, styles = set(), set()
 
     for match in _NUMERIC_MARKER.finditer(body):
-        styles.add("numeric")
-        for part in re.split(r"\s*,\s*", match.group(1)):
+        parts = re.split(r"\s*,\s*", match.group(1))
+        # Reference numbering starts at 1, so a marker containing 0 is not a citation
+        # at all — it is the unit interval. The WHOLE marker is rejected rather than
+        # the zero alone, or `[0, 1]` would be read as citing reference 1.
+        if any(p.strip() == "0" or p.strip().startswith("0-") or
+               p.strip().startswith("0–") for p in parts):
+            continue
+        found = set()
+        for part in parts:
             bounds = re.split(r"\s*[–-]\s*", part)
             if len(bounds) == 2 and all(b.strip().isdigit() for b in bounds):
                 lo, hi = int(bounds[0]), int(bounds[1])
-                if 0 < hi - lo < 200:
-                    keys.update(str(n) for n in range(lo, hi + 1))
+                if lo > 0 and 0 < hi - lo < 200:
+                    found.update(str(n) for n in range(lo, hi + 1))
                     continue
-            if part.strip().isdigit():
-                keys.add(part.strip())
+            if part.strip().isdigit() and int(part.strip()) > 0:
+                found.add(part.strip())
+        if found:
+            styles.add("numeric")
+            keys |= found
 
     for match in _PANDOC_MARKER.finditer(body):
         styles.add("pandoc")
