@@ -29,7 +29,7 @@ the whole thing.
 
 from .. import paths, states
 from ..gates import prose
-from ..infra import journal, storage
+from ..infra import journal, shipping, storage
 from ..stages import argument, building, delivery, outlining
 from . import revising, stalling
 from . import section as section_level
@@ -114,15 +114,28 @@ def advance(records, project_rec, paper_rec, log_fn=print):
 
         if status == states.BUILT:
             journal.set_status(records, paper_rec, states.DELIVERING)
-            artifacts = [paths.manuscript_path(project_rec["project_id"], paper_num)]
+            # Every document the pipeline produced, in Markdown and in every built
+            # format. The Markdown used to be the manuscript alone, which meant the
+            # author's report arrived only as a .docx and read as an afterthought.
+            artifacts = list(paths.documents(project_rec["project_id"], paper_num))
             artifacts += [_as_path(p) for p in (paper_rec.get("built_paths") or [])]
             dest = delivery.deliver(project_rec, paper_num, artifacts,
                                     paper_name=paper_rec.get("title"))
             journal.set_status(records, records[key], states.DELIVERED,
                                delivered_paths=[str(d) for d in dest])
-            journal.set_status(records, records[key], states.COMPLETED)
             log_fn(f"paper {paper_num}: DELIVERED -> "
                    f"{dest[0].parent if dest else '(nothing to deliver)'}")
+
+            # And commit it, if the delivery folder is a working tree and the operator
+            # asked for that. Never raises: the paper is already delivered, and a git
+            # problem must not be the reason a finished paper's status stays
+            # unfinished. Same rule as a missing pandoc.
+            title = paper_rec.get("title") or f"paper {paper_num}"
+            note = shipping.ship(
+                dest, shipping.message_for(project_rec, paper_num, title, dest),
+                log_fn=log_fn)
+            journal.set_status(records, records[key], states.COMPLETED,
+                               shipped=note)
             return
     except RuntimeError as exc:
         # Stall, never fail. The record remembers where to come back to, and the wait

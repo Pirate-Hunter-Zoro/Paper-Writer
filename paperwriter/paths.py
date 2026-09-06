@@ -151,8 +151,36 @@ def manuscript_path(project_id, paper_num):
     return paper_root(project_id, paper_num) / "manuscript.md"
 
 
+def report_path(project_id, paper_num):
+    """The author's report: the ladder, the measurements, and what shipped holding.
+
+    A document in its own right rather than a log, because it is converted and
+    delivered beside the manuscript — the pipeline's job is not finished when the
+    prose is written, it is finished when the author can see what was checked."""
+    return paper_root(project_id, paper_num) / "report.md"
+
+
+def documents(project_id, paper_num):
+    """Every Markdown document this paper has produced, manuscript first.
+
+    What `building.convert_all` iterates. Discovered rather than listed, so a stage
+    that starts emitting another document gets it converted and delivered without
+    anybody remembering to add it here."""
+    root = paper_root(project_id, paper_num)
+    if not root.is_dir():
+        return []
+    first = manuscript_path(project_id, paper_num)
+    rest = sorted(p for p in root.glob("*.md") if p != first)
+    return ([first] if first.exists() else []) + rest
+
+
 def built_path(project_id, paper_num, title, fmt):
     return paper_root(project_id, paper_num) / f"{slug(title)}.{fmt}"
+
+
+def built_document_path(source, fmt):
+    """The converted form of one Markdown document, beside its source."""
+    return source.with_suffix(f".{fmt}")
 
 
 # --- Scratch: proposals before validation ------------------------------------

@@ -13,7 +13,14 @@ sentence it opens on.**
   own voice, as a claim. The writer will use it. A label is not a topic sentence:
   "cohort characteristics" is a heading, "The cohort was younger and more female than
   the source population" is a topic sentence.
-- `supports` — the claim ids this paragraph makes or supports.
+- `supports` — the claim ids this paragraph makes or supports. **These must be claims
+  the section itself carries**, and between them the section's paragraphs must advance
+  every claim the section was given. A section that carries three claims and plans nine
+  paragraphs touching two of them will draft cleanly and simply not make the third, and
+  no gate after this one can tell.
+- `role` — for a paragraph that advances no claim: a transition, a closing line. Say so
+  rather than leaving `supports` empty and hoping. At most a third of a section's
+  paragraphs may be these; a section made of them is a section with no argument in it.
 - `evidence` — the evidence ids it cites.
 - `closes` — what the last sentence says this paragraph means.
 
@@ -32,6 +39,14 @@ carrying four claims is three paragraphs.
 Every section gets a `words` budget, and the budgets must total at most the venue's
 limit. That is a hard ceiling — over it, the manuscript is desk-rejected before a
 reviewer reads a sentence.
+
+**A section that serves no point is a section to shorten or move.** The ladder gate
+measures how many of your planned words sit in sections whose claims serve none of the
+paper's points, and refuses a plan where too many do. Front matter, references and any
+section the argument map gave no claims are exempt — an Introduction that sets up every
+point without asserting one is the ordinary case. What is not exempt is a complete,
+correct, well-evidenced section that nothing in the paper needs, which is the failure
+this check was written from.
 
 **Give each section the length its claims actually need, then cut a claim if the total
 does not fit.** Do not shave every section to make room. A plan that only fits after

@@ -11,8 +11,10 @@ validated for the properties that cannot be repaired later:
     before Results;
   * every claim in the argument map lands in exactly one section;
   * every claim a section makes rests on evidence the frozen reference holds;
-  * every paragraph declares a topic sentence, and the section's paragraph budgets
-    add up to its word budget.
+  * every paragraph declares a topic sentence;
+  * every paragraph advances a claim the section carries, or declares that it is
+    doing something else — and every claim the section carries is advanced by at
+    least one of its paragraphs.
 
 **Why the topic sentence is gated at the outline and not at the draft.** By the time
 prose exists, a paragraph with no claim is repaired by inventing one, and an invented
@@ -27,10 +29,19 @@ supplied the outline must place every one of them and invent none. Two documents
 can both decide where a claim goes is a loop that cannot converge, and the symptom
 always looks like a stubborn model rather than a missing input.
 
+**Why the paragraph-to-claim join is checked here too.** A section can carry three
+claims and plan nine paragraphs that touch two of them, and the third claim then goes
+missing in a way no later gate can see: the section drafts cleanly, its prose passes,
+its numbers trace, and the claim it was given simply is not made. That is the same
+failure as an unserved point one rung down, so it is caught the same way and in the
+same place — at the outline, where deleting a paragraph costs nothing.
+
 All deterministic, all testable here without a model.
 """
 
 from dataclasses import dataclass, field
+
+from .. import config
 
 # The IMRaD spine, in the order a reader meets it. A heading is matched to a phase by
 # the first keyword it contains; anything unrecognised is unordered and free to sit
@@ -200,6 +211,8 @@ def check(outline, evidence_ids=None, argument_claims=None, word_limit=None):
                 f"section {n}: no paragraph plan. Every section is planned paragraph "
                 f"by paragraph, and every paragraph declares the one claim it makes.")
             continue
+        carried = {str(c) for c in (section.get("claims") or [])}
+        advanced, roleless = set(), 0
         for i, para in enumerate(plans, start=1):
             topic = str(para.get("topic") or "").strip()
             if not topic:
@@ -217,5 +230,48 @@ def check(outline, evidence_ids=None, argument_claims=None, word_limit=None):
                     f"section {n}, paragraph {i}: the topic sentence is a question. "
                     f"A paragraph opens on what it is going to show, not on what it "
                     f"is going to ask.")
+
+            # Which claim this paragraph advances. A paragraph is allowed to advance
+            # none — a transition, a closing line — but it says so, and a section of
+            # them is a section with no argument in it.
+            supports = [str(s) for s in (para.get("supports") or []) if str(s).strip()]
+            if supports:
+                unknown = [s for s in supports if carried and s not in carried]
+                if unknown:
+                    errors.append(
+                        f"section {n}, paragraph {i}: supports claim(s) "
+                        f"{', '.join(unknown[:4])}, which this section does not carry. "
+                        f"The argument map decides which section makes which claim; a "
+                        f"paragraph advances one of its own section's claims or none.")
+                advanced.update(s for s in supports if s in carried)
+            elif str(para.get("role") or "").strip():
+                roleless += 1
+            else:
+                roleless += 1
+                if carried:
+                    warnings.append(
+                        f"section {n}, paragraph {i}: advances no claim and declares "
+                        f"no role. Name the claim it makes, or say what it is for.")
+
+        # A section the map gave no claims is structural — a declarations block, a
+        # references list — and there is nothing for its paragraphs to advance. Only a
+        # section that was given an argument has to make one.
+        if carried and plans and roleless / len(plans) > config.PARAGRAPH_ROLE_SHARE_MAX:
+            errors.append(
+                f"section {n}: {roleless} of {len(plans)} paragraphs advance no claim "
+                f"({roleless / len(plans):.0%}); the ceiling is "
+                f"{config.PARAGRAPH_ROLE_SHARE_MAX:.0%}. A transition and a closing "
+                f"line are legitimate. A section made of them is a section with no "
+                f"argument in it.")
+
+        # And the converse, which is the half nothing downstream can see: a claim the
+        # section was given and no paragraph makes.
+        if carried and plans:
+            unmade = sorted(carried - advanced)
+            if unmade and any(p.get("supports") for p in plans):
+                errors.append(
+                    f"section {n}: carries claim(s) {', '.join(unmade[:4])} that no "
+                    f"paragraph advances. The section will draft cleanly and simply "
+                    f"not make them, and no gate after this one can tell.")
 
     return OutlineReport(passed=not errors, errors=errors, warnings=warnings)

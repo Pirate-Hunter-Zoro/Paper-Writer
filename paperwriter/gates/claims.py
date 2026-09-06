@@ -17,9 +17,12 @@ What it enforces, and why each one exists:
   * **Every evidence item is used.** Evidence gathered and never cited means the
     gathering stage went looking for the wrong things, or the argument dropped a
     finding that cost real compute to produce.
-  * **There is exactly one headline claim.** A paper with three headline claims has
-    three papers in it, and reviewers will say so. A paper with none has a reader who
-    finishes the abstract not knowing what was found.
+  * **Something is marked as what the paper found.** A paper whose claims are all
+    equally weighted has a reader who finishes the abstract not knowing which one
+    mattered. Which claim states which POINT is `gates/ladder.py`'s question, and
+    when this gate is handed the points it stays out of that entirely — two gates
+    checking one flag is two documents that can both decide, which is the loop this
+    project spends most of its design avoiding.
   * **The claim types vary.** A map of nothing but descriptive claims is a report,
     not a paper: something has to be compared, explained, or qualified. And a map with
     no limitation claim is a paper whose Discussion will be written defensively at the
@@ -98,11 +101,16 @@ def stats(claims, evidence_ids):
     }
 
 
-def check(claims, evidence_ids=None, sections=None):
+def check(claims, evidence_ids=None, sections=None, points=None):
     """Validate a paper's argument map. Returns an ArgumentReport.
 
     `evidence_ids` is what the frozen evidence holds. `sections` is the planned
-    section headings, so a claim can be checked for landing somewhere that exists."""
+    section headings, so a claim can be checked for landing somewhere that exists.
+
+    `points`, when supplied, hands the whole question of headline claims to
+    `gates/ladder.py`, which checks one per point. Pass it whenever the paper
+    declares points; leaving it None keeps the pre-ladder rule of exactly one headline
+    claim in the map, which is the same rule for a one-point paper."""
     claims = [c for c in (claims or []) if isinstance(c, dict) and _text(c)]
     if not claims:
         return ArgumentReport(passed=False,
@@ -149,17 +157,26 @@ def check(claims, evidence_ids=None, sections=None):
             f"{', '.join(unused[:8])}. Either the argument dropped a finding, or the "
             f"evidence stage gathered something this paper does not need.")
 
-    # 4. Exactly one headline claim.
-    if counts["headline"] == 0:
+    # 4. Headline claims. Owned here only while the paper declares no points; once it
+    #    does, one-per-point is `gates/ladder.py`'s check and duplicating it here
+    #    produces two errors for one defect and two places to fix it.
+    if points is None:
+        if counts["headline"] == 0:
+            errors.append(
+                "no claim is marked `headline`. Exactly one claim is what this paper "
+                "is about, and the abstract, the title and the conclusion all say it.")
+        elif counts["headline"] > 1:
+            headlines = [str(c.get("id")) for c in claims if c.get("headline")]
+            errors.append(
+                f"{counts['headline']} claims are marked `headline` "
+                f"({', '.join(headlines[:5])}). A paper makes one central claim. Two "
+                f"is two papers, and a reviewer will say so. If it genuinely makes "
+                f"two, declare them as `points` and this check moves to the support "
+                f"ladder, which allows up to three.")
+    elif counts["headline"] == 0:
         errors.append(
-            "no claim is marked `headline`. Exactly one claim is what this paper is "
-            "about, and the abstract, the title and the conclusion all say it.")
-    elif counts["headline"] > 1:
-        headlines = [str(c.get("id")) for c in claims if c.get("headline")]
-        errors.append(
-            f"{counts['headline']} claims are marked `headline` "
-            f"({', '.join(headlines[:5])}). A paper makes one central claim. Two is "
-            f"two papers, and a reviewer will say so.")
+            "no claim is marked `headline`. Each point the paper makes has one claim "
+            "that states it outright.")
 
     # 5. Kinds are declared, and they vary.
     unset = [str(c.get("id")) for c in claims if kind_of(c) == UNSET]

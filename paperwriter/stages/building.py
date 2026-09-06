@@ -1,4 +1,4 @@
-"""Building. Assemble the accepted sections into a manuscript, then convert it.
+"""Building. Assemble the accepted sections into a manuscript, then convert everything.
 
 Two steps, and the order matters because only one of them is allowed to fail.
 
@@ -32,6 +32,7 @@ from .. import config, paths
 from ..gates import citations, numbers, prose, sentences, terminology
 from ..infra import storage
 from ..memory import store
+from . import reporting
 
 
 def _front_matter(plan, paper_num, ledger):
@@ -215,24 +216,83 @@ def convert(project_rec, paper_num, title, fmt, reference_docx=None, log_fn=None
     return out_path
 
 
-def build(project_rec, paper_num, title, log_fn=None):
-    """Assemble, audit, and convert. Returns (manuscript_path, [built paths], notes).
+def convert_one(source, fmt, reference_docx=None, log_fn=None):
+    """Convert one Markdown document to one format, beside its source.
 
-    Raises only if assembly itself fails, which means a filesystem problem rather than
-    a manuscript problem."""
+    Returns the path, or None on any failure that is not the document's fault. The
+    Markdown is the deliverable and this is a convenience, so a missing pandoc must
+    never be the reason a finished paper is not delivered."""
+    if not source.exists():
+        return None
+    out_path = paths.built_document_path(source, fmt)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    command = [config.PANDOC_BIN, str(source), "-o", str(out_path),
+               "--from", "markdown", "--standalone",
+               "--resource-path", str(source.parent)]
+    reference = reference_docx or config.REFERENCE_DOCX
+    if fmt == "docx" and reference:
+        command += ["--reference-doc", str(reference)]
+
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as exc:
+        if log_fn:
+            log_fn(f"could not run pandoc on {source.name} ({exc}). The Markdown is "
+                   f"complete and converts with one command.")
+        return None
+    if result.returncode != 0 or not out_path.exists():
+        if log_fn:
+            log_fn(f"pandoc failed on {source.name} ({result.returncode}): "
+                   f"{(result.stderr or '').strip()[:300]}")
+        return None
+    if log_fn:
+        log_fn(f"built {out_path.name} ({out_path.stat().st_size:,} bytes)")
+    return out_path
+
+
+def convert_all(project_rec, paper_num, reference_docx=None, log_fn=None):
+    """Convert EVERY document this paper produced, in every configured format.
+
+    Discovered from disk rather than listed, so a stage that starts emitting another
+    document gets it converted and delivered without anybody remembering to come back
+    here. The manuscript used to be the only thing converted, which meant the author's
+    report and anything else the pipeline wrote arrived as Markdown beside a .docx and
+    read as an afterthought — which it was."""
+    pid = project_rec["project_id"]
+    built = []
+    for source in paths.documents(pid, paper_num):
+        for fmt in config.BUILD_FORMATS:
+            path = convert_one(source, fmt, reference_docx=reference_docx,
+                               log_fn=log_fn)
+            if path:
+                built.append(path)
+            elif config.BUILD_REQUIRED:
+                raise RuntimeError(
+                    f"building: could not produce {fmt} for {source.name} and "
+                    f"PAPER_BUILD_REQUIRED is set")
+    return built
+
+
+def build(project_rec, paper_num, title, log_fn=None):
+    """Assemble, audit, report, and convert everything.
+
+    Returns (manuscript_path, [built paths], notes). Raises only if assembly itself
+    fails, which means a filesystem problem rather than a manuscript problem."""
     manuscript = assemble(project_rec, paper_num, log_fn=log_fn)
     notes = audit(project_rec, paper_num, log_fn=log_fn)
 
+    # The report is written before conversion so it is converted with everything
+    # else. It reads only committed state, so it cannot fail in a way that should
+    # cost the manuscript its build.
+    try:
+        reporting.write(project_rec, paper_num, audit_notes=notes, log_fn=log_fn)
+    except (OSError, KeyError, ValueError) as exc:
+        notes = list(notes) + [f"REPORT: could not be written ({exc}). The manuscript "
+                               f"is unaffected."]
+
     from ..jobspec import reference_docx as job_reference
     reference = job_reference(project_rec.get("prompt_text", "")) or None
-
-    built = []
-    for fmt in config.BUILD_FORMATS:
-        path = convert(project_rec, paper_num, title, fmt, reference_docx=reference,
-                       log_fn=log_fn)
-        if path:
-            built.append(path)
-        elif config.BUILD_REQUIRED:
-            raise RuntimeError(f"building: could not produce {fmt} and "
-                               f"PAPER_BUILD_REQUIRED is set")
+    built = convert_all(project_rec, paper_num, reference_docx=reference,
+                        log_fn=log_fn)
     return manuscript, built, notes

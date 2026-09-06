@@ -25,20 +25,22 @@ somebody will publish.
 
 1. [The two problems this exists to solve](#the-two-problems-this-exists-to-solve)
 2. [The prose contract, and why it is arithmetic](#the-prose-contract-and-why-it-is-arithmetic)
-3. [Architecture: the propose/dispose spine](#architecture-the-proposedispose-spine)
-4. [The three-layer memory](#the-three-layer-memory)
-5. [The gates](#the-gates)
-6. [The editorial loop — the feedback mechanic](#the-editorial-loop--the-feedback-mechanic)
-7. [State machines](#state-machines)
-8. [The stages, end to end](#the-stages-end-to-end)
-9. [Robustness: nothing fails, everything stalls](#robustness-nothing-fails-everything-stalls)
-10. [Running it](#running-it)
-11. [The workflow: "here are results, write me a paper"](#the-workflow-here-are-results-write-me-a-paper)
-12. [Configuration reference](#configuration-reference)
-13. [Watching a run](#watching-a-run)
-14. [Working in this repository](#working-in-this-repository)
-15. [Code layout](#code-layout)
-16. [Known limits and honest caveats](#known-limits-and-honest-caveats)
+3. [The support ladder, and why it is the only gate that refuses correct work](#the-support-ladder-and-why-it-is-the-only-gate-that-refuses-correct-work)
+4. [Architecture: the propose/dispose spine](#architecture-the-proposedispose-spine)
+5. [The three-layer memory](#the-three-layer-memory)
+6. [The gates](#the-gates)
+7. [The editorial loop — the feedback mechanic](#the-editorial-loop--the-feedback-mechanic)
+8. [State machines](#state-machines)
+9. [The stages, end to end](#the-stages-end-to-end)
+10. [Robustness: nothing fails, everything stalls](#robustness-nothing-fails-everything-stalls)
+11. [Running it](#running-it)
+12. [The workflow: "here are results, write me a paper"](#the-workflow-here-are-results-write-me-a-paper)
+13. [What comes out](#what-comes-out)
+14. [Configuration reference](#configuration-reference)
+15. [Watching a run](#watching-a-run)
+16. [Working in this repository](#working-in-this-repository)
+17. [Code layout](#code-layout)
+18. [Known limits and honest caveats](#known-limits-and-honest-caveats)
 
 ---
 
@@ -146,6 +148,71 @@ the synonyms that must **never** appear — and `gates/terminology.py` enforces 
 
 ---
 
+## The support ladder, and why it is the only gate that refuses correct work
+
+Every other gate here checks that a piece of the paper is well made. One checks that
+the piece *belongs*, and it is the only one that can refuse a section which is correct,
+well written, fully evidenced and beside the point.
+
+```
+points   (1-3)      what the paper is FOR
+  ^ serves
+claims   (many)     what the paper ASSERTS
+  ^ rests on
+evidence (many)     what the analysis PRODUCED
+```
+
+`gates/claims.py` already owned the bottom join. `gates/ladder.py` owns the top one.
+
+**The failure it was written from.** A finished manuscript from this harness had three
+stated objectives, which were three things the analysis had done rather than three
+things the paper argued. Two were support for the first: an encoder sweep showing the
+headline null was not an artifact, and an ablation showing why the two arms tied. The
+genuinely separate question was buried sixth of nine subsections with its motivation
+stated nowhere. Every gate passed, every number traced, the prose was clean — and a
+reader who stopped after the Results could not say what the paper claimed, because
+nothing in the pipeline had ever asked.
+
+The same manuscript carried a whole supplement section — a rubric, two verbatim
+prompts, four worked examples, a re-judging experiment — in service of a null result
+about a weighting scheme layered on a predictor that was not competitive. Complete,
+correct, irrelevant. Nothing refused it, because nothing was counting what the paper
+was for.
+
+### What it enforces
+
+| Check | Why |
+|---|---|
+| One to three points, each a sentence | One is the ordinary case and the degenerate case at once — the `headline` boolean this replaced was this gate with the count fixed at one. Three is the most a reader carries out of the room. Four is the count at which the author has stopped choosing. |
+| Every claim serves a point, or declares a role | A claim that does neither is refused, and the honest answer is often to drop it. |
+| Two roles only: `setup`, `reporting` | There is deliberately **no `validity` role**. A check that would have undermined a point and did not *serves* that point, and should name it — often more than one. Given a role instead, validity material drifts to the front of the Results, which is exactly where the real manuscript had put three of them, ahead of its own finding. |
+| At most a third of claims may hold a role | An unbounded exemption turns the ladder into decoration, and "setup" is the easiest label in the world to reach for. |
+| Every point carried by ≥2 claims, not all limitations | A point served by one claim *is* that claim. A point whose whole support is a caveat is not a finding. |
+| Exactly one claim per point marked `headline` | It is the sentence the abstract and the conclusions both reuse. |
+| **The word budget** | The share of planned words in sections that serve no point, warned at 15% and refused at 30%. |
+
+**The budget is the check that matters**, and the reason is that a graph check only
+asks whether every claim has a parent — which a determined writer satisfies by
+attaching claims loosely. Length cannot be argued with. Front matter, references, and
+any section the argument map gave *no* claims are exempt, because an Introduction that
+sets up every point without asserting one is the ordinary case and counting its words
+as serving nothing would fire on every well-built paper. What is not exempt is a
+complete, well-evidenced section that nothing in the paper needs.
+
+One rung lower, `gates/structure.py` asks the same question of paragraphs: every
+paragraph advances a claim its section carries or says what it is doing instead, and
+every claim a section carries is advanced by at least one of its paragraphs. A section
+that carries three claims and plans nine paragraphs touching two of them drafts
+cleanly, passes its prose gates, traces its numbers, and simply does not make the
+third — and no gate after the outline can tell.
+
+**Points are decided at planning time** and nowhere else, because that is the only
+stage that sees all the evidence at once. Left to the argument map they would be
+inferred from the claims, which inverts the ladder: claims exist to serve points, so a
+point derived from the claims is whatever the claims happened to be.
+
+---
+
 ## Architecture: the propose/dispose spine
 
 Each unit of work follows the same four beats:
@@ -215,8 +282,9 @@ each returns a verdict a person can check by hand.
 | Gate | What it refuses |
 |---|---|
 | `coverage` | Drafting on evidence that cannot support the claims. Below the floor the project parks and gathers more. |
-| `claims` | An argument map that is not an argument: no headline claim or two, a claim resting on nothing, kinds that do not vary, no limitation planned, the same thing claimed twice. |
-| `structure` | An outline that does not hold together: non-contiguous numbering, Results before Methods, budgets over the venue's limit, a claim placed twice or not at all, a paragraph with no declared topic sentence. |
+| `claims` | An argument map that is not an argument: a claim resting on nothing, kinds that do not vary, no limitation planned, the same thing claimed twice. |
+| `ladder` | **A paper with no spine, and material that serves nothing.** No declared points or more than three, a claim serving neither a point nor a stated role, a point carried by one claim or by nothing but caveats, and — the check that matters — too many of the planned words sitting in sections that serve no point. |
+| `structure` | An outline that does not hold together: non-contiguous numbering, Results before Methods, budgets over the venue's limit, a claim placed twice or not at all, a paragraph with no declared topic sentence, and a claim the section carries that no paragraph advances. |
 | `numbers` | **A figure in the prose that the analysis never produced.** The most valuable gate here. |
 | `terminology` | A forbidden synonym for a locked term; an abbreviation used before it is expanded, or expanded twice. |
 | `citations` | A marker that resolves to nothing; a reference nobody cites; a borrowed claim carrying no source; two citation styles in one section. |
@@ -343,16 +411,18 @@ different count.
 |---|---|---|---|
 | `evidence` | One item per fact, with its exact numbers and its source | `memory.ledger.validate_evidence`, then `gates.coverage` | Frozen evidence per corpus |
 | `grounding` | Terminology lock, estimand, reader, checklist, conventions | Completeness gate in the stage | `grounding.json` |
-| `planning` | Which papers, which claims belong to which | `gates.claims` | The plan, and the seeded ledger |
-| `argument` | Claim → section → evidence, and what a reader must accept first | `gates.claims`, plus a dependency-order check | `argument.json`, chunk by chunk |
-| `outlining` | Sections, budgets, and a paragraph plan with topic sentences | `gates.structure` | `outline.json` |
+| `planning` | Which papers, what each is FOR, which claims serve it | `gates.claims`, `gates.ladder` | The plan, and the seeded ledger |
+| `argument` | Claim → section → evidence, and what a reader must accept first | `gates.claims`, `gates.ladder`, plus a dependency-order check | `argument.json`, chunk by chunk |
+| `outlining` | Sections, budgets, and a paragraph plan with topic sentences | `gates.structure`, `gates.ladder` (the word budget) | `outline.json` |
 | `drafting` | One section's prose | The gates, via the editorial loop | A draft in staging |
 | `review` | Every defect *with its repair* | `gates.*` computed before the call | An edit list |
 | `patching` | — (pure) | Anchor uniqueness | The repaired prose |
 | `surgery` | Replacement prose for one anchored passage | Anchor uniqueness, shrink floor | A splice |
 | `ledger_update` | What this section settled | `memory.ledger.merge_ledger_update` | The merged ledger |
-| `building` | — (pure, then pandoc) | The whole-manuscript audit | `manuscript.md`, then `.docx` |
+| `reporting` | — (pure) | — | `report.md`: the ladder, the measurements, what shipped holding |
+| `building` | — (pure, then pandoc) | The whole-manuscript audit | `manuscript.md` and `report.md`, then a `.docx` of each |
 | `delivery` | — (pure) | Content hash | The output folder, atomically |
+| `shipping` | — (pure, then git) | A refusal check on the working tree | A commit, and a push if asked |
 
 **One ordering decision is the most important in the engine**, and it is
 counter-intuitive: the ledger is merged *before* the prose is placed. A contradiction
@@ -577,6 +647,55 @@ If a gate fires on something that is plainly correct, suspect the gate first. Al
 were found by pointing the gates at real prose, and not one of them would have shown up
 on a fixture.
 
+## What comes out
+
+Every document the pipeline produces is converted and delivered, not just the
+manuscript. The set is discovered from disk rather than listed, so a stage that starts
+emitting another document gets it built and shipped without anybody remembering to come
+back and add it.
+
+| Document | What it is |
+|---|---|
+| `manuscript.md` | the paper. The artifact; everything else is built from it or about it |
+| `report.md` | **the author's report.** What the paper was for, how the prose measures against every band, what shipped unresolved, and where the numbers came from |
+| `<each>.docx` | one per Markdown document, through pandoc against the venue's reference document |
+
+**Why the report is a document and not a log.** All of it was already true and none of
+it was readable: the ladder was in the plan, the gate measurements were in
+`state/decisions.log`, the issues a section shipped holding were in the journal, and a
+person wanting all three read three files in two formats and joined them by hand. The
+pipeline's job is not finished when the prose is written. It is finished when the author
+can see what was checked.
+
+Nothing in the report is generated. Every line is read off state the pipeline already
+committed, because a report that *summarised* the paper would be a second opinion about
+it, and this is a record.
+
+### And then it can commit
+
+If the delivery folder is a git working tree, `infra/shipping.py` will commit the
+delivered files and — separately opted into — push them. Both halves are off by
+default, because pushing to a remote is the only outward-facing thing this harness does.
+
+It is deliberately narrow:
+
+- **It stages the delivered files by path.** Never `git add -A`. A daemon that swept the
+  working tree would eventually commit half of an unrelated edit under a message about a
+  manuscript.
+- **It refuses rather than forces.** A detached HEAD, a merge or rebase in progress,
+  changes already staged by somebody else, or a failing push all stop it with an
+  explanation. The paper is delivered by then, so stopping costs one commit made by
+  hand and the alternative costs history.
+- **It never raises into the engine.** A git problem must not be the reason a finished
+  paper's status stays unfinished — the same rule that governs a missing pandoc.
+
+```bash
+PAPER_SHIP_REPO=/path/to/analysis-repo    # commit delivered papers here
+PAPER_SHIP_PUSH=1                         # and push them
+```
+
+---
+
 ## Configuration reference
 
 Every tunable lives in `paperwriter/config.py` with the reasoning next to it. Every one
@@ -594,7 +713,11 @@ is overridable with a `PAPER_`-prefixed environment variable. The ones worth kno
 | `PAPER_NUMBER_TOLERANCE` | `0.005` | How much rounding counts as the same number. |
 | `PAPER_EVIDENCE_COVERAGE_MIN` | `0.85` | How much of the intended argument the evidence must support before drafting starts. |
 | `PAPER_EDIT_MAX_PASSES` | `3` | Editorial passes before the loop asks whether it is still improving. |
-| `PAPER_BUILD_FORMATS` | `docx` | What pandoc is asked for. Markdown is always kept. |
+| `PAPER_BUILD_FORMATS` | `docx` | What pandoc is asked for, for every document. Markdown is always kept. |
+| `PAPER_POINTS_MAX` | `3` | How many points a paper may be about. Four is the count at which the author has stopped choosing. |
+| `PAPER_UNLADDERED_WORDS_MAX` | `0.30` | Share of planned words allowed in sections that serve no point. |
+| `PAPER_SHIP_REPO` | off | A git working tree to commit delivered papers into. |
+| `PAPER_SHIP_PUSH` | off | Whether to push after committing. |
 | `PAPER_QUIET_HOURS` | off | Whether to stay off a shared seat during the working day. |
 
 ---
@@ -648,6 +771,7 @@ paperwriter/
              papers.
   memory/    the three layers, their schemas, the merge gatekeeper, and the brief.
   gates/     the deterministic validators. Pure arithmetic and set logic.
+             `ladder.py` is the only one that can refuse correct work.
   models/    THE ONLY place an external model is reached.
   stages/    one module per stage. Propose, validate, apply atomically.
   engine/    the nested project → paper → section state machine.

@@ -10,7 +10,7 @@ import support                                                      # noqa: F401
 import unittest                                                     # noqa: E402
 
 from paperwriter import config                                      # noqa: E402
-from paperwriter.gates import (citations, claims, coverage,         # noqa: E402
+from paperwriter.gates import (citations, claims, coverage, ladder,  # noqa: E402
                                length, numbers, paragraphs, prose,
                                readability, sentences, structure,
                                terminology)
@@ -720,6 +720,283 @@ class ArgumentGateTests(unittest.TestCase):
         report = claims.check(self._claims(), evidence_ids={"e.1", "e.2", "e.9"})
         self.assertTrue(report.passed)
         self.assertTrue(any("e.9" in w for w in report.warnings))
+
+
+class SupportLadderTests(unittest.TestCase):
+    """The ladder: points <- claims <- evidence. The rung this gate owns is the top
+    one, and the failure it was written from is a manuscript where every other gate
+    passed and a reader still could not say what the paper claimed."""
+
+    POINTS = [
+        {"id": "p.1", "point": "The embedding does not outperform the feature vector "
+                               "on this outcome."},
+        {"id": "p.2", "point": "Retrieval over that embedding loses to a model fitted "
+                               "on it."},
+    ]
+
+    def _claims(self, **overrides):
+        base = [
+            {"id": "c.1", "claim": "the two representations tie",
+             "kind": "comparative", "serves": ["p.1"], "headline": True},
+            {"id": "c.2", "claim": "the tie holds across four encoders",
+             "kind": "descriptive", "serves": ["p.1"]},
+            {"id": "c.3", "claim": "nearest retrieval beats random retrieval",
+             "kind": "descriptive", "serves": ["p.2"], "headline": True},
+            {"id": "c.4", "claim": "retrieval falls short of the trained model",
+             "kind": "comparative", "serves": ["p.2"]},
+            {"id": "c.5", "claim": "the cohort is one community health system",
+             "kind": "descriptive", "role": "setup"},
+        ]
+        for cid, patch in overrides.items():
+            for claim in base:
+                if claim["id"] == cid.replace("_", "."):
+                    claim.update(patch)
+        return base
+
+    def test_a_well_formed_ladder_passes(self):
+        report = ladder.check(self.POINTS, self._claims())
+        self.assertTrue(report.passed, report.errors)
+
+    def test_no_points_is_a_list_of_findings(self):
+        report = ladder.check([], self._claims())
+        self.assertFalse(report.passed)
+        self.assertTrue(any("declares no points" in e for e in report.errors))
+
+    def test_too_many_points_is_several_papers(self):
+        points = self.POINTS + [
+            {"id": f"p.{i}", "point": f"a {i}th thing the paper is also about here"}
+            for i in range(3, 6)]
+        claims = self._claims() + [
+            {"id": f"c.1{i}", "claim": f"support {i}", "kind": "descriptive",
+             "serves": [f"p.{i}"], "headline": True} for i in range(3, 6)
+        ] + [
+            {"id": f"c.2{i}", "claim": f"more support {i}", "kind": "descriptive",
+             "serves": [f"p.{i}"]} for i in range(3, 6)]
+        report = ladder.check(points, claims)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("the ceiling is" in e for e in report.errors))
+
+    def test_a_point_that_is_a_topic_is_refused(self):
+        points = [dict(self.POINTS[0], point="representation comparison"),
+                  self.POINTS[1]]
+        report = ladder.check(points, self._claims())
+        self.assertFalse(report.passed)
+        self.assertTrue(any("topic, not a point" in e for e in report.errors))
+
+    def test_a_claim_serving_nothing_is_refused(self):
+        report = ladder.check(self.POINTS, self._claims(c_2={"serves": []}))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("serves no point and declares no role" in e
+                            for e in report.errors))
+
+    def test_a_claim_cannot_both_serve_and_have_a_role(self):
+        report = ladder.check(self.POINTS, self._claims(c_2={"role": "setup"}))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("both serves" in e for e in report.errors))
+
+    def test_an_unknown_role_is_refused_and_names_the_valid_ones(self):
+        report = ladder.check(self.POINTS,
+                               self._claims(c_5={"role": "validity"}))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("no role for a validity check" in e
+                            for e in report.errors))
+
+    def test_a_claim_serving_a_point_that_does_not_exist_is_refused(self):
+        report = ladder.check(self.POINTS, self._claims(c_2={"serves": ["p.9"]}))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("does not declare" in e for e in report.errors))
+
+    def test_a_point_carried_by_one_claim_is_that_claim(self):
+        report = ladder.check(self.POINTS, self._claims(c_2={"serves": ["p.2"]}))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("is served by 1 claim" in e for e in report.errors))
+
+    def test_a_point_supported_only_by_caveats_is_not_a_finding(self):
+        claims = self._claims(c_3={"kind": "limitation"},
+                              c_4={"kind": "limitation"})
+        report = ladder.check(self.POINTS, claims)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("only by limitation claims" in e
+                            for e in report.errors))
+
+    def test_every_point_has_one_claim_that_states_it(self):
+        report = ladder.check(self.POINTS, self._claims(c_3={"headline": False}))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("no claim marked `headline`" in e
+                            for e in report.errors))
+
+    def test_two_claims_cannot_both_state_one_point(self):
+        report = ladder.check(self.POINTS, self._claims(c_2={"headline": True}))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("claims marked `headline`" in e
+                            for e in report.errors))
+
+    def test_the_role_allowance_is_bounded(self):
+        """An unbounded exemption turns the ladder into decoration, and `setup` is the
+        easiest label in the world to reach for."""
+        claims = self._claims()
+        claims += [{"id": f"c.1{i}", "claim": f"more background {i}",
+                    "kind": "descriptive", "role": "setup"} for i in range(4)]
+        report = ladder.check(self.POINTS, claims)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("the ladder is" in e for e in report.errors))
+
+
+class SupportLadderBudgetTests(unittest.TestCase):
+    """The word-budget half. A graph check asks whether every claim has a parent,
+    which a writer satisfies by attaching claims loosely; length cannot be argued
+    with, and it is the half that catches a complete and irrelevant section."""
+
+    POINTS = [{"id": "p.1", "point": "The embedding does not outperform the feature "
+                                     "vector on this outcome."}]
+    CLAIMS = [
+        {"id": "c.1", "claim": "the two tie", "kind": "comparative",
+         "serves": ["p.1"], "headline": True},
+        {"id": "c.2", "claim": "the tie holds across encoders", "kind": "descriptive",
+         "serves": ["p.1"]},
+        {"id": "c.9", "claim": "the judge rubric was mislabelled",
+         "kind": "descriptive", "role": "reporting"},
+    ]
+
+    def _outline(self, aside_words):
+        return {"sections": [
+            {"number": 1, "heading": "Introduction", "words": 400, "claims": []},
+            {"number": 2, "heading": "Results", "words": 1000, "claims": ["c.1", "c.2"]},
+            {"number": 3, "heading": "A similarity judge nobody needed",
+             "words": aside_words, "claims": ["c.9"]},
+            {"number": 4, "heading": "References", "words": 300, "claims": []},
+        ]}
+
+    def test_a_small_aside_passes(self):
+        report = ladder.check(self.POINTS, self.CLAIMS, outline=self._outline(120))
+        self.assertTrue(report.passed, report.errors)
+
+    def test_a_section_serving_nothing_is_refused_on_length(self):
+        report = ladder.check(self.POINTS, self.CLAIMS, outline=self._outline(900))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("serve no point" in e for e in report.errors))
+        self.assertTrue(any("A similarity judge nobody needed" in e
+                            for e in report.errors))
+
+    def test_the_share_is_warned_about_before_it_blocks(self):
+        report = ladder.check(self.POINTS, self.CLAIMS, outline=self._outline(250))
+        self.assertTrue(report.passed, report.errors)
+        self.assertTrue(any("grows quietly" in w for w in report.warnings))
+
+    def test_a_section_with_no_claims_is_structural_not_unladdered(self):
+        """An Introduction that sets up every point without asserting one is the
+        ordinary case. Counting its words as serving nothing fires on every paper."""
+        outline = self._outline(120)
+        outline["sections"][0]["words"] = 4000        # an enormous claim-free section
+        report = ladder.check(self.POINTS, self.CLAIMS, outline=outline)
+        self.assertTrue(report.passed, report.errors)
+
+
+class SupportLadderMigrationTests(unittest.TestCase):
+    """A claim map written before the ladder existed marks one claim `headline`,
+    declares no points, and gives no claim a `serves`. Refusing those would strand
+    state that is otherwise fine, so both halves of the migration travel together."""
+
+    LEGACY = [
+        {"id": "c.1", "claim": "the embedded representation discriminates better",
+         "kind": "comparative", "headline": True},
+        {"id": "c.2", "claim": "the split is large enough to estimate the gap",
+         "kind": "descriptive"},
+        {"id": "c.3", "claim": "discrimination is not benefit", "kind": "limitation"},
+    ]
+
+    def test_a_pre_ladder_map_migrates_to_one_point(self):
+        points, claims = ladder.migrated([], self.LEGACY)
+        self.assertEqual([p["id"] for p in points], ["p.1"])
+        self.assertEqual(points[0]["derived_from"], "c.1")
+        self.assertTrue(all(c["serves"] == ["p.1"] for c in claims))
+        self.assertTrue(ladder.check(points, claims).passed)
+
+    def test_a_derived_point_is_not_measured_as_prose(self):
+        """It inherits its wording from the claim it came from, so measuring its
+        length measures that claim against a rule it never had to meet."""
+        terse = [{"id": "c.1", "claim": "text wins", "kind": "comparative",
+                  "headline": True},
+                 {"id": "c.2", "claim": "twice over", "kind": "descriptive"}]
+        points, claims = ladder.migrated([], terse)
+        self.assertTrue(ladder.check(points, claims).passed)
+
+    def test_declared_points_are_not_filled_in(self):
+        """Under declared points a claim with no `serves` skipped a field that
+        exists, which is a different thing from a map that predates it."""
+        points = [{"id": "p.1", "point": "a thing this paper is genuinely about"}]
+        _p, claims = ladder.migrated(points, self.LEGACY)
+        self.assertFalse(any(c.get("serves") for c in claims))
+        self.assertFalse(ladder.check(points, claims).passed)
+
+    def test_a_map_with_no_headline_does_not_migrate_silently(self):
+        points, _claims = ladder.migrated([], [dict(self.LEGACY[1])])
+        self.assertEqual(points, [])
+
+
+class OutlineParagraphLadderTests(unittest.TestCase):
+    """The rung below the ladder: a section can carry three claims, plan nine
+    paragraphs that touch two of them, and simply not make the third."""
+
+    def _outline(self, paragraphs):
+        return {"sections": [{
+            "number": 1, "heading": "Results", "words": 600,
+            "claims": ["c.1", "c.2"], "evidence": [],
+            "paragraphs": paragraphs}]}
+
+    def test_a_paragraph_advancing_a_claim_passes(self):
+        outline = self._outline([
+            {"topic": "The two representations discriminated alike.",
+             "supports": ["c.1"]},
+            {"topic": "That tie held across every encoder tested.",
+             "supports": ["c.2"]},
+        ])
+        self.assertTrue(structure.check(outline).passed)
+
+    def test_a_claim_no_paragraph_makes_is_refused(self):
+        outline = self._outline([
+            {"topic": "The two representations discriminated alike.",
+             "supports": ["c.1"]},
+            {"topic": "The interval was narrower than the marginal ones.",
+             "supports": ["c.1"]},
+        ])
+        report = structure.check(outline)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("no paragraph advances" in e for e in report.errors))
+
+    def test_a_paragraph_cannot_advance_another_sections_claim(self):
+        outline = self._outline([
+            {"topic": "The two representations discriminated alike.",
+             "supports": ["c.1"]},
+            {"topic": "That tie held across every encoder tested.",
+             "supports": ["c.2", "c.7"]},
+        ])
+        report = structure.check(outline)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("which this section does not carry" in e
+                            for e in report.errors))
+
+    def test_a_section_of_transitions_has_no_argument_in_it(self):
+        outline = self._outline([
+            {"topic": "This paragraph sets the scene for what follows.",
+             "role": "transition"},
+            {"topic": "This paragraph also sets the scene for what follows.",
+             "role": "transition"},
+            {"topic": "The two representations discriminated alike.",
+             "supports": ["c.1", "c.2"]},
+        ])
+        report = structure.check(outline)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("no argument in it" in e for e in report.errors))
+
+    def test_a_claimless_section_is_structural(self):
+        outline = {"sections": [{
+            "number": 1, "heading": "Declarations", "words": 200, "claims": [],
+            "evidence": [], "paragraphs": [
+                {"topic": "The funder had no role in the analysis."},
+                {"topic": "The authors declare no competing interests."},
+            ]}]}
+        self.assertTrue(structure.check(outline).passed)
 
 
 class OutlineStructureTests(unittest.TestCase):

@@ -125,8 +125,25 @@ SECTIONS = [
 ]
 
 
-def _paragraph(topic, closes):
-    return {"topic": topic, "supports": [], "evidence": ["e.1"], "closes": closes}
+# Which claims each section carries, mirroring the argument fixture's placement.
+# The outline gate requires every claim a section was given to be advanced by at least
+# one of its paragraphs, so the fixture has to know the same thing the map does.
+# Every claim id the plan fixture declares, so a test asserting a count does not have
+# to be edited each time the fixture gains one.
+PLAN_CLAIM_IDS = ("c.1", "c.2", "c.3", "c.4", "c.5")
+
+SECTION_CLAIMS = {
+    "Results": ("c.1",),
+    "Methods": ("c.2", "c.5"),
+    "Discussion": ("c.3", "c.4"),
+}
+
+
+def _paragraph(topic, closes, supports=()):
+    """One planned paragraph. `supports` names the claims it advances, which the
+    outline gate now requires of any section the argument map gave claims to."""
+    return {"topic": topic, "supports": list(supports), "evidence": ["e.1"],
+            "closes": closes}
 
 
 # Prose that passes every gate: numbers from the ledger, locked terms only, paragraphs
@@ -217,21 +234,35 @@ def stub_model_seams():
             "papers": [{"number": 1, "title": "Fixture Paper",
                         "venue": "Journal of Fixtures", "word_limit": 4000,
                         "one_line": "Text beats features for this label."}],
+            # What the paper is FOR. One point here, which is the ordinary case and
+            # the degenerate case of the support ladder at once.
+            "points": [
+                {"id": "p.1", "paper": 1,
+                 "point": "Embedding a patient narrative discriminates better than "
+                          "a typed feature vector on this outcome."},
+            ],
+            # Every claim either serves a point or declares why it is in the paper
+            # without serving one. `gates/support.py` checks both halves.
             "claims": [
                 {"id": "c.1", "paper": 1, "headline": True, "kind": "comparative",
+                 "serves": ["p.1"],
                  "claim": "The embedded representation discriminates better than the "
                           "feature representation.",
                  "evidence": ["e.1", "e.2"]},
-                {"id": "c.2", "paper": 1, "kind": "descriptive",
+                {"id": "c.2", "paper": 1, "kind": "descriptive", "role": "setup",
                  "claim": "The held-out split is large enough to estimate that gap.",
                  "evidence": ["e.3", "e.4"]},
-                {"id": "c.3", "paper": 1, "kind": "limitation",
+                {"id": "c.3", "paper": 1, "kind": "limitation", "serves": ["p.1"],
                  "claim": "Discrimination does not establish clinical benefit.",
                  "evidence": ["e.1"]},
-                {"id": "c.4", "paper": 1, "kind": "implication",
+                {"id": "c.4", "paper": 1, "kind": "implication", "serves": ["p.1"],
                  "claim": "A threshold has to be chosen before anyone is treated "
                           "differently.",
                  "evidence": ["e.1"]},
+                {"id": "c.5", "paper": 1, "kind": "methodological", "serves": ["p.1"],
+                 "claim": "Both representations were scored on one frozen split, so "
+                          "the comparison is paired.",
+                 "evidence": ["e.3"]},
             ],
             "references": {"1": {"title": "A prior study", "year": 2024,
                                  "authors": "Smith J", "venue": "Journal"}},
@@ -242,7 +273,7 @@ def stub_model_seams():
     def argument_chunk(project_rec, paper_num, plan, mapped, wanted, out_path,
                        log_fn=None, feedback=""):
         placement = {"c.1": "Results", "c.2": "Methods", "c.3": "Discussion",
-                     "c.4": "Discussion"}
+                     "c.4": "Discussion", "c.5": "Methods"}
         storage.save_json({
             "sections": [h for h, _w in SECTIONS],
             "claims": [dict(c, section=placement[c["id"]], depends_on=[])
@@ -258,9 +289,11 @@ def stub_model_seams():
              "exit_state": f"the reader has read {heading}",
              "paragraphs": [
                  _paragraph(f"{heading} makes its first point about the embedded "
-                            f"representation.", "what that point means"),
+                            f"representation.", "what that point means",
+                            supports=SECTION_CLAIMS.get(heading, ())),
                  _paragraph(f"{heading} makes its second point about the cohort.",
-                            "what that point means"),
+                            "what that point means",
+                            supports=SECTION_CLAIMS.get(heading, ())),
              ]}
             for i, (heading, words) in enumerate(SECTIONS, start=1)]}, out_path)
         return "stub outline"

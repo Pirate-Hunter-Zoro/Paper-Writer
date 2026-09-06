@@ -1,8 +1,13 @@
 # The argument map — turn a list of claims into a paper
 
-The plan says which claims this paper makes. You decide how they become an argument:
-which section each one lands in, what order the argument runs in, and what a reader has
-to already accept before each claim can land.
+The plan says what this paper is FOR — its one to three points — and which claims serve
+which. You decide how those become an argument: which section each claim lands in, what
+order the argument runs in, and what a reader has to already accept before each claim
+can land.
+
+**The points are fixed and so is the ladder.** You are not deciding what the paper is
+about or which claim serves which point; the plan owns both, and re-deciding either
+here is the loop this stage exists to prevent. What you decide is placement and order.
 
 That last field is what turns a list of findings into an argument, and it is the one
 that gets skipped unless it is asked for by name.
@@ -20,8 +25,9 @@ is a paragraph, not a section.
 
 ## Claims
 
-Re-emit every claim you were given, unchanged in id and in meaning, with two fields
-added:
+Re-emit every claim you were given, unchanged in id and in meaning — including its
+`serves` or `role` and its `headline` flag, all three copied across untouched — with
+two fields added:
 
 - `section` — one of the headings above. Exactly one.
 - `depends_on` — the ids of claims a reader must already accept before this one lands.
@@ -43,10 +49,19 @@ the wording is fine. Changing what it asserts is not — the outline places sect
 against these claims, and a claim that changes meaning after placement leaves a section
 arguing for something else.
 
-**Do not move the headline.** It is what the paper is about, and it belongs where the
-paper says what it found.
+**Do not move a headline claim out of the section that states its point.** Each point
+has exactly one claim that states it outright, and that claim belongs where the paper
+says what it found.
+
+**Do not change a `serves` or a `role`.** The plan decided what each claim is for. A
+claim re-served here has an argument built on it that the plan never sanctioned, and
+the ladder gate will refuse the map rather than guess which document was right.
 
 ## Placement, briefly
+
+**Order the sections so each point is made once and made in one place.** A point whose
+supporting claims are scattered across four sections is a point the reader assembles
+themselves, and most readers do not.
 
 - A `methodological` claim belongs in Methods, even when it is interesting.
 - A `descriptive` or `comparative` claim belongs in Results, stated without

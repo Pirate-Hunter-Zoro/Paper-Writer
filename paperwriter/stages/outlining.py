@@ -27,7 +27,7 @@ manuscript that is rejected unread.
 
 from .. import config, paths
 from . import argument as argument_stage, correction_brief, grounding
-from ..gates import structure
+from ..gates import ladder as ladder_gate, structure
 from ..infra import storage
 from ..memory.ledger import new_evidence, evidence_ids
 from ..models import prompts, text
@@ -162,8 +162,21 @@ def run(project_rec, paper_num, log_fn=None):
             report = structure.check(outline, evidence_ids=known,
                                      argument_claims=argument["claims"],
                                      word_limit=limit)
-            errors = report.errors
-            for warning in report.warnings:
+            errors = list(report.errors)
+            warnings = list(report.warnings)
+
+            # The ladder's word budget. This is the only place it can be measured:
+            # the plan knows what serves what and the outline knows how long each
+            # section is, and the share of the paper that serves nothing needs both.
+            points = argument.get("points") or argument_stage.paper_points(
+                plan, paper_num)
+            if points:
+                _p, laddered = ladder_gate.migrated(points, argument["claims"])
+                ladder = ladder_gate.check(points, laddered, outline=outline)
+                errors += ladder.errors
+                warnings += ladder.warnings
+
+            for warning in warnings:
                 if log_fn:
                     log_fn(f"outlining (warning): {warning}")
         if not errors:

@@ -200,6 +200,15 @@ redirect at import, so the suite cannot touch a real path.
   goes through the stage's existing seam.
 - **A gate never calls a model and never does I/O.** That is what makes it testable
   with a string. If a gate needs to read a file, the caller reads it.
+- **`gates/ladder.py` is the only gate that can refuse correct work.** Everything else
+  asks whether a piece of the paper is well made; that one asks whether it belongs, and
+  its word-budget check will reject a complete, well-evidenced, beautifully written
+  section that serves none of the paper's points. That is the intent. Before relaxing
+  one of its thresholds, read the failure recorded in its docstring.
+- **Points are decided at planning time and nowhere else.** Every later stage sees a
+  slice of the evidence and would have to infer the points from the claims, which
+  inverts the ladder. If you find yourself deriving a point downstream, the plan is
+  missing one.
 - **An edit anchor is matched character for character.** Anything that produces an
   anchor must carry the sentence verbatim, line breaks included. `gates/prose.py`
   returns both a `raw` and a `tidy` form for exactly this reason, and handing the
