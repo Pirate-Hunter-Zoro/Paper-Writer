@@ -168,6 +168,7 @@ def build_section_brief(section, prev_section_exit, ledger, evidence,
     budget = int(section.get("words") or 0)
     claim_ids = [str(c) for c in (section.get("claims") or [])]
     claims = ledger.get("claims", {}) if ledger else {}
+    points = ledger.get("points", {}) if ledger else {}
 
     parts = [f"SECTION {n} — {heading}", "", "WRITING BRIEF", ""]
 
@@ -194,9 +195,20 @@ def build_section_brief(section, prev_section_exit, ledger, evidence,
             claim = claims.get(cid) or {}
             statement = claim.get("claim") or f"(claim {cid} is not in the ledger)"
             kind = claim.get("kind", "")
-            marker = " [HEADLINE — this is what the paper is about]" \
+            marker = " [STATES ITS POINT — the sentence the abstract reuses]" \
                 if claim.get("headline") else ""
             parts.append(f"  {cid} ({kind}){marker}: {statement}")
+            # What this claim is FOR. Without it the writer optimises the paragraph
+            # and not the argument, which is how a correct and irrelevant section
+            # gets written.
+            for pid in claim.get("serves") or []:
+                point = (points or {}).get(str(pid)) or {}
+                text_ = point.get("point") or ""
+                if text_:
+                    parts.append(f"      serves {pid}: {text_}")
+            if claim.get("role"):
+                parts.append(f"      role: {claim['role']} — the argument needs this "
+                             f"in place and does not rest on it")
     else:
         parts.append("  (none declared — this section is structural)")
     parts.append("")

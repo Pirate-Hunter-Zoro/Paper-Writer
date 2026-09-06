@@ -22,6 +22,7 @@ cannot produce an artifact too large to write in one turn.
 from .. import config, paths
 from . import correction_brief, grounding
 from ..gates import claims as claims_gate
+from ..gates import ladder as ladder_gate
 from ..infra import storage
 from ..memory.ledger import new_evidence, evidence_ids
 from ..models import prompts, text
@@ -41,7 +42,22 @@ _ARGUMENT_SHAPE = (
 def load(project_id, paper_num):
     """The committed argument map, or an empty one."""
     return storage.load_json(paths.argument_path(project_id, paper_num),
-                             {"sections": [], "claims": []})
+                             {"sections": [], "claims": [], "points": []})
+
+
+def paper_points(plan, paper_num):
+    """The plan's points for one paper, in plan order.
+
+    Falls back to a single point synthesised from the paper's `headline` claim when
+    the plan declares none, which is what a plan written before the support ladder
+    looks like. The fallback is a migration and says so; everything downstream sees
+    an ordinary one-point paper."""
+    declared = [p for p in (plan.get("points") or [])
+                if p.get("paper") == paper_num]
+    if declared:
+        return declared
+    points, _claims = ladder_gate.migrated([], paper_claims(plan, paper_num))
+    return points
 
 
 def paper_claims(plan, paper_num):
@@ -260,16 +276,34 @@ def run(project_rec, paper_num, log_fn=None):
                    f"{len(argument['claims'])}/{len(mine)} claim(s)")
         todo = todo[step:]
 
-    # The whole-map check, which no single chunk can run: exactly one headline, kinds
-    # that vary, a limitation planned rather than conceded, nothing claimed twice.
+    # The whole-map check, which no single chunk can run: kinds that vary, a
+    # limitation planned rather than conceded, nothing claimed twice.
+    points = paper_points(plan, paper_num)
+    argument["points"] = points
     report = claims_gate.check(argument["claims"], evidence_ids=known,
-                               sections=argument.get("sections"))
+                               sections=argument.get("sections"),
+                               points=points or None)
     if not report.passed:
         raise RuntimeError(f"argument: the assembled map is not an argument: "
                            f"{report.errors[:4]}")
     for warning in report.warnings:
         if log_fn:
             log_fn(f"argument (warning): {warning}")
+
+    # And the ladder. The plan already checked it, so a failure here means the map
+    # dropped or re-served something on its way through — which is exactly the drift
+    # this stage exists to make impossible.
+    _points, laddered_claims = ladder_gate.migrated(points, argument["claims"])
+    ladder = ladder_gate.check(points, laddered_claims)
+    if not ladder.passed:
+        raise RuntimeError(f"argument: the support ladder does not hold: "
+                           f"{ladder.errors[:4]}")
+    for warning in ladder.warnings:
+        if log_fn:
+            log_fn(f"argument (warning): {warning}")
+    if log_fn:
+        log_fn(f"paper {paper_num}: the ladder holds — {len(points)} point(s), "
+               f"{len(argument['claims'])} claim(s)")
 
     storage.save_json(argument, paths.argument_path(pid, paper_num))
     return argument

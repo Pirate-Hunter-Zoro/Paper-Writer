@@ -353,10 +353,76 @@ DRAFT_MAX_CONTINUATIONS = int(os.environ.get("PAPER_DRAFT_MAX_CONTINUATIONS", "2
 # least this many. A section with one claim is a paragraph.
 SECTION_MIN_CLAIMS = int(os.environ.get("PAPER_SECTION_MIN_CLAIMS", "2"))
 
+# --- The support ladder ------------------------------------------------------
+#
+# points -> claims -> evidence. `gates/ladder.py` checks the top join: that
+# everything in the paper serves what the paper is for. These five numbers decide
+# what "serves" is allowed to mean, so changing one changes what this harness will
+# publish.
+
+# How many points a paper may be about. One is the ordinary case and the degenerate
+# case at once — the `headline` boolean this replaced was this gate with the count
+# fixed at one. Two is common: a comparison, plus what the comparison rules out.
+# Three is the most a reader carries out of the room. Four is the count at which the
+# author has stopped choosing, and the manuscript that produced this gate had three
+# stated objectives of which two were support for the first.
+POINTS_MIN = int(os.environ.get("PAPER_POINTS_MIN", "1"))
+POINTS_MAX = int(os.environ.get("PAPER_POINTS_MAX", "3"))
+
+# A point stated in fewer words than this is a topic. "Representation comparison" is
+# six characters short of being a heading; "the embedding does not outperform the
+# feature vector" is a point. Six is the floor at which a sentence with a subject and
+# a verb becomes possible.
+POINT_MIN_WORDS = int(os.environ.get("PAPER_POINT_MIN_WORDS", "6"))
+
+# Claims required to carry a point. A point served by one claim IS that claim, and
+# promoting it promises the reader more than the paper delivers.
+POINT_MIN_CLAIMS = int(os.environ.get("PAPER_POINT_MIN_CLAIMS", "2"))
+
+# What share of claims may declare a `setup` or `reporting` role instead of serving a
+# point. A paper cannot be all argument — the cohort has to be described before
+# anything is claimed about it — but an unbounded exemption turns the ladder into
+# decoration, and "setup" is the easiest label in the world to reach for. A third is
+# generous for a clinical paper with a long Methods.
+ROLE_CLAIM_SHARE_MAX = float(os.environ.get("PAPER_ROLE_CLAIM_SHARE_MAX", "0.34"))
+
+# What share of the planned WORDS may sit in sections that serve no point. This is the
+# check that catches the real failure, because a graph check only asks whether every
+# claim has a parent and a determined writer satisfies that by attaching claims
+# loosely. Length cannot be argued with. The warn threshold exists because this share
+# grows quietly, one complete and irrelevant section at a time.
+UNLADDERED_WORDS_WARN = float(os.environ.get("PAPER_UNLADDERED_WORDS_WARN", "0.15"))
+UNLADDERED_WORDS_MAX = float(os.environ.get("PAPER_UNLADDERED_WORDS_MAX", "0.30"))
+
+# Paragraphs in a section that may advance no claim, as a share. A transition and a
+# closing line are legitimate; a section of them is a section with no argument in it.
+PARAGRAPH_ROLE_SHARE_MAX = float(
+    os.environ.get("PAPER_PARAGRAPH_ROLE_SHARE_MAX", "0.34"))
+
 # How many sections the argument stage plans per model call. A paper is small enough
 # that this is usually the whole thing in one call; the chunking exists so a
 # multi-paper project cannot produce an artifact too large to write in one turn.
 ARGUMENT_CHUNK_SECTIONS = int(os.environ.get("PAPER_ARGUMENT_CHUNK_SECTIONS", "12"))
+
+# --- Shipping ----------------------------------------------------------------
+#
+# Delivery puts the documents on disk. If that disk is a git working tree, the work is
+# not anywhere until somebody commits it, and that is the step that gets forgotten for
+# a week while the author believes the paper is filed. So the pipeline can finish the
+# job — but pushing to a remote is the only outward-facing thing this harness does, so
+# both halves are opt-in and the machinery is deliberately narrow. See
+# `infra/shipping.py` for what it refuses and why.
+
+# The git working tree to commit delivered papers into. Empty means never commit.
+# Only files delivery actually wrote are staged, by path; there is no `git add -A`
+# anywhere, because a daemon that swept the tree would eventually commit half of an
+# unrelated edit under a message about a manuscript.
+SHIP_REPO = _env_path("PAPER_SHIP_REPO", None) if os.environ.get("PAPER_SHIP_REPO") \
+    else None
+
+# Whether to push after committing. A separate switch from SHIP_REPO because a local
+# commit is reversible by one command and a push is not.
+SHIP_PUSH = _env_flag("PAPER_SHIP_PUSH", False)
 
 # --- Building ----------------------------------------------------------------
 #

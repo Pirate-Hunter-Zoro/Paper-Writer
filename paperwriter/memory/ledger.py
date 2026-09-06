@@ -151,6 +151,12 @@ def new_project_ledger(project_id):
         # The vocabulary, fixed before drafting. See `gates/terminology.py` for the
         # manuscript this cost two review rounds.
         "terminology": [],
+        # What each paper is FOR: one to three points per paper, keyed by id.
+        # Claims serve these, and `gates/ladder.py` checks that every claim ladders
+        # to one and that no point is left unserved. Committed here because a point
+        # that can be renegotiated mid-draft is a paper that changes what it is about
+        # halfway through, which is invisible section by section.
+        "points": {},
         # Every claim the project has committed to making, keyed by id. Sections
         # reference these; nothing invents one at drafting time.
         "claims": {},
@@ -175,14 +181,23 @@ def new_project_ledger(project_id):
     }
 
 
+def new_point(pid, statement, paper=None):
+    """One thing a paper is for. What its claims add up to."""
+    return {"id": pid, "point": statement, "paper": paper}
+
+
 def new_claim(cid, statement, kind="descriptive", evidence=None, section="",
-              headline=False):
+              headline=False, serves=None, role=""):
     return {
         "id": cid,
         "claim": statement,
         "kind": kind,
         "evidence": list(evidence or []),
         "section": section,
+        # Which point this claim serves, or the role it plays instead. One or the
+        # other, never both — see `gates/ladder.py`.
+        "serves": list(serves or []),
+        "role": role,
         "headline": bool(headline),
         "status": "planned",       # planned -> drafted -> supported
     }
@@ -325,7 +340,8 @@ def merge_ledger_update(ledger, evidence, update):
         draft["claims"][cid] = new_claim(
             cid, statement, kind=record.get("kind", "descriptive"), evidence=cited,
             section=record.get("section", ""),
-            headline=bool(record.get("headline")))
+            headline=bool(record.get("headline")),
+            serves=record.get("serves"), role=record.get("role", ""))
 
     # 3. Support: a claim is marked made-in-prose. It has to exist first.
     for cid in update.get("support", []) or []:

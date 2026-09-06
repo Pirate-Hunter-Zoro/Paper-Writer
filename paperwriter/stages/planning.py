@@ -2,8 +2,17 @@
 ledger.
 
 A project is one or more papers off one body of evidence. The plan says how many, what
-each one is for, which venue it goes to, and — the part that matters — which claims
-belong to which paper. A programme whose two papers both argue the headline finding is
+each one is for, which venue it goes to, and — the part that matters — what each paper
+is FOR and which claims serve it.
+
+**Points are planned here because this is the only place they can be.** A paper's one
+to three points are what its claims add up to, and choosing them needs the whole body
+of evidence in view at once, which is what this stage has and no later stage does. Left
+to the argument map they would be inferred from the claims, and that inverts the
+ladder: claims exist to serve points, so a point derived from the claims is whatever
+the claims happened to be.
+
+The claims then say which point each one serves. A programme whose two papers both argue the headline finding is
 two papers that will be desk-rejected as duplicate submission, and nothing downstream
 can notice that, because each paper's own gates see a coherent argument.
 
@@ -27,6 +36,7 @@ manuscript that is wrong.
 from .. import config, jobspec, paths
 from . import correction_brief, grounding
 from ..gates import claims as claims_gate
+from ..gates import ladder as ladder_gate
 from ..infra import storage
 from ..memory.ledger import (evidence_ids, new_evidence, new_project_ledger,
                              validate_project_ledger)
@@ -114,7 +124,9 @@ def _validate(plan, known_evidence, want_papers):
     # The claim map. This is the half that matters and the half nothing downstream
     # can second-guess.
     all_claims = plan.get("claims") or []
-    report = claims_gate.check(all_claims, evidence_ids=known_evidence)
+    all_points = plan.get("points") or []
+    report = claims_gate.check(all_claims, evidence_ids=known_evidence,
+                               points=all_points or None)
     errors.extend(f"plan: {e}" for e in report.errors)
 
     # Every claim belongs to exactly one paper, and every paper has claims.
@@ -134,6 +146,22 @@ def _validate(plan, known_evidence, want_papers):
             continue
         load.setdefault(where, []).append(claim)
 
+    # Every point belongs to exactly one paper too, and for the same reason: one
+    # finding assigned to two papers is one finding submitted twice.
+    point_load = {}
+    for point in all_points:
+        pid = str(point.get("id") or "")
+        where = point.get("paper")
+        if where is None:
+            errors.append(f"point {pid!r}: no `paper`. Every point belongs to exactly "
+                          f"one paper.")
+            continue
+        if where not in known_papers:
+            errors.append(f"point {pid!r}: assigned to paper {where!r}, which the "
+                          f"plan does not have.")
+            continue
+        point_load.setdefault(where, []).append(point)
+
     for paper in papers:
         n = paper.get("number")
         mine = load.get(n, [])
@@ -141,12 +169,29 @@ def _validate(plan, known_evidence, want_papers):
             errors.append(f"paper {n}: no claims assigned. A paper with no claims is "
                           f"not a paper.")
             continue
-        headlines = [c for c in mine if c.get("headline")]
-        if len(headlines) != 1:
-            errors.append(
-                f"paper {n}: {len(headlines)} headline claim(s). Exactly one claim is "
-                f"what each paper is about — it is the title, the last line of the "
-                f"abstract, and the first line of the conclusions.")
+        my_points = point_load.get(n, [])
+
+        # The ladder, per paper. Run per paper rather than across the plan because a
+        # claim serving another paper's point is the duplicate-submission failure, and
+        # scoped this way it surfaces as an unknown point id, which says so.
+        if my_points:
+            _p, laddered = ladder_gate.migrated(my_points, mine)
+            ladder = ladder_gate.check(my_points, laddered)
+            errors.extend(f"paper {n}: {e}" for e in ladder.errors)
+        elif all_points:
+            errors.append(f"paper {n}: no points assigned. A paper with claims and no "
+                          f"point is a list of findings.")
+        else:
+            # No points anywhere in the plan: a pre-ladder plan, held to the rule the
+            # ladder replaced. `gates/support.legacy_points` is the same allowance one
+            # stage down.
+            headlines = [c for c in mine if c.get("headline")]
+            if len(headlines) != 1:
+                errors.append(
+                    f"paper {n}: {len(headlines)} headline claim(s) and no declared "
+                    f"points. Declare what this paper is for, as one to "
+                    f"{config.POINTS_MAX} points, and say which point each claim "
+                    f"serves.")
 
     return errors
 
@@ -165,6 +210,16 @@ def _seed_ledger(project_id, plan, project_rec, log_fn=None):
     ledger["conventions"] = dict(ledger.get("conventions") or {},
                                  **grounding.conventions(project_id))
 
+    # The points first: claims reference them, and a claim serving a point the ledger
+    # does not hold is the one shape the section brief cannot render.
+    for point in plan.get("points") or []:
+        pid = str(point.get("id"))
+        ledger["points"][pid] = {
+            "id": pid,
+            "point": str(point.get("point") or point.get("statement") or ""),
+            "paper": point.get("paper"),
+        }
+
     for claim in plan.get("claims") or []:
         cid = str(claim.get("id"))
         ledger["claims"][cid] = {
@@ -174,6 +229,8 @@ def _seed_ledger(project_id, plan, project_rec, log_fn=None):
             "evidence": [str(e) for e in (claim.get("evidence") or [])],
             "paper": claim.get("paper"),
             "section": claim.get("section", ""),
+            "serves": ladder_gate.serves_of(claim),
+            "role": ladder_gate.role_of(claim) or "",
             "headline": bool(claim.get("headline")),
             "status": "planned",
         }

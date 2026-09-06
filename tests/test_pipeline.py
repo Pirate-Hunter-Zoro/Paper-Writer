@@ -119,8 +119,57 @@ class PipelineTests(unittest.TestCase):
     def test_the_ledger_survives_the_run(self):
         _status, pid = self._run()
         doc = storage.load_json(paths.ledger_path(pid))
-        self.assertEqual(len(doc["claims"]), 4)
+        self.assertEqual(len(doc["claims"]), len(support.PLAN_CLAIM_IDS))
         self.assertTrue(doc["terminology"])
+
+    def test_the_ledger_carries_the_points_the_claims_serve(self):
+        """The ladder is committed state. A point that can be renegotiated mid-draft
+        is a paper that changes what it is about halfway through, and nothing reading
+        one section at a time can see that."""
+        _status, pid = self._run()
+        doc = storage.load_json(paths.ledger_path(pid))
+        self.assertEqual(sorted(doc["points"]), ["p.1"])
+        served = doc["claims"]["c.1"]["serves"]
+        self.assertEqual(served, ["p.1"])
+        self.assertEqual(doc["claims"]["c.2"]["role"], "setup")
+
+    def test_every_document_is_delivered_not_only_the_manuscript(self):
+        """The pipeline's job is not finished when the prose is written. It is
+        finished when the author can see what was checked, which means the report
+        ships beside the manuscript rather than living in the journal."""
+        _status, pid = self._run()
+        folder = config.OUT_DIR
+        names = {p.name for p in folder.rglob("*") if p.is_file()}
+        self.assertIn("manuscript.md", names)
+        self.assertIn("report.md", names)
+
+    def test_the_report_leads_on_what_the_paper_is_for(self):
+        """A reader can check the numbers and the prose themselves. What they cannot
+        recover from the manuscript is which claim was supposed to serve which
+        point."""
+        _status, pid = self._run()
+        report = paths.report_path(pid, 1).read_text(encoding="utf-8")
+        self.assertIn("What this paper is for", report)
+        self.assertIn("p.1", report)
+        self.assertIn("(states it)", report)
+        self.assertIn("Role: setup", report)
+        self.assertIn("What shipped unresolved", report)
+
+    def test_shipping_is_off_unless_a_repo_is_named(self):
+        """Pushing to a remote is the only outward-facing thing this harness does.
+        Both halves are opt-in and the default is to do nothing."""
+        from paperwriter.infra import shipping
+        self.assertIsNone(config.SHIP_REPO)
+        self.assertFalse(config.SHIP_PUSH)
+        note = shipping.ship([paths.manuscript_path("x", 1)], "a message")
+        self.assertIn("PAPER_SHIP_REPO is not set", note)
+
+    def test_shipping_never_raises_into_the_engine(self):
+        """Delivery has already succeeded by the time it runs, so a git problem must
+        not be the reason a finished paper's status stays unfinished."""
+        from paperwriter.infra import shipping
+        for bad in ([], [None], ["/nonexistent/path/manuscript.md"]):
+            self.assertIsInstance(shipping.ship(bad, "a message"), str)
 
     def test_a_crash_resumes_rather_than_restarting(self):
         """Nothing durable is recomputed. The engine is driven one cycle at a time,
