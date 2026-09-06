@@ -60,6 +60,17 @@ thousand words — so write inside the numbers rather than hoping.
 - **Delete every sentence whose only job is to introduce another one.** "It is worth
   noting", "Importantly", "Taken together", "This highlights" — cut the opener and make
   the point. A section that opens three paragraphs this way loses a reader.
+- **Every paragraph is measured on its own, not just the section.** A section average
+  is bought with easy sentences elsewhere. No paragraph averages past twenty-six words
+  per sentence, whatever the section does.
+- **Do not argue with a reviewer who has not spoken.** "And not only a limitation",
+  "far from being merely", "it might be objected" — the reader has to hold an objection
+  nobody made before they can take your point. Make the claim and let it stand. Saying
+  what a result does *not* establish is different, and belongs where it is true.
+- **Name the axis of every comparison you count.** "Ten of the eleven favour the
+  narrative" asserts eleven judgements and defines none of them, and the number makes
+  it read as evidence. Say what favouring is: more fields, finer values, free text
+  where the other side has a code.
 
 ## How a paragraph is built
 
@@ -76,8 +87,11 @@ always.
   when the whole paper was in view. Write it better if you can; do not write a different
   claim.
 - **It closes on what the claim means.** Not on one more citation, not on a bare
-  number. The reader who reads only your first and last sentences should come away with
-  the argument, because that is how a reviewer under time pressure actually reads.
+  number, and not on a pointer. "The full rules are in Supplement M5" tells the reader
+  where to go instead of what you established; a cross-reference is support, exactly as
+  a citation is, and it goes under the claim. The reader who reads only your first and
+  last sentences should come away with the argument, because that is how a reviewer
+  under time pressure actually reads.
 - **Three to nine sentences.** Under three and there is no structure to check; over
   nine it is two claims and the reader is being asked to work out where one ended.
 - **One paragraph per plan entry, in the plan's order.** Do not merge two, do not split

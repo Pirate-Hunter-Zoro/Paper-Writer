@@ -53,6 +53,16 @@ asks whether every claim has a parent, which a determined writer satisfies by
 attaching claims loosely. A budget check asks how much of the paper's length is spent
 on material that serves nothing, and that number cannot be argued with.
 
+**And the same budget from the other side.** The unladdered cap catches material
+attached to nothing. It does not catch material attached to something and then
+elaborated out of all proportion, which is what the fusion supplement above actually
+was: it served a point, every word of it laddered, and it was still four times the
+length its one null claim could carry. So a claim has a ceiling too, generous by
+default and tighter for the kinds that are side matter by construction. A limitation
+is a caveat and a null about a component already reported as inferior is a footnote;
+neither earns a finding's word count. This is the check that refuses the strand
+nobody decided to stop writing.
+
 **On the name.** This is `ladder.py` and not `support.py` because `tests/support.py`
 is the fixture module every test imports, and `from paperwriter.gates import support`
 shadows it silently — four unrelated prose tests failed with an AttributeError on the
@@ -234,6 +244,36 @@ def unladdered_sections(outline, claims, points):
     return unladdered, laddered_words, unladdered_words
 
 
+def words_per_claim(outline, claims):
+    """How many planned words each claim owns, and the total that ladders.
+
+    A section's budget is split evenly across the claims it carries, because that is
+    the only division the outline actually records. It is a rough attribution and it
+    does not need to be better than rough: the failure this measures is a claim
+    holding a quarter of the paper, not one holding 11% instead of 9%.
+
+    Front and back matter are excluded on the same grounds as `unladdered_sections` —
+    a title page's words are not spent arguing anything.
+
+    Returns (dict of claim id to words, total attributed words)."""
+    exempt = {s.lower() for s in config.PARAGRAPH_EXEMPT_SECTIONS}
+    known = {str(c.get("id")) for c in claims}
+    owned, total = {}, 0
+    for section in outline.get("sections") or []:
+        heading = str(section.get("heading") or "").strip()
+        carried = [str(cid) for cid in (section.get("claims") or [])
+                   if str(cid) in known]
+        if not carried or heading.lower() in exempt or phase_of(heading) in ("front",
+                                                                            "back"):
+            continue
+        words = int(section.get("words") or 0)
+        total += words
+        share = words / len(carried)
+        for cid in carried:
+            owned[cid] = owned.get(cid, 0.0) + share
+    return {cid: int(round(w)) for cid, w in owned.items()}, total
+
+
 def stats(points, claims):
     rungs = ladder(points, claims)
     return {
@@ -412,6 +452,62 @@ def check(points, claims, outline=None):
                     f"{share:.0%} of planned words serve no point ({worst}). Under "
                     f"the ceiling and worth a look: this is the share that grows "
                     f"quietly, one complete and irrelevant section at a time.")
+
+    # 8. And no single claim eats the paper. Section 7 catches material attached to
+    #    nothing; this catches material attached to something and then written until
+    #    it outweighs the claim it belongs to.
+    if outline:
+        owned, attributed = words_per_claim(outline, claims)
+        counts["claim_words"] = owned
+        by_id = {str(c.get("id")): c for c in claims}
+        # A ceiling an even split cannot satisfy is not a ceiling. A four-claim paper
+        # puts a quarter of itself on every claim by construction, and refusing that
+        # is refusing arithmetic rather than a defect. So the soft ceiling applies
+        # only once the paper has enough claims for a share to carry information.
+        even = 1.0 / len(claims) if claims else 1.0
+        # The blocking case needs no such guard, because it is not a bare share: a
+        # limitation is refused when it is BOTH over its share AND longer than the
+        # headline claim of the point it qualifies. That second half is scale-free,
+        # and it is the thing that has actually gone wrong — the caveat has stopped
+        # qualifying the finding and started competing with it.
+        headline_words = {}
+        for point in points:
+            pid = str(point.get("id"))
+            head = next((str(c.get("id")) for c in claims
+                         if pid in serves_of(c) and c.get("headline")), None)
+            if head is not None:
+                headline_words[pid] = owned.get(head, 0)
+        if attributed:
+            for cid, words in sorted(owned.items(), key=lambda kv: -kv[1]):
+                claim = by_id.get(cid, {})
+                minor = kind_of(claim) in config.CLAIM_MINOR_KINDS
+                ceiling = (config.CLAIM_WORDS_MAX_MINOR if minor
+                           else config.CLAIM_WORDS_WARN)
+                share = words / attributed
+                if share <= ceiling:
+                    continue
+                if minor:
+                    served = [p for p in serves_of(claim) if p in headline_words]
+                    if not served or all(words <= headline_words[p] for p in served):
+                        continue
+                elif even >= ceiling:
+                    continue
+                if minor:
+                    errors.append(
+                        f"claim {cid!r} is a {kind_of(claim)} and holds {words:,} of "
+                        f"{attributed:,} planned words ({share:.0%}); the ceiling for "
+                        f"that kind is {ceiling:.0%}. A caveat written at the length "
+                        f"of a finding reads as a finding, and stops qualifying the "
+                        f"result it belongs to. Cut it to a paragraph, or promote it "
+                        f"to a claim that serves a point.")
+                else:
+                    warnings.append(
+                        f"claim {cid!r} holds {words:,} of {attributed:,} planned "
+                        f"words ({share:.0%}), over a soft ceiling of "
+                        f"{ceiling:.0%}. Not refused — a headline claim can earn "
+                        f"that. Worth a look if it is not the headline: this is what "
+                        f"a strand nobody decided to stop writing looks like from "
+                        f"outside.")
 
     return SupportReport(passed=not errors, errors=errors, warnings=warnings,
                          stats=counts)

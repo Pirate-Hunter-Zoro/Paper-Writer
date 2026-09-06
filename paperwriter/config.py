@@ -271,6 +271,25 @@ SENTENCE_STDEV_MIN = float(os.environ.get("PAPER_SENTENCE_STDEV_MIN", "4.0"))
 SEMICOLONS_PER_KWORD_MAX = float(os.environ.get("PAPER_SEMICOLON_RATE_MAX", "2.0"))
 EMDASHES_PER_KWORD_MAX = float(os.environ.get("PAPER_EMDASH_RATE_MAX", "2.0"))
 
+# The local density ceiling: mean words per sentence within ONE paragraph.
+#
+# Every measurement above is a section average, and an average hides the paragraph
+# that earns it. A real manuscript from this harness passed its Methods section at a
+# mean of 20.8 while carrying a four-sentence paragraph at 27.2 — the section's other
+# nineteen sentences paid for it. Six such paragraphs sat in sections that passed. The
+# reader does not read the average; they read the paragraph, and they read it twice.
+#
+# The ceiling is looser than the section ceiling on purpose. One paragraph is allowed
+# to be the heavy one — a definition, a set of exclusions, a passage that genuinely
+# carries more clauses than its neighbours. What is not allowed is a paragraph nobody
+# can read hiding behind twenty sentences that carry it.
+PARAGRAPH_MEAN_WORDS_MAX = float(os.environ.get("PAPER_PARAGRAPH_MEAN_MAX", "26.0"))
+
+# Below this many sentences a paragraph mean is not a measurement. Two sentences, one
+# of them a legitimate 40-word list of covariates, average 26 and mean nothing.
+PARAGRAPH_DENSITY_MIN_SENTENCES = int(
+    os.environ.get("PAPER_PARAGRAPH_DENSITY_MIN_SENTENCES", "3"))
+
 # How many of the worst-offending sentences the editor is shown verbatim when the
 # section fails a sentence gate. Readability is a whole-text statistic and cannot be
 # anchored to a span; the longest sentences can be, which turns an un-anchorable gate
@@ -299,6 +318,26 @@ PARAGRAPH_DEFECT_SHARE_MAX = float(
 # not prose, for the same reason a reference list is not.
 PARAGRAPH_EXEMPT_SECTIONS = ("abstract", "title page", "declarations", "references",
                              "acknowledgements", "keywords", "abbreviations")
+
+# --- Terminology drift -------------------------------------------------------
+#
+# The terminology gate can only forbid the synonyms somebody thought to list. The
+# manuscript that gate was written from went on to carry four names for one arm —
+# "typed feature representation", "feature representation", "feature matrix" and
+# "feature-vector" — because only "rule-based approach" had been banned. Nothing
+# fired, because nothing was looking for a name the lock had never heard of.
+#
+# So the gate also looks for drift: a phrase sharing a locked term's modifier but
+# ending in a different role noun. "Feature matrix" against a locked "feature
+# representation" is a candidate second name; "feature selection" is not, because
+# selection is not a thing the paper is naming.
+TERM_ROLE_NOUNS = ("representation", "approach", "model", "matrix", "vector",
+                   "method", "arm", "pipeline", "encoding", "framework", "scheme",
+                   "predictor", "classifier", "embedding", "baseline", "variant")
+
+# A one-off near-variant is usually ordinary English. A phrase used this many times is
+# a name, whether or not anybody declared it one.
+TERM_DRIFT_MIN_USES = int(os.environ.get("PAPER_TERM_DRIFT_MIN_USES", "2"))
 
 # --- Gate thresholds ---------------------------------------------------------
 
@@ -396,6 +435,31 @@ ROLE_CLAIM_SHARE_MAX = float(os.environ.get("PAPER_ROLE_CLAIM_SHARE_MAX", "0.34"
 # grows quietly, one complete and irrelevant section at a time.
 UNLADDERED_WORDS_WARN = float(os.environ.get("PAPER_UNLADDERED_WORDS_WARN", "0.15"))
 UNLADDERED_WORDS_MAX = float(os.environ.get("PAPER_UNLADDERED_WORDS_MAX", "0.30"))
+
+# The other half of the budget: how much of the paper ONE claim may consume.
+#
+# The unladdered budget above catches material attached to nothing. It does not catch
+# material attached to something and then elaborated out of all proportion — a whole
+# supplement section, with a rubric, two verbatim prompts, four worked examples and a
+# re-judging experiment, in service of a single null result about a weighting scheme
+# layered on a predictor the paper had already reported as not competitive. Every one
+# of those words laddered. The section served a point. It was still four times the
+# length its claim could carry.
+#
+# So a claim also has a ceiling. It WARNS rather than blocks, and the reason is worth
+# stating: word share is a proxy for proportion, and a proxy that stalls a run is a
+# proxy somebody raises until it stops firing. A headline claim legitimately owns a
+# large share of a short paper. What the warning is for is the strand nobody decided
+# to stop writing, surfaced where an author can look at it.
+CLAIM_WORDS_WARN = float(os.environ.get("PAPER_CLAIM_WORDS_WARN", "0.25"))
+
+# One case does block, because it is not a proxy for anything. A LIMITATION written at
+# the length of a finding reads as a finding — the caveat stops qualifying the result
+# and starts competing with it. A caveat is a paragraph. If it needs a section, it is
+# not a caveat, and the honest repair is to promote it to a claim that serves a point
+# or to cut it.
+CLAIM_WORDS_MAX_MINOR = float(os.environ.get("PAPER_CLAIM_WORDS_MAX_MINOR", "0.12"))
+CLAIM_MINOR_KINDS = ("limitation",)
 
 # Paragraphs in a section that may advance no claim, as a share. A transition and a
 # closing line are legitimate; a section of them is a section with no argument in it.

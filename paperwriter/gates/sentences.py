@@ -28,6 +28,17 @@ Seven measurements, and each one names a specific way a sentence stops being rea
     sentence whose only job is to introduce another one.
   * **stacked hedges** — two qualifications on one claim. One hedge is honest; two is
     a claim the author does not want to be held to.
+  * **local density** — the mean inside one paragraph. Every measurement above is a
+    section average, and an average hides the paragraph that earns it. A real
+    manuscript passed its Methods at a mean of 20.8 carrying a paragraph at 27.2, and
+    a reader does not read the average.
+  * **anticipatory rebuttals** — "and not only a limitation", "this should not be read
+    as". The paper arguing with a reviewer who has not spoken yet. It is hard to read
+    because it asks you to hold an objection nobody made.
+  * **undefined comparisons** — "ten of the eleven favour the narrative". A count of a
+    comparison whose dimension is never stated. The number looks precise and the
+    sentence says nothing, which is worse than vagueness because it does not read as
+    vague.
 
 Everything here is arithmetic over a string. No model, no I/O, no opinion — which is
 the point, because "your prose is dense" is an argument and "23% of your sentences are
@@ -66,6 +77,93 @@ _HEDGES = (
     "likely", "unlikely", "tends to", "in some cases", "to some extent",
     "it is possible", "cannot be ruled out", "we speculate", "conceivably",
 )
+
+# The paper arguing with a reviewer who has not spoken yet.
+#
+# Found in a Methods paragraph that ended "it is the evidence for the scope statement
+# above and not only a limitation". The clause is unreadable on one pass for a specific
+# reason: it asks the reader to hold an objection that has not been raised, decide it
+# is wrong, and only then take the point. Every one of these can be deleted with the
+# claim left standing, which is the test — the same test the empty openers pass.
+#
+# The pre-emptive concession ("while it is true that", "we acknowledge that") belongs
+# here too. A Limitations section states a limitation; it does not negotiate one.
+# What is NOT here matters as much as what is. "This parity should not be read as
+# evidence that the embedding found structure unaided" was in the first draft of this
+# list and came straight back out: bounding what a result means is the job of a
+# Discussion, and a gate that refuses it teaches the writer to overclaim. The list is
+# the pre-emptive DEFENCE — the paper insisting it has not made a mistake — not the
+# scope statement, which is the paper saying what it did not measure.
+_ANTICIPATORY = (
+    "and not only a", "and not merely a", "and not just a",
+    "and not only an", "and not merely an", "and not just an",
+    "rather than merely a", "rather than simply a", "rather than just a",
+    "is not a limitation", "far from being a", "far from being merely",
+    "it might be objected", "one might object", "some may argue",
+    "some might argue", "we would argue that", "it could be argued that",
+    "while it is true that", "lest it be thought", "this is not to say",
+)
+
+# A comparison with no dimension.
+#
+# "10 of those 11 favour the narrative" was the sentence this came from. It carries two
+# exact counts and does not say what favouring IS — more fields, finer values, free
+# text where the other side has a code. The precision of the number disguises the fact
+# that the relation is undefined, so it survives a read the way a vague sentence would
+# not.
+#
+# The rule that makes this checkable: a comparison verb has to be told what axis it
+# runs on. That axis reaches the sentence as a preposition ("in granularity", "on
+# discrimination", "by AUC"), as an explicit comparison ("recall over precision"), or
+# as a clause saying what the winner gets. A comparison verb with none of those is a
+# claim the reader has to guess at.
+_COMPARISON_VERBS = (
+    "favour", "favours", "favoured", "favor", "favors", "favored", "favouring",
+    "favoring", "outperform", "outperforms", "outperformed", "outperforming",
+    "beat", "beats", "surpass", "surpasses", "surpassed", "exceed", "exceeds",
+    "exceeded", "win", "wins", "lose", "loses", "dominate", "dominates",
+)
+
+# The COUNT is what makes it checkable, and narrowing to the count is what makes the
+# gate usable. "The embedding did not beat the feature vector" is a plain claim whose
+# axis the section around it has already fixed, and an earlier version of this check
+# refused it — along with "Retrieval works, and loses" and "none exceeds 0.05". Every
+# one of those was correct prose.
+#
+# What survives the narrowing is the construction that actually failed: a tally of
+# comparisons. "Ten of the eleven favour the narrative" asserts eleven separate
+# comparative judgements and defines none of them. The count is doing the work of an
+# argument the sentence never makes, and the reader cannot tell, because a number
+# reads as evidence.
+_TALLIED_COMPARISON_RE = re.compile(
+    r"(?<![a-z])(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|"
+    r"twelve|most|many|several|all|both|half)\s+(?:of\s+)"
+    r"(?:those|these|them|the|its|which)?\s*[\w,\s-]{0,40}?"
+    r"(?<![a-z])(" + "|".join(_COMPARISON_VERBS) + r")(?![a-z])", re.IGNORECASE)
+
+# What counts as naming the axis. Deliberately generous: this gate refuses a sentence,
+# so it must not refuse one that already answers the question in any ordinary way. A
+# number after the verb counts too — "exceeds 0.05" names its axis by stating it.
+_DIMENSION_CUE_RE = re.compile(
+    r"(?<![a-z])(?:in|on|by|for|across|with|over|under|at|per|through|"
+    r"in terms of|with respect to|as measured by|when|where|because|since|"
+    r"which|that|whose|only|because)(?![a-z])|\d", re.IGNORECASE)
+
+
+def _undefined_comparison(sentence):
+    """The tallied comparison this sentence makes without saying on what axis, or "".
+
+    Only the text AFTER the verb is searched for the axis. "In the youngest subgroup
+    six of the ten favour the feature arm" names a stratum, not a dimension, and the
+    sentence still does not say what favouring means."""
+    match = _TALLIED_COMPARISON_RE.search(sentence)
+    if not match:
+        return ""
+    tail = sentence[match.end():]
+    if _DIMENSION_CUE_RE.search(tail):
+        return ""
+    return match.group(1).lower()
+
 
 # A weld is a semicolon INSIDE a line. One at the end of a line is list punctuation —
 # the conventional way to separate the items of an enumeration — and counting it drives
@@ -137,6 +235,9 @@ class SentenceReport:
     empty_openers: list = field(default_factory=list)   # (sentence, phrase)
     stacked_hedges: list = field(default_factory=list)  # sentences with 2+ hedges
     welded: list = field(default_factory=list)          # sentences with ; or —
+    dense_paragraphs: list = field(default_factory=list)  # (opening sentence, mean, n)
+    anticipatory: list = field(default_factory=list)    # (sentence, phrase)
+    undefined_comparisons: list = field(default_factory=list)  # (sentence, verb)
     passed: bool = True
     reasons: list = field(default_factory=list)
 
@@ -147,6 +248,26 @@ class SentenceReport:
                 f"{self.long_share:.0%} over {config.SENTENCE_LONG_WORDS}, "
                 f"{self.semicolons_per_kword:.1f} semicolons and "
                 f"{self.emdashes_per_kword:.1f} dashes per 1,000 words")
+
+
+def _dense_paragraphs(text):
+    """Paragraphs whose own mean is over the local ceiling, worst first.
+
+    A section mean is an average over every sentence in the section, so twenty easy
+    sentences buy one unreadable paragraph. This is the same measurement taken where
+    the reader actually takes it. List blocks are skipped: a bulleted enumeration is
+    not a paragraph and its items are not sentences."""
+    out = []
+    for block in prose.paragraphs(text):
+        if prose.is_list_item(block):
+            continue
+        sents = prose.sentences(block)
+        if len(sents) < config.PARAGRAPH_DENSITY_MIN_SENTENCES:
+            continue
+        mean = statistics.fmean(len(s.split()) for s in sents)
+        if mean > config.PARAGRAPH_MEAN_WORDS_MAX:
+            out.append((sents[0], round(mean, 2), len(sents)))
+    return sorted(out, key=lambda row: row[1], reverse=True)
 
 
 def score(text, section_name=""):
@@ -189,6 +310,10 @@ def score(text, section_name=""):
 
     openers = [(s, phrase) for s in sents if (phrase := _empty_opener(s))]
     hedged = [s for s in sents if _hedge_count(s) >= 2]
+    dense = _dense_paragraphs(text)
+    defensive = [(s, phrase) for s in sents
+                 if (phrase := next((a for a in _ANTICIPATORY if a in s.lower()), ""))]
+    vague = [(s, verb) for s in sents if (verb := _undefined_comparison(s))]
     welded = [s for s in sents
               if _SEMICOLON_RE.search(s) or _dash_welds(s)]
 
@@ -198,7 +323,9 @@ def score(text, section_name=""):
         long_share=round(long_share, 4),
         semicolons_per_kword=round(semis, 2), emdashes_per_kword=round(dashes, 2),
         over_hard_max=over_hard, long_sentences=long_ones,
-        empty_openers=openers, stacked_hedges=hedged, welded=welded)
+        empty_openers=openers, stacked_hedges=hedged, welded=welded,
+        dense_paragraphs=dense, anticipatory=defensive,
+        undefined_comparisons=vague)
 
     reasons = []
     if mean > config.SENTENCE_MEAN_WORDS_MAX:
@@ -245,6 +372,25 @@ def score(text, section_name=""):
         reasons.append(
             f"{len(hedged)} sentence(s) carry two or more hedges. Keep the one that "
             f"changes what a reader would do and delete the rest.")
+    if dense:
+        worst_open, worst_mean, worst_n = dense[0]
+        reasons.append(
+            f"{len(dense)} paragraph(s) average over "
+            f"{config.PARAGRAPH_MEAN_WORDS_MAX:.0f} words per sentence, the worst at "
+            f"{worst_mean:.1f} across {worst_n} sentences. The section average hides "
+            f"it and the reader does not read the average. It opens "
+            f"\"{worst_open[:70]}...\"")
+    if defensive:
+        reasons.append(
+            f"{len(defensive)} sentence(s) argue with a reviewer who has not spoken "
+            f"({', '.join(sorted({p for _, p in defensive})[:3])}). Make the claim "
+            f"and let it stand.")
+    if vague:
+        verbs = ', '.join(sorted({v for _, v in vague})[:3])
+        reasons.append(
+            f"{len(vague)} comparison(s) never say on what axis ({verbs}). Name the "
+            f"dimension the comparison runs on, or the number in front of it is "
+            f"precision about nothing.")
 
     report.reasons = reasons
     report.passed = not reasons
@@ -269,6 +415,12 @@ def worst_offenders(report, count=None):
         scored[sentence] = scored.get(sentence, 0) + 1
     for sentence, _ in report.empty_openers:
         scored[sentence] = scored.get(sentence, 0) + 1
+    for sentence, _ in report.anticipatory:
+        scored[sentence] = scored.get(sentence, 0) + 2
+    for sentence, _ in report.undefined_comparisons:
+        scored[sentence] = scored.get(sentence, 0) + 2
+    for sentence, _, _ in report.dense_paragraphs:
+        scored[sentence] = scored.get(sentence, 0) + 2
     ranked = sorted(scored.items(),
                     key=lambda kv: (kv[1], len(kv[0].split())), reverse=True)
     return [s for s, _ in ranked[:count]]

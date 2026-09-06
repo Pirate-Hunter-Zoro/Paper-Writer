@@ -109,6 +109,9 @@ repetition is deliberate. An instruction is not a mechanism — the draft templa
 | Semicolons and em-dashes per 1,000 words, ceiling 2 each | Both are almost always two sentences pretending to be one. Rationed, not banned. |
 | Empty openers | "It is worth noting", "Importantly", "Taken together" — a sentence whose only job is to introduce another one. |
 | Stacked hedges | Two qualifications on one claim is a claim the author does not want to be held to. |
+| Mean words per sentence **inside one paragraph**, ceiling 26 | The section average is bought with easy sentences elsewhere. A real Methods section passed at 20.8 while carrying a four-sentence paragraph at 27.2, and a reader does not read the average. |
+| Anticipatory rebuttals | "And not only a limitation", "it might be objected", "far from being a". The paper arguing with a reviewer who has not spoken yet. It is hard to read because it asks you to hold an objection nobody made. |
+| Tallied comparisons with no axis | "Ten of the eleven favour the narrative" asserts eleven comparative judgements and defines none of them. The count reads as evidence, which is why it survives a read that a vague sentence would not. |
 
 ### What is measured, at the paragraph
 
@@ -120,7 +123,14 @@ The gate cannot tell whether a topic sentence is *good*. It catches every struct
 way a paragraph fails to have one, and that turns out to be most of the failures: it
 opens on a citation, on a number, on a connective, or on a subordinate clause that
 delays the claim past a comma; it is one sentence long; it runs past nine; it ends on a
-citation rather than on what the paragraph means.
+citation, or on a signpost, rather than on what the paragraph means.
+
+A signpost is a closing citation in different clothes. "The full encoding rules are
+described in Supplement M5 and two example narratives are reproduced in Supplement S5"
+tells the reader where to go instead of what the paragraph established. A
+cross-reference is support, and support belongs under the claim rather than in the
+position the claim should hold. A pointer hanging off a sentence that states its
+finding — "as shown in Figure 3" — is not this, and the gate does not touch it.
 
 **The topic sentence is decided at outline time, not at drafting time.** That is the
 load-bearing design decision. Once prose exists, a paragraph with no claim gets
@@ -145,6 +155,17 @@ paragraph and a review round. The fix was one banned word.
 
 So the grounding stage locks the vocabulary before a word is drafted — each term, and
 the synonyms that must **never** appear — and `gates/terminology.py` enforces it.
+
+**And the synonym nobody thought to ban.** A lock can only forbid what somebody listed,
+so that rule is blind by construction to the second name invented during drafting. The
+same manuscript went on to carry four names for one arm — the *typed feature
+representation*, the *feature representation*, the *feature matrix*, the
+*feature-vector* — through every gate, because only "rule-based approach" had ever been
+declared. So the whole-manuscript pass also looks for **drift**: a phrase that shares a
+locked term's modifier, ends in a different role noun, and is used more than once.
+"Feature matrix" against a locked "feature representation" is a candidate second name.
+"Feature selection" is not, because selection is not a thing the paper names. Pointed at
+that manuscript it finds six undeclared names for two arms.
 
 ---
 
@@ -190,6 +211,7 @@ was for.
 | Every point carried by ≥2 claims, not all limitations | A point served by one claim *is* that claim. A point whose whole support is a caveat is not a finding. |
 | Exactly one claim per point marked `headline` | It is the sentence the abstract and the conclusions both reuse. |
 | **The word budget** | The share of planned words in sections that serve no point, warned at 15% and refused at 30%. |
+| **The word budget, from the other side** | What ONE claim holds. Warned over 25%. A `limitation` that is both over 12% and longer than the headline claim of the point it qualifies is refused, because at that length a caveat has stopped qualifying the finding and started competing with it. |
 
 **The budget is the check that matters**, and the reason is that a graph check only
 asks whether every claim has a parent — which a determined writer satisfies by
@@ -283,13 +305,13 @@ each returns a verdict a person can check by hand.
 |---|---|
 | `coverage` | Drafting on evidence that cannot support the claims. Below the floor the project parks and gathers more. |
 | `claims` | An argument map that is not an argument: a claim resting on nothing, kinds that do not vary, no limitation planned, the same thing claimed twice. |
-| `ladder` | **A paper with no spine, and material that serves nothing.** No declared points or more than three, a claim serving neither a point nor a stated role, a point carried by one claim or by nothing but caveats, and — the check that matters — too many of the planned words sitting in sections that serve no point. |
+| `ladder` | **A paper with no spine, and material that serves nothing.** No declared points or more than three, a claim serving neither a point nor a stated role, a point carried by one claim or by nothing but caveats, and — the check that matters — too many of the planned words sitting in sections that serve no point, or on any one claim. |
 | `structure` | An outline that does not hold together: non-contiguous numbering, Results before Methods, budgets over the venue's limit, a claim placed twice or not at all, a paragraph with no declared topic sentence, and a claim the section carries that no paragraph advances. |
 | `numbers` | **A figure in the prose that the analysis never produced.** The most valuable gate here. |
-| `terminology` | A forbidden synonym for a locked term; an abbreviation used before it is expanded, or expanded twice. |
+| `terminology` | A forbidden synonym for a locked term; an undeclared near-variant of one; an abbreviation used before it is expanded, or expanded twice. |
 | `citations` | A marker that resolves to nothing; a reference nobody cites; a borrowed claim carrying no source; two citation styles in one section. |
-| `sentences` | The one-read rule, measured. See the table above. |
-| `paragraphs` | Every structural way a paragraph fails to open on its claim or close on what it means. |
+| `sentences` | The one-read rule, measured at the section and again inside each paragraph. See the table above. |
+| `paragraphs` | Every structural way a paragraph fails to open on its claim, or closes on a citation or a signpost instead of what it means. |
 | `readability` | Flesch and Flesch-Kincaid, banded for an academic venue. Measures word length, which sentence statistics do not. |
 | `length` | A section outside the band around its planned budget. The ceiling is the half that matters: over the venue's limit is a desk rejection before a reviewer reads a sentence. |
 

@@ -26,6 +26,11 @@ turns out to be most of the failures:
     to work out where one ended.
   * **It ends on a citation or a bare number.** The last sentence should say what the
     paragraph means, not cite one more source.
+  * **It ends on a signpost.** "The full encoding rules are described in Supplement
+    M5 and two example narratives are reproduced in Supplement S5" tells the reader
+    where to go instead of what the paragraph established. A cross-reference is
+    support, exactly as a citation is, and it belongs under the claim rather than in
+    the position the claim should hold.
 
 **The share, not the count.** A section fails when too *many* of its paragraphs break
 shape, not when one does. A one-sentence paragraph is right at the end of a
@@ -53,6 +58,46 @@ _CITATION_OPENERS = (
 )
 
 _NUMBER_OPENER = re.compile(r"^\s*[\(\[]?[-+]?\d")
+
+# A pointer to somewhere else in the document. Same family as a citation: it is where
+# the support lives, not what the paragraph means.
+_CROSSREF_RE = re.compile(
+    r"(?<![A-Za-z])(?:supplement(?:ary)?(?:\s+(?:material|table|figure|file))?|"
+    r"appendix|table|figure|fig\.?|section|panel|supplementary)\s*"
+    r"(?:[SMEA]?\d+|[SMEA]\d*)\b", re.IGNORECASE)
+
+# The frames that make a pointer the whole sentence rather than a note attached to a
+# claim. "Discrimination was flat across encoders, as shown in Figure 3" ends on its
+# finding and merely says where to look, so every frame here is rejected when "as"
+# precedes it — that one word is the difference between a signpost and an attachment.
+_SIGNPOST_RE = re.compile(
+    r"(?<![A-Za-z])(?:see|are\s+(?:described|reported|given|reproduced|listed|shown|"
+    r"provided|summarised|summarized|detailed|presented|tabulated|found|set\s+out)|"
+    r"is\s+(?:described|reported|given|reproduced|listed|shown|provided|summarised|"
+    r"summarized|detailed|presented|tabulated|found|set\s+out)|"
+    r"(?:full\s+)?details\s+(?:are|is|appear)|refer\s+to)\s+", re.IGNORECASE)
+
+_AS_ATTACHED_RE = re.compile(r"(?<![A-Za-z])as\s+$", re.IGNORECASE)
+
+
+def _ends_on_signpost(sentence):
+    """Whether the last sentence points somewhere instead of concluding.
+
+    Requires both halves: a cross-reference AND a frame that makes the pointer the
+    sentence's own business. A trailing "(Table 2)" on a sentence that states a result
+    is not this defect, and neither is "as shown in Figure 3"."""
+    if not _CROSSREF_RE.search(sentence):
+        return False
+    for match in _SIGNPOST_RE.finditer(sentence):
+        if _AS_ATTACHED_RE.search(sentence[:match.start()]):
+            continue
+        if _CROSSREF_RE.search(sentence[match.end():]):
+            return True
+    # "The field-level crosswalk, row by row, is Supplement S10." No signpost verb at
+    # all: the cross-reference is the predicate.
+    return bool(re.search(r"(?<![A-Za-z])(?:is|are|was|were)\s+(?:in\s+)?"
+                          r"(?:supplement|appendix|table|figure|section)\b",
+                          sentence, re.IGNORECASE))
 
 # Connectives that make a sentence a hinge rather than a claim.
 _CONNECTIVES = (
@@ -213,6 +258,13 @@ def _check_one(index, paragraph):
             out.append(ParagraphDefect(
                 index, "no concluding sentence",
                 f"paragraph {index} ends on a bare number. Close on what it means.",
+                last))
+        elif _ends_on_signpost(last):
+            out.append(ParagraphDefect(
+                index, "no concluding sentence",
+                f"paragraph {index} ends on a pointer to somewhere else in the "
+                f"document. A cross-reference is support, like a citation. Close on "
+                f"what this paragraph established and put the pointer under it.",
                 last))
     return out
 

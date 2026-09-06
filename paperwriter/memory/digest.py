@@ -26,6 +26,7 @@ Pure function of already-loaded state, so it is deterministic and testable: same
 inputs, same brief, no model call.
 """
 
+from .. import config
 from .ledger import one_line
 
 
@@ -109,7 +110,10 @@ def _paragraph_plan(section):
 # is the specific arithmetic the gates will apply to THIS section, with THIS section's
 # numbers in it. An instruction the writer can check itself against is worth several
 # it cannot.
-def _prose_contract(budget, sentence_max, long_words, long_share):
+def _prose_contract(budget, sentence_max, long_words, long_share,
+                    para_max=None):
+    para_max = (config.PARAGRAPH_MEAN_WORDS_MAX if para_max is None
+                else para_max)
     return [
         "HOW IT HAS TO READ. Every sentence is read once. If a reader has to go back",
         "over one, that sentence failed however correct it is. This is measured after",
@@ -126,7 +130,18 @@ def _prose_contract(budget, sentence_max, long_words, long_share):
         "  * Every paragraph opens on its own claim. Not on a citation, not on a",
         "    number, not on \"However\" or \"Furthermore\", not on a subordinate clause",
         "    that delays the claim past a comma. The claim goes first.",
-        "  * Every paragraph closes on what it means. Not on one more citation.",
+        "  * Every paragraph closes on what it means. Not on one more citation, and",
+        "    not on a pointer — \"the full rules are in Supplement M5\" says where to",
+        "    go instead of what you showed. The cross-reference goes under the claim.",
+        f"  * No single paragraph averages past {para_max:.0f} words per sentence. The",
+        "    section average is bought with easy sentences elsewhere and the reader",
+        "    does not read the average.",
+        "  * Do not argue with a reviewer who has not spoken. \"And not only a",
+        "    limitation\", \"it might be objected\" — the reader has to hold an",
+        "    objection nobody made before they can take the point.",
+        "  * Name the axis of every comparison you count. \"Ten of the eleven favour",
+        "    the narrative\" asserts eleven judgements and defines none of them, and",
+        "    the number makes it read as evidence.",
         "  * One idea per sentence. A trailing \"which\" clause is a second sentence.",
         "  * Verbs, not nominalizations. \"The model did worse when the chart said",
         "    unspecified\", never \"discrimination decreased for patients coded",

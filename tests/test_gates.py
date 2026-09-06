@@ -255,6 +255,190 @@ class SentenceGateTests(unittest.TestCase):
         self.assertFalse(sentences.score("").passed)
 
 
+class LocalDensityTests(unittest.TestCase):
+    """A section average hides the paragraph that earns it."""
+
+    # Verbatim, from the Methods of a manuscript this harness produced and shipped.
+    # Four sentences, mean 27.2, inside a section that passed at 20.8.
+    DENSE = ("The 2 representations were derived from the same temporal slice and from "
+             "the same selected fields, but they do not render an identical inventory "
+             "of them: 11 of 30 source fields are asymmetric, and 10 of those 11 "
+             "favour the narrative. Head-to-head performance comparisons therefore "
+             "estimate the performance of the complete representation pipelines rather "
+             "than the isolated effect of data format. The field-level crosswalk, row "
+             "by row with each field's encoding on both sides, is Supplement S10; it "
+             "is the evidence for the scope statement above and not only a limitation. "
+             "The full encoding rules are described in Supplement M5 and two example "
+             "narratives are reproduced in Supplement S5.")
+
+    def test_a_dense_paragraph_is_reported(self):
+        report = sentences.score(self.DENSE)
+        self.assertTrue(report.dense_paragraphs)
+        self.assertGreater(report.dense_paragraphs[0][1],
+                           config.PARAGRAPH_MEAN_WORDS_MAX)
+
+    def test_a_dense_paragraph_survives_a_passing_section(self):
+        """The defect this check exists for. A real Methods section passed at a mean
+        of 20.8 while carrying a paragraph at 27.2, because nineteen easy sentences
+        paid for four hard ones."""
+        section = "\n\n".join([support.CLEAN_PROSE] * 3 + [self.DENSE])
+        report = sentences.score(section)
+        self.assertLessEqual(report.mean, config.SENTENCE_MEAN_WORDS_MAX)
+        self.assertTrue(report.dense_paragraphs)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("does not read the average" in r for r in report.reasons))
+
+    def test_clean_prose_has_no_dense_paragraph(self):
+        self.assertEqual(sentences.score(support.CLEAN_PROSE).dense_paragraphs, [])
+
+    def test_two_sentences_are_not_a_measurement(self):
+        """One legitimate 40-word list of covariates plus a short sentence averages
+        over the ceiling and means nothing."""
+        text = ("Covariates comprised age, sex, race, ethnicity, preferred language, "
+                "marital status, religion, smoking status, body mass index, systolic "
+                "pressure, diastolic pressure, encounter count, prior trial counts and "
+                "the nine social-determinant flags recorded in the window. All were "
+                "measured before the index date.")
+        self.assertEqual(sentences.score(text).dense_paragraphs, [])
+
+    def test_the_dense_opener_is_quotable_for_the_editor(self):
+        report = sentences.score(self.DENSE)
+        opener = report.dense_paragraphs[0][0]
+        self.assertIn(opener, self.DENSE)
+        self.assertIn(opener, sentences.worst_offenders(report))
+
+
+class AnticipatoryRebuttalTests(unittest.TestCase):
+    """The paper arguing with a reviewer who has not spoken yet."""
+
+    def test_the_defensive_clause_is_caught(self):
+        text = ("The crosswalk is in the supplement. It is the evidence for the scope "
+                "statement above and not only a limitation. The rules follow.")
+        report = sentences.score(text)
+        self.assertTrue(report.anticipatory)
+        self.assertFalse(report.passed)
+
+    def test_a_scope_caveat_is_not_a_rebuttal(self):
+        """Bounding what a result means is what a Discussion is for. An early version
+        of this list refused it, which teaches the writer to overclaim."""
+        text = ("Cohort proportions describe this enriched sample. They should not be "
+                "interpreted as health-system prevalence estimates. The denominator "
+                "differs.")
+        self.assertEqual(sentences.score(text).anticipatory, [])
+
+    def test_a_real_contrast_is_not_a_rebuttal(self):
+        text = ("The farthest-neighbor predictor is not merely poor but informatively "
+                "poor. Its errors are structured. That structure is the finding.")
+        self.assertEqual(sentences.score(text).anticipatory, [])
+
+
+class TalliedComparisonTests(unittest.TestCase):
+    """A count of comparisons whose dimension is never stated."""
+
+    def test_a_tally_with_no_axis_is_refused(self):
+        text = ("Eleven fields are asymmetric and ten of them favour the narrative. "
+                "The rest match. That bounds the claim.")
+        report = sentences.score(text)
+        self.assertEqual([v for _, v in report.undefined_comparisons], ["favour"])
+        self.assertTrue(any("on what axis" in r for r in report.reasons))
+
+    def test_naming_the_axis_clears_it(self):
+        text = ("Eleven fields are asymmetric and ten of them favour the narrative in "
+                "granularity. The rest match. That bounds the claim.")
+        self.assertEqual(sentences.score(text).undefined_comparisons, [])
+
+    def test_a_plain_comparison_is_not_a_tally(self):
+        """"The embedding did not beat the feature vector" is a claim whose axis the
+        section around it has fixed. Refusing it was the first version of this check
+        and it refused correct prose."""
+        text = ("The embedding did not beat the feature vector. The gap was small. "
+                "Retrieval works, and loses.")
+        self.assertEqual(sentences.score(text).undefined_comparisons, [])
+
+    def test_a_threshold_comparison_names_its_own_axis(self):
+        text = ("All ten contrasts include zero. None of them exceeds 0.05. The "
+                "conclusion holds across strata.")
+        self.assertEqual(sentences.score(text).undefined_comparisons, [])
+
+
+class SignpostEndingTests(unittest.TestCase):
+    """A cross-reference is support, exactly as a citation is."""
+
+    def test_a_paragraph_ending_on_a_signpost_has_no_conclusion(self):
+        text = ("The two representations differ in their field inventory. Eleven of "
+                "thirty are asymmetric. The full encoding rules are described in "
+                "Supplement M5 and two example narratives are reproduced in "
+                "Supplement S5.")
+        self.assertIn("no concluding sentence",
+                      {d.kind for d in paragraphs.check(text).defects})
+
+    def test_a_cross_reference_as_the_predicate_is_a_signpost(self):
+        text = ("The crosswalk settles the question. Every row traces to a chosen "
+                "field. The field-level crosswalk, row by row, is Supplement S10.")
+        self.assertIn("no concluding sentence",
+                      {d.kind for d in paragraphs.check(text).defects})
+
+    def test_an_attached_pointer_is_not_a_signpost(self):
+        """"as shown in Figure 3" hangs off a sentence that states its finding. That
+        one word is the difference between a signpost and an attachment."""
+        text = ("Discrimination was flat across the four encoders. The spread was "
+                "0.012. The band held in every stratum, as shown in Figure 3.")
+        self.assertNotIn("no concluding sentence",
+                         {d.kind for d in paragraphs.check(text).defects})
+
+    def test_a_parenthetical_table_reference_is_not_a_signpost(self):
+        text = ("The cohort lost 3,105 patients at the diagnosis filter. Most of the "
+                "rest were missing an index date. Attrition therefore concentrates in "
+                "one step (Table 2).")
+        self.assertNotIn("no concluding sentence",
+                         {d.kind for d in paragraphs.check(text).defects})
+
+
+class TerminologyDriftTests(unittest.TestCase):
+    """The synonym nobody thought to ban."""
+
+    LOCK = [{"term": "feature representation", "aliases": ["rule-based approach"]}]
+
+    TEXT = ("# Methods\n\nThe feature representation assigned explicit columns. The "
+            "feature matrix was assembled first. Every row of the feature matrix "
+            "carried one patient. The feature-vector model exceeded the threshold, "
+            "and the feature-vector arm was fitted with regularisation.\n")
+
+    def test_an_undeclared_second_name_is_drift(self):
+        report = terminology.check_manuscript(self.TEXT, self.LOCK)
+        found = {d.found for d in report.defects if d.kind == "drift"}
+        self.assertIn("feature matrix", found)
+        self.assertIn("feature vector", found)
+        self.assertFalse(report.passed)
+
+    def test_a_single_use_is_ordinary_english(self):
+        text = "# Methods\n\nThe feature representation used columns. The feature " \
+               "matrix was assembled once.\n"
+        report = terminology.check_manuscript(text, self.LOCK)
+        self.assertEqual([d for d in report.defects if d.kind == "drift"], [])
+
+    def test_drift_does_not_run_at_section_scope(self):
+        """A phrase used once in each of four sections is a name, and no section can
+        see that from inside itself. The same split the abbreviation rules make."""
+        report = terminology.check(self.TEXT, self.LOCK)
+        self.assertEqual([d for d in report.defects if d.kind == "drift"], [])
+
+    def test_a_declared_alias_belongs_to_the_alias_rule(self):
+        lock = [{"term": "feature representation",
+                 "aliases": ["feature matrix"]}]
+        report = terminology.check_manuscript(self.TEXT, lock)
+        kinds = {d.kind for d in report.defects if d.found == "feature matrix"}
+        self.assertEqual(kinds, {"alias"})
+
+    def test_a_non_naming_head_is_not_drift(self):
+        """"Feature selection" shares the modifier and names no thing."""
+        text = ("# Methods\n\nThe feature representation used columns. Feature "
+                "selection ran first. Feature selection used the training fold "
+                "alone.\n")
+        report = terminology.check_manuscript(text, self.LOCK)
+        self.assertEqual([d for d in report.defects if d.kind == "drift"], [])
+
+
 class ParagraphGateTests(unittest.TestCase):
 
     def test_a_paragraph_opening_on_a_citation_has_no_topic_sentence(self):
@@ -1005,6 +1189,85 @@ class SupportLadderBudgetTests(unittest.TestCase):
         outline["sections"][0]["words"] = 4000        # an enormous claim-free section
         report = ladder.check(self.POINTS, self.CLAIMS, outline=outline)
         self.assertTrue(report.passed, report.errors)
+
+
+class ClaimWordCeilingTests(unittest.TestCase):
+    """The budget from the other side: material attached to something, then written
+    until it outweighs the claim it belongs to."""
+
+    POINTS = [{"id": "p.1", "point": "The embedding does not outperform the feature "
+                                     "vector on this outcome."}]
+
+    def _claims(self, aside_kind="descriptive"):
+        return [
+            {"id": "c.1", "claim": "the two tie", "kind": "comparative",
+             "serves": ["p.1"], "headline": True},
+            {"id": "c.2", "claim": "the tie holds across encoders",
+             "kind": "descriptive", "serves": ["p.1"]},
+            {"id": "c.3", "claim": "the ablation localises the signal",
+             "kind": "mechanistic", "serves": ["p.1"]},
+            {"id": "c.4", "claim": "retrieval is informative, not competitive",
+             "kind": "comparative", "serves": ["p.1"]},
+            {"id": "c.5", "claim": "the cohort is single-site", "kind": "descriptive",
+             "role": "setup"},
+            {"id": "c.6", "claim": "fusing the inverted farthest signal does not help",
+             "kind": aside_kind, "serves": ["p.1"]},
+        ]
+
+    def _outline(self, fusion_words):
+        return {"sections": [
+            {"number": 1, "heading": "Introduction", "words": 400, "claims": []},
+            {"number": 2, "heading": "Results", "words": 2400,
+             "claims": ["c.1", "c.2", "c.3", "c.4"]},
+            {"number": 3, "heading": "Cohort", "words": 600, "claims": ["c.5"]},
+            {"number": 4, "heading": "Nearest-farthest retrieval fusion",
+             "words": fusion_words, "claims": ["c.6"]},
+            {"number": 5, "heading": "References", "words": 300, "claims": []},
+        ]}
+
+    def test_a_proportionate_strand_is_silent(self):
+        report = ladder.check(self.POINTS, self._claims(),
+                              outline=self._outline(300))
+        self.assertTrue(report.passed, report.errors)
+        self.assertEqual([w for w in report.warnings if "soft ceiling" in w], [])
+
+    def test_an_overgrown_strand_is_warned_about_not_refused(self):
+        """Word share is a proxy, and a proxy that stalls a run is a proxy somebody
+        raises until it stops firing."""
+        report = ladder.check(self.POINTS, self._claims(),
+                              outline=self._outline(1900))
+        self.assertTrue(report.passed, report.errors)
+        self.assertTrue(any("soft ceiling" in w for w in report.warnings))
+        self.assertTrue(any("'c.6'" in w for w in report.warnings))
+
+    def test_a_limitation_written_at_the_length_of_a_finding_is_refused(self):
+        report = ladder.check(self.POINTS, self._claims(aside_kind="limitation"),
+                              outline=self._outline(1900))
+        self.assertFalse(report.passed)
+        self.assertTrue(any("reads as a finding" in e for e in report.errors))
+
+    def test_a_ceiling_an_even_split_cannot_meet_does_not_fire(self):
+        """A two-claim paper puts half of itself on each claim by construction.
+        Refusing that is refusing arithmetic."""
+        points = self.POINTS
+        claims = [
+            {"id": "c.1", "claim": "the two tie", "kind": "comparative",
+             "serves": ["p.1"], "headline": True},
+            {"id": "c.2", "claim": "a caveat", "kind": "limitation",
+             "serves": ["p.1"]},
+        ]
+        outline = {"sections": [
+            {"number": 1, "heading": "Results", "words": 1000, "claims": ["c.1"]},
+            {"number": 2, "heading": "Limitations", "words": 1000, "claims": ["c.2"]},
+        ]}
+        report = ladder.check(points, claims, outline=outline)
+        self.assertEqual([e for e in report.errors if "reads as a finding" in e], [])
+
+    def test_the_attribution_is_reported_for_a_person_to_check(self):
+        report = ladder.check(self.POINTS, self._claims(),
+                              outline=self._outline(1900))
+        self.assertEqual(report.stats["claim_words"]["c.6"], 1900)
+        self.assertEqual(report.stats["claim_words"]["c.1"], 600)
 
 
 class SupportLadderMigrationTests(unittest.TestCase):

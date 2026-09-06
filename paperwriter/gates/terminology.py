@@ -24,6 +24,20 @@ enforces it. A locked term has:
 The gate also catches the abbreviation defects nobody catches by eye: an acronym used
 before it is expanded, and an acronym expanded twice.
 
+**And the synonym nobody thought to ban.** A lock can only forbid what somebody
+listed, so the gate above is blind by construction to the second name that was
+invented during drafting. The manuscript this gate was written from went on to carry
+four names for one arm — the *typed feature representation*, the *feature
+representation*, the *feature matrix* and the *feature-vector* — through every gate,
+because only "rule-based approach" had ever been declared.
+
+So `check_manuscript` also looks for **drift**: a phrase that shares a locked term's
+modifier and ends in a different role noun. "Feature matrix" against a locked "feature
+representation" is a candidate second name. "Feature selection" is not, because
+selection is not a thing the paper names. It runs at manuscript scope only, for the
+same reason the abbreviation rules do — a phrase used once in each of four sections is
+a name, and no section can see that from inside itself.
+
 **What it deliberately does not do.** It does not object to a pronoun, a shortened
 form the lock declares acceptable, or the term appearing inside a quotation. Vocabulary
 policing that fires on ordinary English is vocabulary policing that gets turned off.
@@ -138,6 +152,9 @@ def check(text, lock, whole_manuscript=False):
                            f"for {term}. A reader takes a second name for a second "
                            f"thing. Use \"{term}\" here and everywhere else."))
 
+        if whole_manuscript:
+            defects.extend(_drift(body, spans, entry, quoted))
+
         expansion = str(entry.get("first_use") or "").strip()
         if expansion and whole_manuscript:
             defects.extend(_check_abbreviation(body, spans, term, expansion, quoted))
@@ -191,6 +208,54 @@ def _check_abbreviation(body, spans, term, expansion, quoted):
             kind="redefined", term=term, found=expansion, sentence=raw,
             detail=f"\"{expansion}\" is written out {len(expansions)} times. Expand "
                    f"it once, at the first use, then use {term} alone."))
+    return out
+
+
+def _drift(body, spans, entry, quoted):
+    """Undeclared near-variants of a locked term, by shared modifier.
+
+    "Feature representation" splits into the modifier "feature" and the head
+    "representation". Any other phrase built from that modifier and a role noun —
+    matrix, vector, approach, arm — is a second name for the same thing wearing a
+    different head, and the lock never heard of it. Hyphenation is ignored, because
+    "feature-vector" and "feature vector" are the same defect.
+
+    A single use is ordinary English and is not reported. A phrase used
+    `TERM_DRIFT_MIN_USES` times is a name whether or not anybody declared it one."""
+    term = str(entry["term"]).strip()
+    parts = re.split(r"[\s-]+", term.lower())
+    if len(parts) < 2:
+        return []                    # a one-word term has no modifier to share
+    modifier, head = parts[-2], parts[-1]
+    if modifier in config.TERM_ROLE_NOUNS:
+        return []                    # "regression model" — the modifier is itself a role
+    declared = {str(a).strip().lower() for a in entry.get("aliases") or []}
+
+    alternatives = "|".join(n for n in config.TERM_ROLE_NOUNS if n != head)
+    pattern = re.compile(r"(?<![A-Za-z])" + re.escape(modifier) + r"[\s-]+(" +
+                         alternatives + r")(?:s)?(?![A-Za-z])", re.IGNORECASE)
+
+    seen = {}
+    for match in pattern.finditer(body):
+        if any(s <= match.start() < e for s, e in quoted):
+            continue
+        phrase = " ".join(match.group(0).split()).lower().replace("-", " ")
+        if phrase in declared:
+            continue                 # already banned; the alias rule owns it
+        seen.setdefault(phrase, []).append(match.start())
+
+    out = []
+    for phrase, hits in sorted(seen.items(), key=lambda kv: -len(kv[1])):
+        if len(hits) < config.TERM_DRIFT_MIN_USES:
+            continue
+        raw, _ = prose.sentence_at(spans, hits[0])
+        out.append(TermDefect(
+            kind="drift", term=term, found=phrase, sentence=raw,
+            detail=f"\"{phrase}\" appears {len(hits)} times and is not in the lock. "
+                   f"It shares \"{modifier}\" with the locked term \"{term}\" and "
+                   f"ends somewhere else, which is what a second name looks like. "
+                   f"Either use \"{term}\" throughout, or declare \"{phrase}\" as a "
+                   f"separate locked term if it really is a separate thing."))
     return out
 
 
