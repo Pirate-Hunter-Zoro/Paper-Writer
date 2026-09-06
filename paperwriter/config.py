@@ -294,8 +294,11 @@ PARAGRAPH_DEFECT_SHARE_MAX = float(
 
 # Sections whose paragraph-shape rules are relaxed entirely. An abstract is one
 # structured block, a declarations section is a list, and references are not prose.
+# An abbreviations list joined this set on 2026-09-06, when a venue that requires one
+# produced a 92-word "sentence" made of fourteen glossary entries. A definition list is
+# not prose, for the same reason a reference list is not.
 PARAGRAPH_EXEMPT_SECTIONS = ("abstract", "title page", "declarations", "references",
-                             "acknowledgements", "keywords")
+                             "acknowledgements", "keywords", "abbreviations")
 
 # --- Gate thresholds ---------------------------------------------------------
 

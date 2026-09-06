@@ -160,6 +160,28 @@ def report_path(project_id, paper_num):
     return paper_root(project_id, paper_num) / "report.md"
 
 
+def parts_dir(project_id, paper_num, document_stem):
+    """Where one document's per-section files live.
+
+    `<paper>/parts/<document>/NN-heading.md`. NOT `sections/`, which is already the
+    drafting stage's own working directory for `s01.md`, `s02.md` and their kin —
+    those are internal state and are never delivered, and one directory holding both
+    would be two meanings for one name in the place a reader is most likely to look.
+
+    Under a folder of its own so the delivered tree reads at a glance: the whole
+    documents at the top, the parts one level down, and no chance of a reader taking
+    `04-methods.md` for a submission."""
+    return paper_root(project_id, paper_num) / "parts" / slug(document_stem)
+
+
+def part_documents(project_id, paper_num):
+    """Every per-section file, across every document, in reading order."""
+    root = paper_root(project_id, paper_num) / "parts"
+    if not root.is_dir():
+        return []
+    return sorted(root.glob("*/*.md"))
+
+
 def documents(project_id, paper_num):
     """Every Markdown document this paper has produced, manuscript first.
 
@@ -170,6 +192,8 @@ def documents(project_id, paper_num):
     if not root.is_dir():
         return []
     first = manuscript_path(project_id, paper_num)
+    # `glob` rather than `rglob`: the per-section files under `sections/` are derived
+    # from these and must never be re-split or counted as documents in their own right.
     rest = sorted(p for p in root.glob("*.md") if p != first)
     return ([first] if first.exists() else []) + rest
 

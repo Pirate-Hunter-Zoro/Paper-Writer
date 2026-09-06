@@ -10,6 +10,8 @@ source, it is the thing an author edits, and it is the one artifact that exists 
 when pandoc does not.
 """
 
+from pathlib import Path
+
 from .. import config, paths
 from ..infra import storage
 
@@ -36,9 +38,18 @@ def deliver(project_rec, paper_num, artifacts, project_name=None, paper_name=Non
     paper_name = paths.slug(paper_name or f"paper-{paper_num}")
     folder = config.OUT_DIR / project_name / paper_name
 
+    # Delivered paths keep whatever subtree they had under the paper root, so
+    # `sections/manuscript/04-methods.docx` arrives as that and not as a flat
+    # `04-methods.docx` beside three other files with the same name from three other
+    # documents.
+    root = paths.paper_root(project_rec["project_id"], paper_num)
     delivered = []
     for source in artifacts:
         if source is None or not source.exists():
             continue
-        delivered.append(deliver_one(source, folder / source.name))
+        try:
+            rel = source.resolve().relative_to(root.resolve())
+        except (ValueError, OSError):
+            rel = Path(source.name)
+        delivered.append(deliver_one(source, folder / rel))
     return delivered

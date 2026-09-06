@@ -117,7 +117,9 @@ def advance(records, project_rec, paper_rec, log_fn=print):
             # Every document the pipeline produced, in Markdown and in every built
             # format. The Markdown used to be the manuscript alone, which meant the
             # author's report arrived only as a .docx and read as an afterthought.
-            artifacts = list(paths.documents(project_rec["project_id"], paper_num))
+            pid_ = project_rec["project_id"]
+            artifacts = list(paths.documents(pid_, paper_num))
+            artifacts += list(paths.part_documents(pid_, paper_num))
             artifacts += [_as_path(p) for p in (paper_rec.get("built_paths") or [])]
             dest = delivery.deliver(project_rec, paper_num, artifacts,
                                     paper_name=paper_rec.get("title"))
