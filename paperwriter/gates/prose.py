@@ -23,6 +23,9 @@ import re
 
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['-][A-Za-z]+)*")
 
+# The start of a Markdown list item, at the beginning of a line.
+_LIST_START = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+", re.MULTILINE)
+
 # Abbreviations whose full stop does not end a sentence. Lowercased, without the dot.
 _ABBREVIATIONS = {
     # scholarly
@@ -39,15 +42,20 @@ _ABBREVIATIONS = {
 # A stop that is part of a number (3.14), an initial (J. R. Smith), or an ellipsis is
 # never a boundary either; `_ends_on_abbreviation` handles those.
 #
-# `*` and `_` ride with the opening bracket class, and that is not cosmetic. A
+# `*` and `_` ride with BOTH bracket classes, and that is not cosmetic. A
 # structured abstract runs its labels in as bold text — "...of the record. **Methods.**
 # We assembled..." — and without them the boundary after "record." is not a boundary at
 # all, because the next character is an asterisk rather than a capital. Two sentences
 # then merge across every label in the abstract, which both hides real long sentences
 # and invents fake ones. JMIR, BMJ and PLOS all want structured abstracts.
+#
+# The closing side matters for the same reason at the other end of a block. A figure or
+# table caption is written as `***Table S3.** ... *` and therefore ends in `.*`, so
+# without `*` as a closer the caption never terminates and swallows the paragraph
+# beneath it. On a supplement that is most of the apparent long sentences.
 _SENTENCE_END = re.compile(r"""
     (?<=[.!?])                # a terminator
-    ["'’”)\]]*      # closing quotes or brackets ride with it
+    ["'’”)\]*_]*             # closing quotes, brackets or emphasis ride with it
     \s+                       # whitespace is what makes it a boundary
     (?=[\"'‘“(\[*_]*[A-Z0-9])  # the next sentence starts capitalised
 """, re.VERBOSE)
@@ -66,7 +74,10 @@ def word_count(text):
 
 def _ends_on_abbreviation(chunk):
     """Whether a candidate sentence ends on something that is not a sentence end."""
-    tail = chunk.rstrip()
+    # Trailing emphasis is punctuation, not content: "***Table 3.**" ends on the
+    # numbering of a caption, and the number is what decides whether this is a
+    # boundary. Strip the markers before asking.
+    tail = chunk.rstrip().rstrip("*_")
     if not tail.endswith("."):
         return False
     # The token before the stop, lowercased and stripped of everything but letters
@@ -105,7 +116,16 @@ def sentence_spans(text):
     if not (text or "").strip():
         return []
     body = text
-    bounds = [0] + [m.end() for m in _SENTENCE_END.finditer(body)] + [len(body)]
+    # A list item begins a new sentence, whatever punctuation preceded it.
+    #
+    # This is not a nicety. A bulleted list is the standard repair for a sentence that
+    # is carrying six things, and its stem — "A patient needed all six of:" — ends in a
+    # colon rather than a full stop. Without this boundary the stem and every bullet
+    # merge into one enormous "sentence", so the gate reports the repair as worse than
+    # the defect and the writer is pushed back toward the run-on.
+    bounds = sorted({0, len(body)}
+                    | {m.end() for m in _SENTENCE_END.finditer(body)}
+                    | {m.start() for m in _LIST_START.finditer(body)})
     spans, start = [], None
     for i in range(len(bounds) - 1):
         lo, hi = bounds[i], bounds[i + 1]
@@ -157,11 +177,25 @@ def collapse_pattern(phrase):
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s")
 _TABLE_RE = re.compile(r"^\s*\|")
+# A Markdown image on its own line is a figure, not a sentence. Its alt text and path
+# are not prose a reader reads, and a long results path counts as a dozen words.
+_IMAGE_RE = re.compile(r"^\s*!\[")
+# A display equation is a block of mathematics, not a paragraph and not a sentence.
+# Counting one produces a "paragraph" with no topic sentence on every derivation.
+_DISPLAY_MATH_RE = re.compile(r"^\s*\$\$")
+# A blockquote is somebody else's words: a verbatim model output, a quoted narrative,
+# a reviewer's comment. Measuring it as the author's prose is wrong twice over — the
+# author cannot repair a sentence they did not write, and a supplement that quotes a
+# 170-word generated narrative measures as though it contained a 170-word sentence.
+# `gates.terminology` already treats a blockquote as quoted material and exempts it;
+# this makes the sentence and paragraph gates agree with it.
+_QUOTE_RE = re.compile(r"^\s{0,3}>")
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def strip_structure(text):
-    """The prose of a Markdown block: no headings, tables, fences, or comments.
+    """The prose of a Markdown block: no headings, tables, fences, blockquotes, images,
+    display equations, or comments.
 
     Everything that measures prose measures this, so a section is judged on the
     sentences a reader actually reads.
@@ -189,7 +223,9 @@ def strip_structure(text):
     for line in (text or "").splitlines(keepends=True):
         bare = line.rstrip("\n")
         fence = bool(_FENCE_RE.match(bare))
-        drop = fence or in_fence or _HEADING_RE.match(bare) or _TABLE_RE.match(bare)
+        drop = (fence or in_fence or _HEADING_RE.match(bare)
+                or _TABLE_RE.match(bare) or _QUOTE_RE.match(bare)
+                or _IMAGE_RE.match(bare) or _DISPLAY_MATH_RE.match(bare))
         if fence:
             in_fence = not in_fence
         if drop:

@@ -67,7 +67,10 @@ _HEDGES = (
     "it is possible", "cannot be ruled out", "we speculate", "conceivably",
 )
 
-_SEMICOLON_RE = re.compile(r";")
+# A weld is a semicolon INSIDE a line. One at the end of a line is list punctuation —
+# the conventional way to separate the items of an enumeration — and counting it drives
+# a writer away from the bulleted list that fixes the long sentence in the first place.
+_SEMICOLON_RE = re.compile(r";(?![ \t]*(?:\n|$))")
 _EMDASH_RE = re.compile(r"[—–]|(?<=\s)--(?=\s)")
 
 
