@@ -13,7 +13,7 @@ from paperwriter import config                                      # noqa: E402
 from paperwriter.gates import (citations, claims, coverage, ladder,  # noqa: E402
                                length, numbers, paragraphs, prose,
                                readability, sentences, structure,
-                               terminology)
+                               terminology, venue)
 
 
 class ProseSplittingTests(unittest.TestCase):
@@ -720,6 +720,121 @@ class ArgumentGateTests(unittest.TestCase):
         report = claims.check(self._claims(), evidence_ids={"e.1", "e.2", "e.9"})
         self.assertTrue(report.passed)
         self.assertTrue(any("e.9" in w for w in report.warnings))
+
+
+class VenueGateTests(unittest.TestCase):
+    """The journal's own rules. Every other gate asks whether the manuscript is good;
+    this one asks whether the file will be accepted, which an editorial assistant
+    settles in ninety seconds and which no other gate here can see."""
+
+    GOOD = (
+        "# Title page\n\n**Title.** A Study\n\n"
+        "# Abstract\n\n"
+        "**Background.** " + "word " * 40 + "\n\n"
+        "**Objective.** " + "word " * 30 + "\n\n"
+        "**Methods.** " + "word " * 40 + "\n\n"
+        "**Results.** " + "word " * 30 + "\n\n"
+        "**Conclusions.** " + "word " * 20 + "\n\n"
+        "**Keywords.** one; two; three; four; five; six\n\n"
+        "# Methods\n\nThe cohort was assembled from records. Nothing was refit.\n\n"
+        "# Declarations\n\n**Funding.** None.\n\n"
+        "**Conflicts of interest.** None declared.\n\n"
+        "**Ethics and data handling.** Secondary analysis.\n\n"
+        "**Authors' contributions.** MF did the work.\n\n"
+        "**Data availability.** On request.\n\n"
+        "**Abbreviations.** TRD: treatment-resistant depression.\n\n"
+        "# References\n\n1. Someone. A paper. Journal. 2024.\n"
+    )
+
+    def test_a_compliant_manuscript_passes(self):
+        report = venue.check(self.GOOD, "JMIR Mental Health")
+        self.assertTrue(report.passed, report.errors)
+
+    def test_an_unprofiled_venue_does_not_pass_silently(self):
+        """Writing to a journal nobody has profiled is ordinary. Being told the
+        manuscript is compliant against rules nobody checked is how an 810-word
+        abstract survived two redrafts."""
+        report = venue.check(self.GOOD, "Journal of Made Up Things")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("no venue profile" in e for e in report.errors))
+
+    def test_no_venue_at_all_does_not_pass_silently(self):
+        self.assertFalse(venue.check(self.GOOD, "").passed)
+
+    def test_an_over_length_abstract_is_refused(self):
+        text = self.GOOD.replace("**Methods.** " + "word " * 40,
+                                 "**Methods.** " + "word " * 400)
+        report = venue.check(text, "JMIR")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("against this venue's ceiling" in e
+                            for e in report.errors))
+
+    def test_the_venue_labels_are_not_charged_to_the_author(self):
+        """The structured headings are the venue's own form. Counting them against
+        the author's allowance is charging them for the boilerplate."""
+        report = venue.check(self.GOOD, "JMIR")
+        self.assertNotIn("Background", str(report.stats))
+        self.assertLess(report.stats["abstract_words"], 450)
+
+    def test_a_missing_structured_heading_is_refused(self):
+        report = venue.check(self.GOOD.replace("**Objective.**", "**Aim.**"), "JMIR")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("no `Objective` heading" in e for e in report.errors))
+
+    def test_a_missing_mandatory_section_is_refused(self):
+        report = venue.check(self.GOOD.replace("**Abbreviations.**", "**Notes.**"),
+                             "JMIR")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("`Abbreviations` section" in e for e in report.errors))
+
+    def test_a_url_in_the_body_is_refused(self):
+        """The commonest way to break this is a Methods section naming its own code
+        repository, which reads as good practice and is not what the venue asked."""
+        text = self.GOOD.replace("Nothing was refit.",
+                                 "Code is at https://github.com/x/y.")
+        report = venue.check(text, "JMIR")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("URL(s) in the body" in e for e in report.errors))
+
+    def test_a_url_in_the_reference_list_is_fine(self):
+        text = self.GOOD.replace("1. Someone. A paper. Journal. 2024.",
+                                 "1. Someone. A paper. https://example.org/x")
+        self.assertTrue(venue.check(text, "JMIR").passed)
+
+    def test_too_few_keywords_is_refused(self):
+        report = venue.check(self.GOOD.replace(
+            "one; two; three; four; five; six", "one; two"), "JMIR")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("keyword" in e for e in report.errors))
+
+    def test_an_advisory_limit_warns_and_says_what_it_costs(self):
+        """A venue that recommends a length and charges above it has not set a
+        ceiling. Blocking there refuses legitimate manuscripts; saying nothing lets
+        the author find out at invoice."""
+        long_body = self.GOOD.replace("The cohort was assembled from records.",
+                                      "The cohort was assembled. " * 6000)
+        report = venue.check(long_body, "JMIR")
+        self.assertTrue(report.passed, report.errors)
+        self.assertTrue(any("fees" in w for w in report.warnings))
+
+    def test_a_profile_that_has_not_decided_a_key_is_refused(self):
+        """A key that is absent is a requirement nobody looked up. `None` records
+        that the venue states no limit; missing records that nobody checked."""
+        from paperwriter import venues
+        half = {k: v for k, v in venues.JMIR.items() if k != "references_max"}
+        report = venue.check(self.GOOD, "JMIR", profile=half)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("does not decide" in e for e in report.errors))
+
+    def test_a_stale_profile_is_reported_rather_than_trusted(self):
+        from datetime import date, timedelta
+        from paperwriter import venues
+        old = dict(venues.JMIR)
+        report = venue.check(self.GOOD, "JMIR", profile=old,
+                             today=old["checked"] + timedelta(days=900))
+        self.assertTrue(report.passed, report.errors)
+        self.assertTrue(any("re-read it before submitting" in w
+                            for w in report.warnings))
 
 
 class SupportLadderTests(unittest.TestCase):

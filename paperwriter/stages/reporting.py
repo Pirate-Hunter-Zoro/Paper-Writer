@@ -23,7 +23,7 @@ opinion about it, and this is a record.
 """
 
 from .. import config, paths
-from ..gates import ladder as ladder_gate, prose, sentences
+from ..gates import ladder as ladder_gate, prose, sentences, venue
 from ..infra import journal, storage
 from ..memory import store
 
@@ -74,6 +74,35 @@ def _ladder_block(plan, paper_num, argument):
         lines.append("")
         lines += [f"- {w}" for w in report.warnings]
         lines.append("")
+    return lines
+
+
+def _venue_block(plan, paper_num, manuscript_text):
+    """Whether the journal will accept the file, which is not the same question as
+    whether the paper is any good and is answered by an editorial assistant first."""
+    where = ""
+    for paper in plan.get("papers") or []:
+        if paper.get("number") == paper_num:
+            where = paper.get("venue", "")
+    report = venue.check(manuscript_text, where)
+    lines = ["## Will the journal accept the file", "",
+             f"Checked against **{report.venue}**.", ""]
+    if report.stats:
+        lines += ["| Measured | |", "| --- | ---: |"]
+        lines += [f"| {k.replace('_', ' ')} | {v:,} |" if isinstance(v, int)
+                  else f"| {k.replace('_', ' ')} | {v} |"
+                  for k, v in report.stats.items()]
+        lines.append("")
+    if report.errors:
+        lines += ["These will stop the submission before a reviewer sees it:", ""]
+        lines += [f"- {e}" for e in report.errors]
+        lines.append("")
+    if report.warnings:
+        lines += ["Advisory, with the consequence stated:", ""]
+        lines += [f"- {w}" for w in report.warnings]
+        lines.append("")
+    if not report.errors and not report.warnings:
+        lines += ["Every stated requirement is met.", ""]
     return lines
 
 
@@ -168,6 +197,7 @@ def write(project_rec, paper_num, audit_notes=None, log_fn=None):
              "unresolved. Nothing here is written by a model; every line is read off "
              "state the pipeline committed._", ""]
 
+    parts += _venue_block(plan, paper_num, manuscript_text)
     parts += _ladder_block(plan, paper_num, argument)
 
     sections = outline.get("sections") or []

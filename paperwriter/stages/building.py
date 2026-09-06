@@ -29,10 +29,10 @@ import re
 import subprocess
 
 from .. import config, paths
-from ..gates import citations, numbers, prose, sentences, terminology
+from ..gates import citations, numbers, prose, sentences, terminology, venue
 from ..infra import storage
 from ..memory import store
-from . import reporting
+from . import reporting, splitting
 
 
 def _front_matter(plan, paper_num, ledger):
@@ -173,6 +173,20 @@ def audit(project_rec, paper_num, log_fn=None):
     if not sent.passed:
         notes += [f"PROSE: {reason}" for reason in sent.reasons]
 
+    # The venue's own rules. Last, because it is the only check here that is about
+    # whether the journal will accept the file rather than about whether the paper is
+    # any good, and an author reading this list wants that separated.
+    plan = storage.load_json(paths.plan_path(pid), {})
+    where = ""
+    for paper in plan.get("papers") or []:
+        if paper.get("number") == paper_num:
+            where = paper.get("venue", "")
+    venue_report = venue.check(text_, where)
+    notes += [f"VENUE: {reason}" for reason in venue_report.errors]
+    notes += [f"VENUE (advisory): {reason}" for reason in venue_report.warnings]
+    if venue_report.passed and not venue_report.warnings:
+        notes.append(f"VENUE: every stated requirement of {venue_report.venue} is met.")
+
     for note in notes:
         if log_fn:
             log_fn(f"paper {paper_num} audit — {note}")
@@ -252,7 +266,8 @@ def convert_one(source, fmt, reference_docx=None, log_fn=None):
 
 
 def convert_all(project_rec, paper_num, reference_docx=None, log_fn=None):
-    """Convert EVERY document this paper produced, in every configured format.
+    """Convert every document this paper produced AND every section of each, in every
+    configured format.
 
     Discovered from disk rather than listed, so a stage that starts emitting another
     document gets it converted and delivered without anybody remembering to come back
@@ -261,7 +276,8 @@ def convert_all(project_rec, paper_num, reference_docx=None, log_fn=None):
     read as an afterthought — which it was."""
     pid = project_rec["project_id"]
     built = []
-    for source in paths.documents(pid, paper_num):
+    for source in (list(paths.documents(pid, paper_num))
+                   + list(paths.part_documents(pid, paper_num))):
         for fmt in config.BUILD_FORMATS:
             path = convert_one(source, fmt, reference_docx=reference_docx,
                                log_fn=log_fn)
@@ -275,10 +291,11 @@ def convert_all(project_rec, paper_num, reference_docx=None, log_fn=None):
 
 
 def build(project_rec, paper_num, title, log_fn=None):
-    """Assemble, audit, report, and convert everything.
+    """Assemble, audit, report, split, and convert everything.
 
     Returns (manuscript_path, [built paths], notes). Raises only if assembly itself
     fails, which means a filesystem problem rather than a manuscript problem."""
+    pid = project_rec["project_id"]
     manuscript = assemble(project_rec, paper_num, log_fn=log_fn)
     notes = audit(project_rec, paper_num, log_fn=log_fn)
 
@@ -290,6 +307,12 @@ def build(project_rec, paper_num, title, log_fn=None):
     except (OSError, KeyError, ValueError) as exc:
         notes = list(notes) + [f"REPORT: could not be written ({exc}). The manuscript "
                                f"is unaffected."]
+
+    # And the parts, before conversion, so each one is converted with everything else.
+    # Derived from the assembled documents rather than from the accepted sections on
+    # disk: those exist only for the manuscript, and a split that came from a different
+    # source than the whole would be a second version of the paper.
+    splitting.run(pid, paper_num, log_fn=log_fn)
 
     from ..jobspec import reference_docx as job_reference
     reference = job_reference(project_rec.get("prompt_text", "")) or None
