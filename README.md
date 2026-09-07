@@ -333,6 +333,7 @@ each returns a verdict a person can check by hand.
 | `terminology` | A forbidden synonym for a locked term; an undeclared near-variant of one; an abbreviation used before it is expanded, or expanded twice. |
 | `citations` | A marker that resolves to nothing; a reference nobody cites; a borrowed claim carrying no source; two citation styles in one section. |
 | `crossrefs` | **A pointer the paper makes to itself that resolves to nothing, and a gap in the numbering.** Whole-document, because a pointer is the one defect no per-section gate can see. |
+| `procedures` | **A named procedure whose defining parameter the paper never states.** Benjamini-Hochberg without its false discovery rate; a bootstrap without its resample count. Both numbers existed in the analysis code and neither reached the paper. Whole-document, because a caption should not restate what the Methods stated. |
 | `repetition` | **One point restated in three sections or more.** Two is a Discussion picking up what the Results said. Three is a paper that does not trust its reader. Front matter and captions exempt. |
 | `sentences` | The one-read rule, measured at the section and again inside each paragraph. See the table above. |
 | `paragraphs` | Every structural way a paragraph fails to open on its claim, or closes on a citation or a signpost instead of what it means. |

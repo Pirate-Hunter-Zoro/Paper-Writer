@@ -13,6 +13,7 @@ import unittest                                                     # noqa: E402
 
 from paperwriter import config                                      # noqa: E402
 from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder, venue,
+                               procedures,
                                repetition,  # noqa: E402
                                length, numbers, paragraphs, prose,
                                readability, sentences, structure,
@@ -1152,6 +1153,58 @@ class RepetitionGateTests(unittest.TestCase):
         reason = repetition.check(doc).reasons[0]
         for name in ("Introduction", "Methods", "Discussion"):
             self.assertIn(name, reason)
+
+
+class ProcedureSpecificationTests(unittest.TestCase):
+    """Naming a procedure is not specifying it."""
+
+    def test_a_correction_without_its_error_rate_is_refused(self):
+        text = ("P values were adjusted across the entire reported set by "
+                "Benjamini-Hochberg. The adjusted value is what we interpret. Two "
+                "hundred forty contrasts were computed.")
+        report = procedures.check(text)
+        self.assertFalse(report.passed)
+        self.assertEqual([d.procedure for d in report.defects], ["Benjamini-Hochberg"])
+
+    def test_a_contrast_count_is_not_an_error_rate(self):
+        """The numbers around a multiplicity correction are mostly not its
+        parameter, which is the whole precision of the check."""
+        text = "Two hundred 240 contrasts were adjusted by Benjamini-Hochberg."
+        self.assertFalse(procedures.check(text).passed)
+
+    def test_stating_the_rate_clears_it(self):
+        text = ("P values were adjusted by Benjamini-Hochberg, controlling the false "
+                "discovery rate at 5%. The adjusted value is what we interpret.")
+        self.assertTrue(procedures.check(text).passed)
+
+    def test_a_bootstrap_without_its_resample_count_is_refused(self):
+        text = ("Confidence intervals were estimated by resampling test-set patients "
+                "with replacement. The 2.5th and 97.5th percentiles of the bootstrap "
+                "distribution form the 95% confidence interval.")
+        self.assertEqual([d.procedure for d in procedures.check(text).defects],
+                         ["bootstrap"])
+
+    def test_ninety_five_percent_is_not_a_resample_count(self):
+        """It sits beside every bootstrap interval in every paper ever written."""
+        text = "Bootstrap percentile 95% confidence intervals are reported throughout."
+        self.assertFalse(procedures.check(text).passed)
+
+    def test_stating_the_resample_count_clears_it(self):
+        text = ("Intervals come from 1,000 nonparametric bootstrap resamples of the "
+                "test-set patients. Percentiles form the 95% interval.")
+        self.assertTrue(procedures.check(text).passed)
+
+    def test_the_parameter_may_be_stated_in_the_supplement(self):
+        """A manuscript and its supplement are one submission, and a paper should not
+        restate a resample count in every caption that mentions a bootstrap."""
+        man = "Bootstrap percentile 95% confidence intervals are reported throughout."
+        sup = "Intervals come from 1,000 bootstrap resamples drawn with replacement."
+        self.assertTrue(procedures.check(man, sup).passed)
+
+    def test_a_procedure_the_paper_never_names_is_not_reported(self):
+        report = procedures.check("The model reached a ROC AUC of 0.657 on the test "
+                                  "set. Nothing was refit. That is the headline.")
+        self.assertEqual(report.defects, [])
 
 
 class CrossrefGateTests(unittest.TestCase):

@@ -67,6 +67,10 @@ thousand words — so write inside the numbers rather than hoping.
   "far from being merely", "it might be objected" — the reader has to hold an objection
   nobody made before they can take your point. Make the claim and let it stand. Saying
   what a result does *not* establish is different, and belongs where it is true.
+- **Naming a procedure is not specifying it.** "Adjusted by Benjamini-Hochberg"
+  needs the error rate it controls. "Bootstrap confidence intervals" needs the
+  number of resamples. Say it once, in the Methods or the supplement, and a reader
+  can check the result instead of taking it.
 - **Give the number of any threshold you lean on.** "Below the conventional
   events-per-variable threshold" asks a reader to accept a comparison against a
   value you declined to state. Numbers elsewhere in the sentence do not help —

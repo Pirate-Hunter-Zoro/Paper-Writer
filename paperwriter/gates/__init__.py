@@ -28,6 +28,9 @@ each returns a verdict a person can check by hand:
   * `crossrefs`   — do the pointers the paper makes to ITSELF resolve, and is the
                     numbering contiguous? The defect a cut section leaves behind, and
                     the one thing no per-section gate can see.
+  * `procedures`  — is every named procedure SPECIFIED? A correction without its error
+                    rate, a bootstrap without its resample count. Whole-document,
+                    because a caption should not restate what the Methods stated.
   * `repetition`  — is one point restated in three sections or more? Every instance
                     true, well written and relevant; end to end, a paper that does not
                     trust its reader.
