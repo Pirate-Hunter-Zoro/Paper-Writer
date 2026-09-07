@@ -12,7 +12,7 @@ from unittest import mock                                           # noqa: E402
 import unittest                                                     # noqa: E402
 
 from paperwriter import config                                      # noqa: E402
-from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder,
+from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder, venue,
                                repetition,  # noqa: E402
                                length, numbers, paragraphs, prose,
                                readability, sentences, structure,
@@ -742,8 +742,21 @@ class ParagraphGateTests(unittest.TestCase):
                          {d.kind for d in paragraphs.check(text).defects})
 
     def test_a_one_sentence_paragraph_is_too_short(self):
+        """A single sentence cannot be a claim plus anything, and this is exactly how
+        one appears after a compression pass: a fact left floating."""
         self.assertIn("too short",
                       {d.kind for d in paragraphs.check("The model did better.").defects})
+
+    def test_two_sentences_is_a_claim_and_what_follows(self):
+        """The floor was three until a real manuscript was read against it. Three
+        refused eight paragraphs and was wrong about seven: an attrition statement, a
+        lead-in before bolded subsections, a claim and its consequence, and the compact
+        findings a Conclusions section is made of."""
+        text = ("The domains the embedding relies on are the same domains that carry "
+                "the largest feature-vector weights. That convergence is the mechanism "
+                "behind the null in Table 2.")
+        self.assertNotIn("too short",
+                         {d.kind for d in paragraphs.check(text).defects})
 
     def test_the_gate_blocks_on_a_share_not_on_one_defect(self):
         """A single mis-shaped paragraph in a long section is not a failing section.
@@ -1489,6 +1502,47 @@ class VenueGateTests(unittest.TestCase):
         self.assertTrue(report.passed, report.errors)
         self.assertTrue(any("re-read it before submitting" in w
                             for w in report.warnings))
+
+
+class TitleLengthTests(unittest.TestCase):
+    """A title nobody can read is a paper nobody opens."""
+
+    HEAD = ("# Title page\n\n**Title.** {title}\n\n**Short title.** {short}\n\n"
+            "**Authors.** A B.\n")
+
+    def _check(self, title, short):
+        return venue.check(self.HEAD.format(title=title, short=short), "JMIR")
+
+    def test_an_overlong_title_is_refused_when_the_venue_states_no_limit(self):
+        """Most venues state no character limit, which meant nothing checked a title
+        at all. This one ran 34 words with every word of it accurate."""
+        long_title = ("Typed Feature Vectors, Generalized Pretrained Transformer "
+                      "Embeddings of Deterministic Patient Narratives, and "
+                      "Nearest-Neighbor Retrieval for Predicting a "
+                      "Treatment-Switch-Defined Electronic Health Record Proxy for "
+                      "Treatment-Resistant Depression: Retrospective Cohort Study")
+        errors = self._check(long_title, "Short One").errors
+        self.assertTrue(any("words against a ceiling" in e for e in errors))
+
+    def test_a_title_that_names_the_finding_and_the_design_passes(self):
+        title = ("Narrative Embeddings Do Not Outperform Typed Features for a "
+                 "Treatment-Switch Proxy of Treatment-Resistant Depression: "
+                 "Retrospective Cohort Study")
+        errors = self._check(title, "Embeddings and Typed Features for TRD "
+                                    "Prediction").errors
+        self.assertEqual([e for e in errors if "title" in e.lower()], [])
+
+    def test_a_short_title_is_a_running_head(self):
+        """The constraint is the page margin, not taste."""
+        errors = self._check("A Short Title", "Curated EHR Representations and "
+                             "Patient Retrieval for Predicting a Treatment-Switch "
+                             "Proxy for Treatment-Resistant Depression").errors
+        self.assertTrue(any("running head" in e for e in errors))
+
+    def test_the_measurements_are_reported_either_way(self):
+        stats = self._check("A B C", "D E").stats
+        self.assertEqual(stats["title_words"], 3)
+        self.assertEqual(stats["short_title_chars"], 3)
 
 
 class SupportLadderTests(unittest.TestCase):

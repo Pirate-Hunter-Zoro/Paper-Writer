@@ -31,7 +31,7 @@ is how the 810-word abstract survived.
 import re
 from dataclasses import dataclass, field
 
-from .. import venues
+from .. import config, venues
 from . import prose
 
 
@@ -212,16 +212,38 @@ def check(text, venue, profile=None, today=None):
                 f"{len(found)} URL(s) in the body: {shown}. This venue requires every "
                 f"URL to be cited as a reference instead.")
 
-    # 7. Title length, when the venue states one.
-    if profile["title_max_chars"] is not None:
-        m = re.search(r"\*\*Title\.?\*\*\s*(.+?)(?:\n\n|\Z)", text, re.S)
-        if m:
-            title = " ".join(m.group(1).split())
-            stats["title_chars"] = len(title)
+    # 7. Title length. A venue that states a character limit wins; when none does, a
+    #    word ceiling still applies, because most venues state nothing and a title
+    #    nobody can read is a paper nobody opens. One manuscript reached 34 words and
+    #    258 characters with every word of it accurate.
+    m = re.search(r"\*\*Title\.?\*\*\s*(.+?)(?:\n\n|\Z)", text, re.S)
+    if m:
+        title = " ".join(m.group(1).split())
+        stats["title_chars"] = len(title)
+        stats["title_words"] = len(title.split())
+        if profile["title_max_chars"] is not None:
             if len(title) > profile["title_max_chars"]:
                 errors.append(
                     f"the title is {len(title)} characters against this venue's "
                     f"{profile['title_max_chars']}.")
+        elif stats["title_words"] > config.TITLE_MAX_WORDS:
+            errors.append(
+                f"the title runs {stats['title_words']} words against a ceiling of "
+                f"{config.TITLE_MAX_WORDS}. A title names the finding and the design. "
+                f"Everything past that is the abstract's job.")
+
+    # 8. The short title is a running head. It sits in the margin of every page, so the
+    #    constraint is the margin rather than a matter of taste.
+    m = re.search(r"\*\*Short[ -]title\.?\*\*\s*(.+?)(?:\n\n|\Z)", text,
+                  re.S | re.IGNORECASE)
+    if m:
+        short = " ".join(m.group(1).split())
+        stats["short_title_chars"] = len(short)
+        if len(short) > config.SHORT_TITLE_MAX_CHARS:
+            errors.append(
+                f"the short title is {len(short)} characters against a ceiling of "
+                f"{config.SHORT_TITLE_MAX_CHARS}. It is a running head, and the limit "
+                f"is what fits in a page margin.")
 
     return VenueReport(venue=profile["name"], passed=not errors, errors=errors,
                        warnings=warnings, stats=stats)

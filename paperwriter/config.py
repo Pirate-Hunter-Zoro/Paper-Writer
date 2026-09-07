@@ -208,6 +208,25 @@ MODEL_QUOTA_BACKOFF_SEC = int(os.environ.get("PAPER_MODEL_QUOTA_BACKOFF_SEC", "3
 # The floor is deliberately loose and the ceiling deliberately tight.
 SECTION_MIN_WORDS = int(os.environ.get("PAPER_SECTION_MIN_WORDS", "150"))
 
+# --- Titles -------------------------------------------------------------------
+#
+# A venue that states a character limit wins, and most do not state one — which meant
+# nothing checked a title at all. One manuscript carried a 34-word, 258-character title
+# reading "Typed Feature Vectors, Generalized Pretrained Transformer Embeddings of
+# Deterministic Patient Narratives, and Nearest-Neighbor Retrieval for Predicting a
+# Treatment-Switch-Defined Electronic Health Record Proxy for Treatment-Resistant
+# Depression: Retrospective Cohort Study". Every word in it is accurate. Nobody can
+# read it, and a title nobody reads is a paper nobody opens.
+#
+# A title names the finding and the design. Twenty words is generous for both.
+TITLE_MAX_WORDS = int(os.environ.get("PAPER_TITLE_MAX_WORDS", "20"))
+
+# The short title is a RUNNING HEAD. It sits in the margin of every page, and the
+# constraint is the margin rather than a matter of taste: journals converge on about
+# fifty characters because that is what fits. The same manuscript's short title ran to
+# 137.
+SHORT_TITLE_MAX_CHARS = int(os.environ.get("PAPER_SHORT_TITLE_MAX_CHARS", "60"))
+
 # --- Reporting density, for Results-phase sections only -----------------------
 #
 # A Results section's job is to report numbers. How many words it spends per number is
@@ -322,7 +341,22 @@ EDIT_LONG_SENTENCES = int(os.environ.get("PAPER_EDIT_LONG_SENTENCES", "15"))
 # whether a topic sentence is good, but it can catch every structural way a paragraph
 # fails to have one: a paragraph that opens on a citation, opens on a number, opens
 # with a connective, or is one sentence long and therefore has no structure at all.
-PARAGRAPH_MIN_SENTENCES = int(os.environ.get("PAPER_PARAGRAPH_MIN_SENTENCES", "3"))
+# The floor is TWO, and it was three until a real manuscript was read against it.
+#
+# Three is the right shape for a paragraph that argues: a claim, its support, and what
+# follows. It is the wrong floor for the paragraphs a paper is also made of. Of eight
+# paragraphs the floor of three refused in one manuscript, seven were correct at two
+# sentences: an attrition statement with nothing more to say, a two-sentence lead-in
+# before a run of bolded subsections, a claim and the consequence it licenses, and the
+# compact findings a Conclusions section is made of.
+#
+# Exactly one was a real defect, and it was ONE sentence — a fact left floating between
+# two paragraphs after a compression pass. That is the line. A single sentence cannot
+# be a claim plus anything. Two can be a claim and what follows from it, and whether
+# that is enough is a question about the section, which the OUTLINE answers by naming a
+# topic sentence for every planned paragraph. Counting sentences was standing in for
+# that judgement and getting it wrong seven times in eight.
+PARAGRAPH_MIN_SENTENCES = int(os.environ.get("PAPER_PARAGRAPH_MIN_SENTENCES", "2"))
 PARAGRAPH_MAX_SENTENCES = int(os.environ.get("PAPER_PARAGRAPH_MAX_SENTENCES", "9"))
 
 # What share of a section's paragraphs may break the shape rules before it blocks.

@@ -19,9 +19,17 @@ turns out to be most of the failures:
     two should be one paragraph or two claims.
   * **It opens on a subordinate clause.** "Because the cohort was retrospective,
     ..." delays the claim past the comma. The claim goes first.
-  * **It is one sentence long.** A single sentence has no structure to check. It is
-    occasionally right — the last line of a Discussion — and usually a fragment that
-    escaped from the paragraph above it.
+  * **It is one sentence long.** A single sentence cannot be a claim plus anything. It
+    is usually a fact that escaped from the paragraph above it, which is exactly how
+    one appears after a compression pass.
+
+    The floor is two and not three, and the difference was settled by reading rather
+    than by reasoning. Three refused eight paragraphs in a real manuscript and was
+    wrong about seven: an attrition statement with nothing more to say, a lead-in
+    before a run of bolded subsections, a claim and the consequence it licenses, and
+    the compact findings a Conclusions section is made of. Whether two sentences are
+    enough is a question about the section, and the OUTLINE answers it by naming a
+    topic sentence for every planned paragraph.
   * **It runs past nine sentences.** That is two claims, and the reader is being asked
     to work out where one ended.
   * **It ends on a citation or a bare number.** The last sentence should say what the

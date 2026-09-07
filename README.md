@@ -139,6 +139,21 @@ cross-reference is support, and support belongs under the claim rather than in t
 position the claim should hold. A pointer hanging off a sentence that states its
 finding — "as shown in Figure 3" — is not this, and the gate does not touch it.
 
+**The floor is two sentences, and it was three.** Three is the right shape for a
+paragraph that *argues* — a claim, its support, what follows. It is the wrong floor for
+the other paragraphs a paper is made of, and reading a real manuscript against it
+settled that: of eight paragraphs it refused, seven were correct at two sentences. An
+attrition statement with nothing more to say. A lead-in before a run of bolded
+subsections. A claim and the consequence it licenses. The compact findings a
+Conclusions section is made of.
+
+Exactly one was a real defect, and it was **one** sentence — a fact left floating
+between two paragraphs after a compression pass. That is the line. A single sentence
+cannot be a claim plus anything. Whether two are enough is a question about the
+section, and the outline answers it by naming a topic sentence for every planned
+paragraph; counting sentences was standing in for that judgement and getting it wrong
+seven times in eight.
+
 **The topic sentence is decided at outline time, not at drafting time.** That is the
 load-bearing design decision. Once prose exists, a paragraph with no claim gets
 repaired by *inventing* one — and an invented claim is exactly what the evidence ledger
@@ -322,6 +337,7 @@ each returns a verdict a person can check by hand.
 | `sentences` | The one-read rule, measured at the section and again inside each paragraph. See the table above. |
 | `paragraphs` | Every structural way a paragraph fails to open on its claim, or closes on a citation or a signpost instead of what it means. |
 | `readability` | Flesch and Flesch-Kincaid, banded for an academic venue. Measures word length, which sentence statistics do not. |
+| `venue` | The journal's own stated limits, plus two that hold whatever the journal says: **a title too long to read, and a short title too long to be a running head.** A venue that states a character limit wins. Most state none, which meant nothing checked a title at all — one manuscript reached 34 words and 272 characters with every word of it accurate. |
 | `length` | A section outside the band around its planned budget. The ceiling is the half that matters: over the venue's limit is a desk rejection before a reviewer reads a sentence. It also **warns** on a Results section spending too many words per number reported. |
 
 Everything there is trivially testable, which is the point. `tests/test_gates.py` is
