@@ -21,9 +21,12 @@ over-budget is cut a claim or tighten sentences; under-budget is support a claim
 was only asserted, and specifically NOT add adjectives.
 """
 
+import re
 from dataclasses import dataclass
 
 from .. import config
+from . import prose
+from .structure import phase_of
 
 
 @dataclass
@@ -77,3 +80,76 @@ def check(words, budget=None):
             f"consequence. Do not pad sentences and do not add hedges.")
 
     return LengthReport(words, budget, floor, ceiling, True, "")
+
+
+# A figure the prose actually reports: a bare number, a percentage, a count with
+# thousands separators. Not a section number and not a citation marker, both of which
+# are addressing rather than reporting.
+_REPORTED_NUMBER_RE = re.compile(r"(?<![\w.])[-+\u2212]?\d[\d,]*(?:\.\d+)?%?")
+
+# A caption reports the figure, not the finding, and it is measured by its own rules.
+_CAPTION_BLOCK_RE = re.compile(r"^\*\*\*.*?\*\s*$", re.MULTILINE | re.DOTALL)
+
+
+@dataclass
+class DensityReport:
+    words: int
+    numbers: int
+    ratio: float
+    passed: bool = True
+    warnings: list = None
+
+    def brief(self):
+        return (f"{self.words} words of body prose, {self.numbers} reported figures, "
+                f"{self.ratio:.1f} words per figure")
+
+
+def density(text, section_name="", ceiling=None, phase=None):
+    """How many words a Results section spends per number it reports.
+
+    A Results section reports figures. The ratio of words to figures is therefore a
+    measure of how much of it is reporting and how much is talking about the reporting,
+    and it fell on every section of a real manuscript that was compressed by hand.
+
+    It WARNS. A section that names its predictors rather than measuring them —
+    suicidality, insomnia, obsessive-compulsive disorder — reports in words, scores
+    around 20 here, and is correct; blocking would tell it to invent numbers. Captions
+    are excluded because a caption describes a figure rather than reporting a result.
+
+    Pass `phase` when the caller knows it. A results subsection is named "Model
+    discrimination" and names no phase on its own, so the heading alone cannot
+    distinguish it from a Discussion subsection named "Principal findings".
+
+    Returns a DensityReport. Sections outside the results phase return an empty one."""
+    ceiling = (config.RESULTS_WORDS_PER_NUMBER_WARN if ceiling is None else ceiling)
+    # A results SUBSECTION is named "Model discrimination", not "Results", so
+    # `phase_of` returns "" for almost every heading this needs to measure. Skipping on
+    # anything but a positive match would skip the whole section. So the rule inverts:
+    # measure unless the heading names a phase that is definitely not results.
+    # A caller that knows the parent phase passes it, and it wins. "Principal
+    # findings" is a Discussion subsection whose heading names no phase, so inferring
+    # from the subsection alone would measure it and warn about prose that is meant to
+    # carry no numbers.
+    phase = phase if phase is not None else (phase_of(section_name) if section_name
+                                             else "")
+    if phase and phase != "results":
+        return DensityReport(words=0, numbers=0, ratio=0.0, warnings=[])
+
+    body = _CAPTION_BLOCK_RE.sub("", text or "")
+    body = prose.strip_structure(body)
+    words = len(body.split())
+    if words < config.RESULTS_DENSITY_MIN_WORDS:
+        return DensityReport(words=words, numbers=0, ratio=0.0, warnings=[])
+
+    numbers = len(_REPORTED_NUMBER_RE.findall(body))
+    ratio = words / max(numbers, 1)
+    warnings = []
+    if ratio > ceiling:
+        warnings.append(
+            f"{ratio:.0f} words per reported figure, over a soft ceiling of "
+            f"{ceiling:.0f}. Not refused — a section that names its predictors rather "
+            f"than measuring them reads this way and is right to. Worth a look if this "
+            f"one reports numbers: at this ratio most of it is talking about the "
+            f"results rather than giving them.")
+    return DensityReport(words=words, numbers=numbers, ratio=round(ratio, 2),
+                         passed=True, warnings=warnings)

@@ -208,6 +208,25 @@ MODEL_QUOTA_BACKOFF_SEC = int(os.environ.get("PAPER_MODEL_QUOTA_BACKOFF_SEC", "3
 # The floor is deliberately loose and the ceiling deliberately tight.
 SECTION_MIN_WORDS = int(os.environ.get("PAPER_SECTION_MIN_WORDS", "150"))
 
+# --- Reporting density, for Results-phase sections only -----------------------
+#
+# A Results section's job is to report numbers. How many words it spends per number is
+# therefore a measure of how much of it is reporting and how much is talking about the
+# reporting. Pointed at a real manuscript before and after a compression pass, this
+# tracked every edit: 8.9 to 6.8 in the discrimination section, 12.9 to 10.9 in
+# calibration, 15.8 to 14.9 in the validity checks.
+#
+# It WARNS and does not block, and the exception is the reason why. A section that
+# names its predictors — suicidality, insomnia, obsessive-compulsive disorder — is
+# reporting in words rather than in figures, scores 20 on this measure, and is correct.
+# Blocking would tell that section to invent numbers.
+RESULTS_WORDS_PER_NUMBER_WARN = float(
+    os.environ.get("PAPER_RESULTS_WORDS_PER_NUMBER_WARN", "20.0"))
+
+# Below this many words a ratio is noise rather than a measurement.
+RESULTS_DENSITY_MIN_WORDS = int(
+    os.environ.get("PAPER_RESULTS_DENSITY_MIN_WORDS", "80"))
+
 # How far over its outline budget a section may run before the gate blocks. 1.15 is
 # one long paragraph of slack on a 1,000-word section.
 SECTION_OVER_BUDGET_RATIO = float(

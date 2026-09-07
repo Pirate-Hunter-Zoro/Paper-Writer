@@ -273,8 +273,11 @@ def _stacked_across_sentences(sentences):
 _RATIO_WORDS = (
     r"an?\s+(?:third|quarter|fifth|half)\s+(?:the|as)",
     r"(?:twice|thrice|double|triple|quadruple)\s+(?:the|as)",
-    r"(?:two|three|four|five|six|seven|eight|nine|ten)\s+times\s+(?:the|as|wider|"
-    r"narrower|larger|smaller|longer|higher|lower)",
+    # "more" and "less" belong here. "Roughly three times more precise than comparing
+    # the marginal intervals" sat in a figure caption, unsupported, and was the inverse
+    # of a claim already cut from the body two sentences away.
+    r"(?:two|three|four|five|six|seven|eight|nine|ten)\s+times\s+(?:the|as|more|less|"
+    r"wider|narrower|larger|smaller|longer|higher|lower)",
     r"orders?\s+of\s+magnitude",
     r"an?\s+(?:order)\s+of\s+magnitude",
     # The unquantified magnitude comparison, which is the same defect without the

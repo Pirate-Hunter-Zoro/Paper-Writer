@@ -1187,6 +1187,59 @@ class LengthGateTests(unittest.TestCase):
         self.assertFalse(length.check(10).passed)
 
 
+class ResultsDensityTests(unittest.TestCase):
+    """How many words a Results section spends per number it reports."""
+
+    DENSE = ("Embedded logistic regression reached 0.657 (0.643 to 0.672) and XGBoost "
+             "0.649 (0.634 to 0.664). The paired difference was 0.008, on an interval "
+             "from -0.003 to 0.019. The lowest configuration reached 0.623 and the "
+             "highest 0.657. Tuning grids did not differ between representations.")
+
+    PADDED = ("The two representations behaved in a way that rewards careful reading, "
+              "and the pattern that emerges is worth setting out at some length before "
+              "the figures are given. What the comparison shows, taken as a whole, is "
+              "that neither representation established itself over the other in any "
+              "way that a reader should regard as decisive. The reader should keep in "
+              "mind that the classifiers were tuned identically throughout. Taken "
+              "together these considerations frame everything that follows in this "
+              "section, and the single figure worth carrying away is 0.008.")
+
+    def test_a_reporting_section_is_quiet(self):
+        report = length.density(self.DENSE, "Model discrimination")
+        self.assertEqual(report.warnings, [])
+        self.assertLess(report.ratio, config.RESULTS_WORDS_PER_NUMBER_WARN)
+
+    def test_a_section_that_talks_about_its_results_warns(self):
+        report = length.density(self.PADDED, "Model discrimination")
+        self.assertTrue(report.warnings)
+        self.assertTrue(any("talking about the results" in w for w in report.warnings))
+
+    def test_it_warns_and_never_blocks(self):
+        """A section that names its predictors rather than measuring them reads this
+        way and is right to. Blocking would tell it to invent numbers."""
+        self.assertTrue(length.density(self.PADDED, "Model discrimination").passed)
+
+    def test_captions_are_not_reporting_prose(self):
+        text = self.DENSE + ("\n\n***Figure 2.** Discrimination by representation and "
+                             "classifier, held-out test set, n = 8,516.*\n")
+        self.assertEqual(length.density(text, "Model discrimination").numbers,
+                         length.density(self.DENSE, "Model discrimination").numbers)
+
+    def test_a_non_results_phase_is_not_measured(self):
+        self.assertEqual(length.density(self.PADDED, "Study design").words, 0)
+
+    def test_an_explicit_phase_beats_the_heading(self):
+        """"Principal findings" is a Discussion subsection whose heading names no
+        phase, so the heading alone cannot tell it from a results subsection."""
+        self.assertEqual(
+            length.density(self.PADDED, "Principal findings", phase="discussion").words,
+            0)
+
+    def test_a_short_section_is_not_a_measurement(self):
+        self.assertEqual(length.density("The rate was 17.5%.", "Participant flow").ratio,
+                         0.0)
+
+
 class ReadabilityGateTests(unittest.TestCase):
 
     def test_syllable_counting_handles_the_silent_e(self):

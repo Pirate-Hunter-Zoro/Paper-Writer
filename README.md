@@ -322,7 +322,7 @@ each returns a verdict a person can check by hand.
 | `sentences` | The one-read rule, measured at the section and again inside each paragraph. See the table above. |
 | `paragraphs` | Every structural way a paragraph fails to open on its claim, or closes on a citation or a signpost instead of what it means. |
 | `readability` | Flesch and Flesch-Kincaid, banded for an academic venue. Measures word length, which sentence statistics do not. |
-| `length` | A section outside the band around its planned budget. The ceiling is the half that matters: over the venue's limit is a desk rejection before a reviewer reads a sentence. |
+| `length` | A section outside the band around its planned budget. The ceiling is the half that matters: over the venue's limit is a desk rejection before a reviewer reads a sentence. It also **warns** on a Results section spending too many words per number reported. |
 
 Everything there is trivially testable, which is the point. `tests/test_gates.py` is
 the largest module in the suite for exactly that reason.
@@ -351,6 +351,51 @@ catches the excision.
 
 Pointed at the manuscript immediately after a by-hand renumbering pass, it found one
 dangling reference that three careful reads had missed.
+
+### Measuring how much of a Results section is reporting
+
+A Results section's job is to give numbers. How many words it spends per number is
+therefore a measure of how much of it reports and how much of it talks about the
+reporting, and `length.density` is that ratio.
+
+It was calibrated the way everything here is calibrated: by compressing a real Results
+section by hand and checking whether the number followed. It did, everywhere —
+discrimination 8.9 to 6.8, calibration 12.9 to 10.9, the ablation 13.8 to 12.5, the
+validity checks 15.8 to 14.9.
+
+It **warns** and never blocks, and the exception is the reason why. "What each
+representation reads" scores 21 and is correct: it names its predictors — suicidality,
+insomnia, obsessive-compulsive disorder — rather than measuring them, so it reports in
+words. Blocking would tell that section to invent numbers.
+
+### Two checks that were built, measured, and not shipped
+
+Both were written for real defects, both looked obviously right, and both failed
+against the manuscript. They are recorded because the next person to have the idea
+should not have to rediscover the answer.
+
+**Nominalization density.** The contract says *verbs, not nominalizations*, and a
+paragraph that passed every gate was unreadable for exactly that reason. Counting words
+ending in *-tion, -ment, -ance, -ity* flags 44 sentences in this manuscript at four or
+more, and the densest are "Domains included depression characteristics, psychiatric and
+substance-use comorbidity, medical comorbidity, and social determinants of health" and
+"Performance in the held-out test set was characterized using ROC AUC, calibration
+slope and intercept, and precision-recall". Both correct. In a paper whose subject
+matter IS discrimination, calibration, representation and distribution, the measure
+tracks the topic rather than the prose.
+
+**Captions that restate the body.** Two real instances existed — a figure caption
+repeating a finding the body had just made, another repeating "385 of 4,096" verbatim.
+Near-duplicate detection between a section's captions and its own body found neither,
+because a restating caption reworded as it went, and returned two false positives
+instead: a caption restating the index-date definition, and a panel list naming the
+same three proxies the body names. A caption restating the setup is what makes it
+self-contained.
+
+The pattern in both: a measure that is right about prose in general is wrong about
+prose whose subject is the thing being measured. What survives is always the narrower
+check — a threshold with no value, a ratio spelled as a word, a comparison tallied with
+no axis, a ratio of words to figures in the one phase whose job is figures.
 
 ### One thing the contract asks for and no gate measures
 
