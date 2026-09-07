@@ -17,22 +17,25 @@ and the author can convert a Markdown file themselves in one command.
 Set `PAPER_BUILD_REQUIRED=1` to invert that, for a workflow where the .docx is the
 only artifact anyone will look at.
 
-**The whole-manuscript checks run here.** Two gates cannot be run against a single
-section and are run against the assembled document instead: a reference cited nowhere,
-and a citation marker that resolves in one section against a reference list assembled
-from all of them. They are reported and recorded, and — like conversion — they do not
-block, because a paper that is finished except for one uncited reference should reach
-its author rather than sit in a queue.
+**The final sweep runs here**, between assembly and conversion, and it is
+`stages.sweep`. Every gate, every section, every document the paper produced — on the
+ASSEMBLED text rather than on the staged drafts, because assembly and the hand edits
+after it are where a manuscript acquires the defects no per-section loop can see. It is
+reported and recorded and, like conversion, it does not block: a paper that is finished
+except for one uncited reference should reach its author rather than sit in a queue.
+
+`audit` is what the sweep replaced and is kept as a thin wrapper, because it is the name
+on the journal record of every paper this harness has already built.
 """
 
 import re
 import subprocess
 
 from .. import config, paths
-from ..gates import citations, numbers, prose, sentences, terminology, venue
+from ..gates import prose
 from ..infra import storage
 from ..memory import store
-from . import reporting, splitting
+from . import reporting, splitting, sweep
 
 
 def _front_matter(plan, paper_num, ledger):
@@ -143,54 +146,12 @@ def assemble(project_rec, paper_num, log_fn=None):
 
 
 def audit(project_rec, paper_num, log_fn=None):
-    """The whole-manuscript checks no single section can run. Returns a list of notes.
+    """The final sweep, as the flat list of notes the journal record carries.
 
-    Never raises and never blocks. These are findings for the author, recorded on the
-    journal beside the delivered paper — a manuscript that is finished except for one
-    uncited reference should reach its author rather than sit in a queue."""
-    pid = project_rec["project_id"]
-    memory = store.load(project_rec, paper_num)
-    try:
-        text_ = paths.manuscript_path(pid, paper_num).read_text(encoding="utf-8")
-    except OSError:
-        return ["audit: no manuscript on disk"]
-
-    notes = []
-    cites = citations.check_manuscript(text_, memory.references)
-    notes += [f"CITATIONS: {reason}" for reason in cites.reasons]
-
-    nums = numbers.check(text_, memory.evidence_document())
-    if not nums.passed:
-        notes += [f"NUMBERS: {reason}" for reason in nums.reasons]
-
-    terms = terminology.check_manuscript(text_, memory.terminology)
-    if not terms.passed:
-        notes += [f"TERMINOLOGY: {d.detail}" for d in terms.defects
-                  if d.kind != "alias"]
-
-    sent = sentences.score(text_)
-    notes.append(f"PROSE: {sent.brief()}")
-    if not sent.passed:
-        notes += [f"PROSE: {reason}" for reason in sent.reasons]
-
-    # The venue's own rules. Last, because it is the only check here that is about
-    # whether the journal will accept the file rather than about whether the paper is
-    # any good, and an author reading this list wants that separated.
-    plan = storage.load_json(paths.plan_path(pid), {})
-    where = ""
-    for paper in plan.get("papers") or []:
-        if paper.get("number") == paper_num:
-            where = paper.get("venue", "")
-    venue_report = venue.check(text_, where)
-    notes += [f"VENUE: {reason}" for reason in venue_report.errors]
-    notes += [f"VENUE (advisory): {reason}" for reason in venue_report.warnings]
-    if venue_report.passed and not venue_report.warnings:
-        notes.append(f"VENUE: every stated requirement of {venue_report.venue} is met.")
-
-    for note in notes:
-        if log_fn:
-            log_fn(f"paper {paper_num} audit — {note}")
-    return notes
+    A thin wrapper on `stages.sweep.run`, kept under this name because it is what every
+    already-built paper's journal record calls its findings. New code should call the
+    sweep and read its structured findings; this is the string view."""
+    return sweep.run(project_rec, paper_num, log_fn=log_fn).notes()
 
 
 def convert(project_rec, paper_num, title, fmt, reference_docx=None, log_fn=None):
@@ -294,16 +255,26 @@ def build(project_rec, paper_num, title, log_fn=None):
     """Assemble, audit, report, split, and convert everything.
 
     Returns (manuscript_path, [built paths], notes). Raises only if assembly itself
-    fails, which means a filesystem problem rather than a manuscript problem."""
+    fails, which means a filesystem problem rather than a manuscript problem.
+
+    The sweep runs after assembly and before the report, so the report leads with what
+    the sweep found. That ordering is the deliverable: the reader sees the list of
+    defects before they start reading the paper, rather than discovering them."""
     pid = project_rec["project_id"]
     manuscript = assemble(project_rec, paper_num, log_fn=log_fn)
-    notes = audit(project_rec, paper_num, log_fn=log_fn)
+
+    # The sweep runs on the assembled documents, which is the whole point of it being
+    # here rather than in the editorial loop: assembly, and the hand edits after it,
+    # are where a manuscript acquires the defects no single section can see.
+    swept = sweep.run(project_rec, paper_num, log_fn=log_fn)
+    notes = swept.notes()
 
     # The report is written before conversion so it is converted with everything
     # else. It reads only committed state, so it cannot fail in a way that should
     # cost the manuscript its build.
     try:
-        reporting.write(project_rec, paper_num, audit_notes=notes, log_fn=log_fn)
+        reporting.write(project_rec, paper_num, audit_notes=notes, sweep=swept,
+                        log_fn=log_fn)
     except (OSError, KeyError, ValueError) as exc:
         notes = list(notes) + [f"REPORT: could not be written ({exc}). The manuscript "
                                f"is unaffected."]

@@ -30,17 +30,18 @@ somebody will publish.
 5. [The three-layer memory](#the-three-layer-memory)
 6. [The gates](#the-gates)
 7. [The editorial loop — the feedback mechanic](#the-editorial-loop--the-feedback-mechanic)
-8. [State machines](#state-machines)
-9. [The stages, end to end](#the-stages-end-to-end)
-10. [Robustness: nothing fails, everything stalls](#robustness-nothing-fails-everything-stalls)
-11. [Running it](#running-it)
-12. [The workflow: "here are results, write me a paper"](#the-workflow-here-are-results-write-me-a-paper)
-13. [What comes out](#what-comes-out)
-14. [Configuration reference](#configuration-reference)
-15. [Watching a run](#watching-a-run)
-16. [Working in this repository](#working-in-this-repository)
-17. [Code layout](#code-layout)
-18. [Known limits and honest caveats](#known-limits-and-honest-caveats)
+8. [The final sweep — every gate, on the thing that ships](#the-final-sweep--every-gate-on-the-thing-that-ships)
+9. [State machines](#state-machines)
+10. [The stages, end to end](#the-stages-end-to-end)
+11. [Robustness: nothing fails, everything stalls](#robustness-nothing-fails-everything-stalls)
+12. [Running it](#running-it)
+13. [The workflow: "here are results, write me a paper"](#the-workflow-here-are-results-write-me-a-paper)
+14. [What comes out](#what-comes-out)
+15. [Configuration reference](#configuration-reference)
+16. [Watching a run](#watching-a-run)
+17. [Working in this repository](#working-in-this-repository)
+18. [Code layout](#code-layout)
+19. [Known limits and honest caveats](#known-limits-and-honest-caveats)
 
 ---
 
@@ -576,7 +577,13 @@ passage, and `stages/surgery.py` replaces only that span. Everything outside it 
 passed through a model at all, so it is bit-identical afterwards by construction rather
 than by instruction.
 
-### And the sweep
+### And the revision sweep
+
+Two things in this project are called a sweep and they are not the same thing, so both
+carry their adjective. The **revision** sweep is here: model-driven, over the sections
+that shipped flawed, before the manuscript is assembled. The **final** sweep is the next
+chapter: pure arithmetic, over every document, after it is assembled. One re-edits
+prose; the other measures what shipped.
 
 A section that could not be made clean inside its own budget **ships holding its
 notes** and is revisited once every section exists. That buys three things the
@@ -590,9 +597,87 @@ per-section loop cannot have:
   time the paper is finished.
 - **It is cheap.** Only flagged sections are re-read, and each gets an anchored repair.
 
-The sweep stops on **blocking yield** rather than on "the editor still found
-something". A demanding editor asked "is this perfect?" always says no, so polish must
+The revision sweep stops on **blocking yield** rather than on "the editor still
+found something". A demanding editor asked "is this perfect?" always says no, so polish must
 never buy another round.
+
+---
+
+## The final sweep — every gate, on the thing that ships
+
+Everything above happens to a *section*. The final sweep happens to the **packet**, it
+happens after assembly, and it is the last thing that runs before a person reads the
+paper.
+
+That distinction sounds procedural. It is the difference between a manuscript with a
+Methods section and one without.
+
+**The failure it was written from.** A finished manuscript went out for its author's
+read carrying nine defects. Every section had passed its editorial loop. The
+whole-manuscript audit had passed. And a missing newline had left `# Methods` inside the
+last sentence of the Introduction, so pandoc printed four literal characters and the
+built `.docx` ran fifteen hundred words of Methods on as a continuation of the
+Introduction. The outline had a Methods section. The splitter, which finds `# Methods`
+wherever it sits, produced a correct part file. Only the assembled document was wrong —
+and the assembled document is the artifact.
+
+**Three gaps, and each one is a scope the old audit did not have.**
+
+*It read one document.* `audit` opened `manuscript.md` and nothing else. The same packet
+shipped a 75,000-word supplement carrying an undeclared third name for one study arm, a
+section contradicting its own earlier subsection, an analysis advertised and never
+reported, a small-cell rule defined two ways, and thirty-six table cells spelling one
+term differently from the rest of the paper. None of it had ever been measured.
+
+*It measured the manuscript as one block.* `sentences.score` over eleven thousand words
+returns a mean, and a mean over a whole paper is the section-average problem one level
+up: a tight Results buys an unreadable Methods. The prose contract is measured at the
+section and again inside each paragraph for exactly that reason, and the audit threw
+both resolutions away.
+
+*It ran five gates of thirteen.* No `paragraphs`, no `readability`, no `crossrefs`, no
+`procedures`, no `repetition`, no `length`. Three of those only exist at document scope,
+which is to say the one place they could have run was the place that was not running
+them.
+
+### What it does, and what it refuses to do
+
+Every gate, over every `#` section of every document the paper produced, plus every
+check that only exists across a whole document or across the pair. Pointed at the packet
+as it stood before that final review it returns **25 blocking findings**; pointed at the
+same packet after, **0**.
+
+**It does not block delivery.** A paper that is finished except for one uncited
+reference reaches its author rather than sitting in a queue — the same rule that governs
+a missing pandoc and the same rule that lets a section ship holding its notes. What the
+sweep produces is a *list*: what is wrong, in which document, in which section, from
+which gate, with the offending sentence quoted so it is a find-and-replace rather than a
+hunt.
+
+**That list leads `report.md`, and the position is the deliverable.** The point of the
+sweep is that the reader sees the defects before they start reading, not after. A list
+at the bottom of a report is read once the damage is done.
+
+**Blocking and advisory are separated, and the split is not severity.** It is whether
+arithmetic can be argued with. A number that is not in the ledger, a pointer that
+resolves to nothing, a heading that will not render, a forbidden synonym: facts. A
+borrowed-claim heuristic, a repetition count, a words-per-figure ratio: judgements the
+gate is offering and the author may overrule. Mixing them is how a list stops being
+read.
+
+### The bug class it created, and the fix that generalised
+
+Running gates section by section immediately broke four exemptions, all the same way: a
+gate that keys an exemption on a **heading** cannot see one when it is handed a
+section's **body**. The reference list's numbers came back as 58 findings. Two
+reference titles came back as this paper's vocabulary. And the supplement was told to
+expand TRD again, which is the same as telling the manuscript to expand it twice.
+
+So `numbers.check` and `terminology.check` now take a `section_name`, the way
+`sentences`, `paragraphs` and `readability` already did, and
+`terminology.check_manuscript` takes `first_use=False` for a companion document. The
+general rule the final sweep forced into the open: **an exemption keyed on document structure has to be reachable by name, or it
+switches off silently the moment somebody measures at a finer grain.**
 
 ---
 
@@ -644,7 +729,8 @@ different count.
 | `surgery` | Replacement prose for one anchored passage | Anchor uniqueness, shrink floor | A splice |
 | `ledger_update` | What this section settled | `memory.ledger.merge_ledger_update` | The merged ledger |
 | `reporting` | — (pure) | — | `report.md`: the ladder, the measurements, what shipped holding |
-| `building` | — (pure, then pandoc) | The whole-manuscript audit | `manuscript.md` and `report.md`, then a `.docx` of each |
+| `sweep` | — (pure) | — (it *is* the validation) | Nothing. It returns findings, and they lead `report.md` |
+| `building` | — (pure, then pandoc) | The final sweep | `manuscript.md` and `report.md`, then a `.docx` of each |
 | `delivery` | — (pure) | Content hash | The output folder, atomically |
 | `shipping` | — (pure, then git) | A refusal check on the working tree | A commit, and a push if asked |
 
@@ -813,9 +899,13 @@ in the paper, and deleting it now costs nothing.
 cheap, they take milliseconds, and a defect found in section three is a defect that does
 not propagate into section four's assumptions.
 
-**5. Assemble, then run the whole-manuscript audit.** Three checks only exist at document
-scope: a reference cited nowhere, an abbreviation expanded twice in the body, and the
-prose statistics for the paper as a whole.
+**5. Assemble, then run the final sweep.** Every gate, over every section of every
+document in the packet, on the assembled text rather than on the drafts. Assembly and
+the hand edits after it are where a manuscript acquires the defects no per-section pass
+can see: a heading that stopped rendering, a pointer to a section that was cut, a
+reference list that drifted out of order, a supplement nobody re-read. It does not block
+delivery, and its findings lead the author's report — the reader should see the list
+before they start reading rather than after.
 
 **6. Deliver into the analysis repository**, alongside the evidence ledger and the
 grounding that produced it. A draft nobody can trace back to its numbers is a draft
@@ -961,7 +1051,7 @@ back and add it.
 | Document | What it is |
 |---|---|
 | `manuscript.md` | the paper. The artifact; everything else is built from it or about it |
-| `report.md` | **the author's report.** What the paper was for, how the prose measures against every band, what shipped unresolved, and where the numbers came from |
+| `report.md` | **the author's report.** Led by the final sweep — every gate, every section, every document — then what the paper was for, how the prose measures against every band, what shipped unresolved, and where the numbers came from |
 | `<each>.docx` | one per Markdown document, through pandoc against the venue's reference document |
 
 **Why the report is a document and not a log.** All of it was already true and none of
@@ -1021,6 +1111,7 @@ is overridable with a `PAPER_`-prefixed environment variable. The ones worth kno
 | `PAPER_PANDOC_BIN` | searched | The pandoc to use. Unset means: `PATH`, then the usual conda/RStudio/Quarto locations, then the bare name. |
 | `PAPER_POINTS_MAX` | `3` | How many points a paper may be about. Four is the count at which the author has stopped choosing. |
 | `PAPER_UNLADDERED_WORDS_MAX` | `0.30` | Share of planned words allowed in sections that serve no point. |
+| `PAPER_SWEEP_LOG_FINDINGS` | `10` | Blocking findings the final sweep prints to the log. The full list always reaches `report.md`. |
 | `PAPER_SHIP_REPO` | off | A git working tree to commit delivered papers into. |
 | `PAPER_SHIP_PUSH` | off | Whether to push after committing. |
 | `PAPER_QUIET_HOURS` | off | Whether to stay off a shared seat during the working day. |
@@ -1079,6 +1170,7 @@ paperwriter/
              `ladder.py` is the only one that can refuse correct work.
   models/    THE ONLY place an external model is reached.
   stages/    one module per stage. Propose, validate, apply atomically.
+             `sweep.py` is the only one whose scope is the whole delivered packet.
   engine/    the nested project → paper → section state machine.
   daemons/   the two entry points. Thin: a lock, a loop, a call into engine/.
 prompts/     the committed base prompts. Load-bearing non-code artifacts.

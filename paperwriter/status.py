@@ -47,7 +47,8 @@ _STAGE_NOTES = {
     states.DRAFTED: ("done writing; the revision sweep is next", "moments"),
     states.REVISING: ("re-editing the sections that shipped with notes",
                       "a few minutes per flagged section"),
-    states.BUILDING: ("assembling and converting the manuscript", "seconds"),
+    states.BUILDING: ("assembling, running the final sweep over every document, "
+                      "and converting", "seconds"),
     states.BUILT: ("built; delivering is next", "moments"),
     states.STALLED: ("waiting to retry something that did not work",
                      "it retries by itself, on a doubling backoff"),

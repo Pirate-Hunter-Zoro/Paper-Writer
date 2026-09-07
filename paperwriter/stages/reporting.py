@@ -170,8 +170,69 @@ def _held_block(records, project_id, paper_num):
             "line below is a defect a person still has to decide about.", ""] + lines
 
 
-def write(project_rec, paper_num, audit_notes=None, log_fn=None):
-    """Assemble the author's report. Returns its path."""
+def _sweep_block(swept):
+    """What the final sweep found, blocking first, grouped by document.
+
+    **This leads the report, and the position is the point.** The sweep exists so the
+    reader sees the list of defects before they start reading the paper rather than
+    discovering them one at a time, and a list at the bottom of a report is a list
+    read after the damage is done.
+
+    Anchors are quoted with their whitespace COLLAPSED and truncated, which is the
+    opposite of what `stages.patching` needs and is correct here. Patching matches an
+    anchor character for character and gets the real one from the gate. This is for a
+    person who is going to search their editor for the sentence, and six words of it
+    is enough to find it — where a full hard-wrapped anchor would be unreadable in a
+    bullet and would still not match if they pasted it."""
+    if swept is None:
+        return []
+
+    out = ["## The final sweep", "",
+           f"_Every gate, every section, every document, run on the built packet: "
+           f"{swept.brief()}. It does not block delivery — a paper finished except "
+           f"for one uncited reference should reach its author rather than sit in a "
+           f"queue — so this list is the thing to read before reading the paper._", ""]
+
+    if not swept.findings:
+        out += ["Nothing found. Every gate passes on every section of every document "
+                "at both scopes.", ""]
+        return out
+
+    for severity, title, gloss in (
+            ("blocking", "Blocking", "Facts, not judgements: a number that is not in "
+             "the evidence ledger, a pointer that resolves to nothing, a heading that "
+             "will not render, a forbidden synonym. Each one is arithmetic and can be "
+             "checked by hand."),
+            ("advisory", "Advisory", "The gate's judgement rather than its "
+             "arithmetic — a borrowed-claim heuristic, a repetition count, a "
+             "words-per-figure ratio. Worth reading and yours to overrule.")):
+        group = [f for f in swept.findings if f.severity == severity]
+        if not group:
+            continue
+        out += [f"### {title} ({len(group)})", "", gloss, ""]
+        seen_doc = None
+        for finding in group:
+            where = finding.document or "across the packet"
+            if where != seen_doc:
+                out += [f"**{where}**", ""]
+                seen_doc = where
+            head = f"{finding.section} — " if finding.section else ""
+            out.append(f"- **{head}`{finding.gate}`.** {finding.detail}")
+            if finding.anchor:
+                quoted = " ".join(finding.anchor.split())
+                if len(quoted) > 160:
+                    quoted = quoted[:157] + "..."
+                out.append(f"  > {quoted}")
+        out.append("")
+    return out
+
+
+def write(project_rec, paper_num, audit_notes=None, sweep=None, log_fn=None):
+    """Assemble the author's report. Returns its path.
+
+    `sweep` is a `stages.sweep.SweepReport` and, when present, leads the document.
+    `audit_notes` is the same findings as flat strings and is rendered only when
+    `sweep` is absent, so the list never appears twice."""
     pid = project_rec["project_id"]
     plan = storage.load_json(paths.plan_path(pid), {})
     argument = storage.load_json(paths.argument_path(pid, paper_num),
@@ -197,6 +258,7 @@ def write(project_rec, paper_num, audit_notes=None, log_fn=None):
              "unresolved. Nothing here is written by a model; every line is read off "
              "state the pipeline committed._", ""]
 
+    parts += _sweep_block(sweep)
     parts += _venue_block(plan, paper_num, manuscript_text)
     parts += _ladder_block(plan, paper_num, argument)
 
@@ -217,7 +279,11 @@ def write(project_rec, paper_num, audit_notes=None, log_fn=None):
 
     parts += _held_block(records, pid, paper_num)
 
-    if audit_notes:
+    # `audit_notes` is the flat string view of the same findings, and it is rendered
+    # only when the structured report was not supplied — a caller from before the
+    # sweep existed, or a hand-run of `building.audit`. Printing both would be the
+    # same list twice, which is how a report stops being read.
+    if audit_notes and sweep is None:
         parts += ["## The whole-manuscript audit", "",
                   "Checks that only exist at document scope: a reference cited "
                   "nowhere, an abbreviation expanded twice, the prose statistics for "

@@ -155,6 +155,18 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("Role: setup", report)
         self.assertIn("What shipped unresolved", report)
 
+    def test_the_report_leads_with_the_final_sweep(self):
+        """The sweep exists so the reader sees the list of defects before they start
+        reading the paper. A list at the bottom of a report is read after the damage
+        is done, so the position is part of the deliverable."""
+        _status, pid = self._run()
+        report = paths.report_path(pid, 1).read_text(encoding="utf-8")
+        self.assertIn("## The final sweep", report)
+        self.assertLess(report.index("## The final sweep"),
+                        report.index("What this paper is for"))
+        # Every gate, every section, every document — and it says so in numbers.
+        self.assertRegex(report, r"\d+ document\(s\), \d+ section\(s\)")
+
     def test_shipping_is_off_unless_a_repo_is_named(self):
         """Pushing to a remote is the only outward-facing thing this harness does.
         Both halves are opt-in and the default is to do nothing."""

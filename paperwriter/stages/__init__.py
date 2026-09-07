@@ -14,7 +14,12 @@
     patching       apply those repairs as exact find/replace edits.
     surgery        replace one anchored passage when a repair needs new prose.
     ledger_update  an accepted section's proposed ledger updates, validated + merged.
-    building       accepted sections -> manuscript.md, audited, then converted.
+    sweep          THE FINAL SWEEP. Every gate, every section, every document, on
+                   the assembled packet -- the last thing that runs before a person
+                   reads the paper, and the only stage whose scope is the whole
+                   delivery rather than one unit of it. It returns findings and they
+                   lead report.md.
+    building       accepted sections -> manuscript.md, swept, then converted.
     delivery       the manuscript and its builds -> the output folder, atomically.
 
 Every stage follows the same four beats and in the same order: propose (models/),

@@ -339,13 +339,23 @@ def _matches(value, allowed, tolerance, places=None):
     return False
 
 
-def check(text, evidence, tolerance=None):
+def check(text, evidence, tolerance=None, section_name=""):
     """Gate a section's numbers against the frozen evidence. Returns a NumberReport.
 
     An empty ledger disables the gate rather than failing every number: a project
     whose evidence stage has not run yet must not have its first draft rejected for
-    every figure in it."""
+    every figure in it.
+
+    **`section_name` is what makes the reference-list exemption work at section
+    scope.** `_non_prose_sections` finds a reference list by its heading, which is
+    fine when the whole manuscript is handed over and useless when one section's BODY
+    is — the heading is not in it. The final sweep measures section by section on
+    purpose, so without this the 58 bibliographic false positives come straight back,
+    one finding each, and bury the real ones."""
     tolerance = config.NUMBER_MATCH_TOLERANCE if tolerance is None else tolerance
+    if section_name and section_name.strip().lower() in config.NUMBER_EXEMPT_SECTIONS:
+        return NumberReport(checked=0, matched=0, unsupported=[], passed=True,
+                            reasons=[])
     allowed = ledger_values(evidence)
     uses = extract(text)
 

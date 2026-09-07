@@ -122,7 +122,7 @@ def _borrowed_sections(text):
     return spans
 
 
-def check(text, lock, whole_manuscript=False):
+def check(text, lock, whole_manuscript=False, section_name=""):
     """Gate a section against the terminology lock. Returns a TerminologyReport.
 
     `lock` is the grounding document's `terminology` list. An empty lock disables the
@@ -138,7 +138,16 @@ def check(text, lock, whole_manuscript=False):
     So the alias rules run everywhere, because a forbidden synonym is a defect wherever
     it appears, and the first-use rules run only against the assembled manuscript. The
     same split `citations.check` and `citations.check_manuscript` already make, for the
-    same reason: some defects only exist at whole-document scope."""
+    same reason: some defects only exist at whole-document scope.
+
+    **`section_name` is what makes the borrowed-wording exemption work at section
+    scope.** `_borrowed_sections` finds the reference list by its heading, which is no
+    use when one section's BODY is handed over — the heading is not in it. The final
+    sweep measures section by section on purpose, and without this every reference
+    whose published title contains a banned synonym is reported as this paper's
+    vocabulary."""
+    if section_name and section_name.strip().lower() in config.TERM_BORROWED_SECTIONS:
+        return TerminologyReport(locked=len(lock or []), passed=True)
     terms = [t for t in (lock or []) if isinstance(t, dict) and t.get("term")]
     if not terms:
         return TerminologyReport(locked=0, passed=True)
@@ -323,6 +332,11 @@ def _drift(body, spans, entry, quoted):
 
 _SECTION_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
+# The defect kinds that are claims about a WHOLE manuscript rather than about a piece
+# of text: an abbreviation used before it is expanded, and one expanded twice. They are
+# the two `check_manuscript` drops for a companion document — see `first_use` there.
+_FIRST_USE_KINDS = ("undefined-abbreviation", "redefined")
+
 
 def body_of(text):
     """The manuscript minus the sections that expand their own abbreviations.
@@ -347,16 +361,26 @@ def body_of(text):
     return "\n".join(keep)
 
 
-def check_manuscript(text, lock):
+def check_manuscript(text, lock, first_use=True):
     """The whole-manuscript pass, where "expanded once" is finally a checkable claim.
 
-    Run against the assembled manuscript. Everything `check` reports, plus the
-    first-use rules: an abbreviation used before it is expanded, and an abbreviation
-    expanded more than once. The abstract and the other stand-alone sections are
-    excluded from the first-use scan — see `body_of`."""
+    Run against the assembled manuscript. Everything `check` reports, plus drift, plus
+    the first-use rules: an abbreviation used before it is expanded, and an
+    abbreviation expanded more than once. The abstract and the other stand-alone
+    sections are excluded from the first-use scan — see `body_of`.
+
+    **`first_use=False` is for a companion document rather than a degraded mode.** A
+    supplement, a reporting checklist and a cover letter are each delivered as their
+    own file and each legitimately reuses the abbreviations the manuscript expanded.
+    Demanding that a supplement expand TRD again is demanding the manuscript expand it
+    twice, which is the contradiction this function's own docstring warns about one
+    level down. Drift still runs, because a second name for one method is a defect
+    wherever in the packet it appears."""
     aliases = check(text, lock, whole_manuscript=False)
-    first_use = check(body_of(text), lock, whole_manuscript=True)
-    kept = [d for d in first_use.defects if d.kind != "alias"]
+    drift = check(body_of(text), lock, whole_manuscript=True)
+    kept = [d for d in drift.defects
+            if d.kind != "alias"
+            and (first_use or d.kind not in _FIRST_USE_KINDS)]
     defects = aliases.defects + kept
     reasons = []
     if defects:

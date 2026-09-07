@@ -390,6 +390,13 @@ ECHO_MIN_CONTENT_WORDS = int(os.environ.get("PAPER_ECHO_MIN_CONTENT_WORDS", "8")
 PARAGRAPH_EXEMPT_SECTIONS = ("abstract", "title page", "declarations", "references",
                              "acknowledgements", "keywords", "abbreviations")
 
+# --- The final sweep ---------------------------------------------------------
+#
+# How many blocking findings the sweep writes to the log. The full list always reaches
+# `report.md` and the journal; this is only the console, where a hundred lines scrolling
+# past is the same as none. Ten is what fits on a screen beside the build output.
+SWEEP_LOG_FINDINGS = int(os.environ.get("PAPER_SWEEP_LOG_FINDINGS", "10"))
+
 # Sections where READABILITY is not measured, because both its numbers are
 # dominated by syllables per word and a methods section's syllable count is its
 # subject matter.
