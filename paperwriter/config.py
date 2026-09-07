@@ -312,6 +312,23 @@ PARAGRAPH_MAX_SENTENCES = int(os.environ.get("PAPER_PARAGRAPH_MAX_SENTENCES", "9
 PARAGRAPH_DEFECT_SHARE_MAX = float(
     os.environ.get("PAPER_PARAGRAPH_DEFECT_SHARE_MAX", "0.15"))
 
+# --- The point made over and over ---------------------------------------------
+#
+# Three sections each spending a paragraph on the same background fact. Every
+# instance true, well written and relevant; end to end it reads as a paper that does
+# not trust its reader. Two is normal — a Discussion picks up what the Results said —
+# so the floor is three.
+ECHO_MIN_SECTIONS = int(os.environ.get("PAPER_ECHO_MIN_SECTIONS", "3"))
+
+# Jaccard overlap of content words. A writer restating a point never uses the same
+# words twice, so this is deliberately loose; it was set by pointing the check at a
+# real manuscript and walking it up until the table captions stopped matching.
+ECHO_SIMILARITY = float(os.environ.get("PAPER_ECHO_SIMILARITY", "0.45"))
+
+# Below this many content words, heavy overlap does not mean two sentences say the
+# same thing.
+ECHO_MIN_CONTENT_WORDS = int(os.environ.get("PAPER_ECHO_MIN_CONTENT_WORDS", "8"))
+
 # Sections whose paragraph-shape rules are relaxed entirely. An abstract is one
 # structured block, a declarations section is a list, and references are not prose.
 # An abbreviations list joined this set on 2026-09-06, when a venue that requires one

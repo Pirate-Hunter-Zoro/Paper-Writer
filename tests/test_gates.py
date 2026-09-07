@@ -12,7 +12,8 @@ from unittest import mock                                           # noqa: E402
 import unittest                                                     # noqa: E402
 
 from paperwriter import config                                      # noqa: E402
-from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder,  # noqa: E402
+from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder,
+                               repetition,  # noqa: E402
                                length, numbers, paragraphs, prose,
                                readability, sentences, structure,
                                terminology, venue)
@@ -1017,6 +1018,87 @@ class CitationGateTests(unittest.TestCase):
         whole = citations.check_manuscript("Nothing cited here at all.", {"1": {}})
         self.assertEqual(whole.uncited, ["1"])
         self.assertFalse(whole.passed)
+
+
+class RepetitionGateTests(unittest.TestCase):
+    """A point the paper makes over and over, section after section.
+
+    One manuscript said in five places that both representations were built from the
+    same hand-picked inventory. Every instance was true and relevant. The sixth was cut
+    only because a person noticed."""
+
+    POINT = ("Predictor selection ran once, before either representation existed, and "
+             "both arms then encoded that same chosen inventory of fields.")
+
+    def _doc(self, sections):
+        return "\n\n".join(f"# {name}\n\n{body}\n" for name, body in sections)
+
+    def test_a_point_in_three_sections_is_reported(self):
+        doc = self._doc([
+            ("Introduction", self.POINT),
+            ("Methods", "Predictor selection happened once, before either "
+                        "representation existed, and both arms encoded that chosen "
+                        "inventory of fields."),
+            ("Discussion", "Predictor selection ran once before either representation "
+                           "existed, and both arms encoded the same chosen inventory "
+                           "of fields."),
+        ])
+        report = repetition.check(doc)
+        self.assertFalse(report.passed)
+        self.assertEqual(len(report.echoes), 1)
+        self.assertEqual(len(report.echoes[0].sections), 3)
+
+    def test_two_sections_is_a_discussion_doing_its_job(self):
+        doc = self._doc([
+            ("Results", self.POINT),
+            ("Discussion", "Predictor selection ran once, before either "
+                           "representation existed, and both arms then encoded that "
+                           "same chosen inventory of fields."),
+        ])
+        self.assertTrue(repetition.check(doc).passed)
+
+    def test_the_abstract_is_supposed_to_restate_the_paper(self):
+        """A conclusions section that introduced new material would be the defect."""
+        doc = self._doc([
+            ("Abstract", self.POINT),
+            ("Introduction", self.POINT),
+            ("Methods", self.POINT),
+        ])
+        self.assertEqual(len(repetition.check(doc).echoes), 0)
+
+    def test_captions_share_boilerplate_by_design(self):
+        """Three clusters of perfectly correct captions, on the first run."""
+        cap = ("***Table {n}.** Discrimination of the four classifiers on each "
+               "representation (held-out test set). 95% CIs are bootstrap percentile "
+               "intervals.*")
+        doc = self._doc([("Model discrimination", cap.format(n=2)),
+                         ("Model calibration", cap.format(n=3)),
+                         ("Robustness across encoders", cap.format(n=5))])
+        self.assertTrue(repetition.check(doc).passed)
+
+    def test_two_sections_on_different_topics_do_not_match(self):
+        doc = self._doc([
+            ("Introduction", self.POINT),
+            ("Methods", "Discrimination was summarised with ROC AUC and calibration "
+                        "with slope and intercept on the held-out patients."),
+            ("Discussion", "The cohort came from one community health system and "
+                           "skews middle-aged, which bounds transportability."),
+        ])
+        self.assertTrue(repetition.check(doc).passed)
+
+    def test_the_report_names_the_sections_a_person_must_open(self):
+        doc = self._doc([
+            ("Introduction", self.POINT),
+            ("Methods", "Predictor selection happened once, before either "
+                        "representation existed, and both arms encoded that chosen "
+                        "inventory of fields."),
+            ("Discussion", "Predictor selection ran once before either representation "
+                           "existed, and both arms encoded the same chosen inventory "
+                           "of fields."),
+        ])
+        reason = repetition.check(doc).reasons[0]
+        for name in ("Introduction", "Methods", "Discussion"):
+            self.assertIn(name, reason)
 
 
 class CrossrefGateTests(unittest.TestCase):
