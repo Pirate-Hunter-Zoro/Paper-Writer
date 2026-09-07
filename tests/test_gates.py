@@ -12,7 +12,7 @@ from unittest import mock                                           # noqa: E402
 import unittest                                                     # noqa: E402
 
 from paperwriter import config                                      # noqa: E402
-from paperwriter.gates import (citations, claims, coverage, ladder,  # noqa: E402
+from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder,  # noqa: E402
                                length, numbers, paragraphs, prose,
                                readability, sentences, structure,
                                terminology, venue)
@@ -891,6 +891,57 @@ class CitationGateTests(unittest.TestCase):
         whole = citations.check_manuscript("Nothing cited here at all.", {"1": {}})
         self.assertEqual(whole.uncited, ["1"])
         self.assertFalse(whole.passed)
+
+
+class CrossrefGateTests(unittest.TestCase):
+    """Pointers the paper makes to itself.
+
+    Three supplement sections were cut from one manuscript in an afternoon. Each
+    removal renumbered everything below it, one pass ran twice by mistake, and the
+    Methods ended up pointing at the subgroup analysis instead of the crosswalk. Every
+    gate passed, because a pointer is the one defect that cannot be seen from inside
+    the section that makes it."""
+
+    SUP = ("# Supplement S1. First\n\n***Table S1.** One.*\n\n"
+           "# Supplement S2. Second\n\n***Table S2.** Two.*\n\n"
+           "***Figure S1.** A picture.*\n")
+
+    def test_a_pointer_to_nothing_is_refused(self):
+        man = "The crosswalk is Supplement S7. It settles the question. Read it."
+        report = crossrefs.check(man, self.SUP)
+        self.assertFalse(report.passed)
+        self.assertIn("Supplement S7", {d.label for d in report.defects})
+
+    def test_a_pointer_that_resolves_passes(self):
+        man = "The crosswalk is Supplement S2. It settles the question. Read it."
+        self.assertTrue(crossrefs.check(man, self.SUP).passed)
+
+    def test_a_gap_in_the_numbering_is_a_missing_item(self):
+        """What an excision leaves behind. A reader counts a lost section."""
+        sup = self.SUP + "\n# Supplement S4. Fourth\n\nBody text here.\n"
+        report = crossrefs.check("The paper is short.", sup)
+        self.assertFalse(report.passed)
+        self.assertTrue(any(d.kind == "gap" for d in report.defects))
+
+    def test_main_text_and_supplement_are_separate_sequences(self):
+        """"Table 2" and "Table S2" are two different objects."""
+        man = "***Table 1.** Main.*\n\nThe result is in Table 1 and Table S2."
+        self.assertTrue(crossrefs.check(man, self.SUP).passed)
+
+    def test_a_range_names_every_item_in_it(self):
+        man = "Those are given in Tables S1-S3."
+        report = crossrefs.check(man, self.SUP)
+        self.assertIn("Table S3", {d.label for d in report.defects})
+
+    def test_a_kind_with_no_captions_is_not_this_gate_s_business(self):
+        """A manuscript with no figure captions at all is being assembled, not
+        broken. Firing on it means firing on every section drafted in isolation."""
+        self.assertTrue(crossrefs.check("See Figure 4 for the curve.", "").passed)
+
+    def test_the_defect_carries_the_sentence_to_repair(self):
+        man = "The crosswalk is Supplement S7. It settles the question. Read it."
+        defect = crossrefs.check(man, self.SUP).defects[0]
+        self.assertIn("Supplement S7", defect.sentence)
 
 
 class LengthGateTests(unittest.TestCase):

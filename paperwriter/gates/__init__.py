@@ -25,6 +25,9 @@ each returns a verdict a person can check by hand:
                     that invents a number which looks exactly right.
   * `citations`   — do the markers resolve, are the references used, and does every
                     borrowed claim carry a source?
+  * `crossrefs`   — do the pointers the paper makes to ITSELF resolve, and is the
+                    numbering contiguous? The defect a cut section leaves behind, and
+                    the one thing no per-section gate can see.
   * `readability` — Flesch and Flesch-Kincaid, banded for an academic venue. Measures
                     word length, which sentence statistics do not.
   * `length`      — is this section the length it was budgeted to be? A band, and the

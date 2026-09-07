@@ -313,6 +313,7 @@ each returns a verdict a person can check by hand.
 | `numbers` | **A figure in the prose that the analysis never produced.** The most valuable gate here. |
 | `terminology` | A forbidden synonym for a locked term; an undeclared near-variant of one; an abbreviation used before it is expanded, or expanded twice. |
 | `citations` | A marker that resolves to nothing; a reference nobody cites; a borrowed claim carrying no source; two citation styles in one section. |
+| `crossrefs` | **A pointer the paper makes to itself that resolves to nothing, and a gap in the numbering.** Whole-document, because a pointer is the one defect no per-section gate can see. |
 | `sentences` | The one-read rule, measured at the section and again inside each paragraph. See the table above. |
 | `paragraphs` | Every structural way a paragraph fails to open on its claim, or closes on a citation or a signpost instead of what it means. |
 | `readability` | Flesch and Flesch-Kincaid, banded for an academic venue. Measures word length, which sentence statistics do not. |
@@ -320,6 +321,31 @@ each returns a verdict a person can check by hand.
 
 Everything there is trivially testable, which is the point. `tests/test_gates.py` is
 the largest module in the suite for exactly that reason.
+
+### The pointers a paper makes to itself
+
+`citations` asks whether `[27]` has a reference behind it. `crossrefs` asks the same of
+"Supplement S10", "Table S12", "Figure 4" — and it is the same defect with a different
+cause. A citation goes stale when a reference is added or dropped. A cross-reference
+goes stale when a section is *cut*, and cutting a section is a thing that happens to
+every paper on the way to submission.
+
+Three supplement sections came out of one manuscript in a single afternoon. Each
+removal renumbered everything below it, in two documents; one pass ran twice by
+mistake, and the Methods ended up pointing at the subgroup analysis instead of the
+field-level crosswalk. Every gate passed. Every gate looked at one section at a time,
+and a pointer is the one defect that cannot be seen from inside the section that makes
+it.
+
+So the gate checks two things at whole-document scope. Every pointer resolves. And the
+numbering is contiguous from 1 — because a supplement that skips S4 tells a reader a
+section was lost, which is exactly what did happen and exactly what the renumber is
+supposed to hide. It does **not** check that a pointer aims at the *right* thing;
+nothing can, short of reading the paper. Resolution catches the renumber, contiguity
+catches the excision.
+
+Pointed at the manuscript immediately after a by-hand renumbering pass, it found one
+dangling reference that three careful reads had missed.
 
 **One design note that recurs.** Several gates measure a whole-text statistic that
 cannot be anchored to a span — a mean sentence length is a property of every sentence
