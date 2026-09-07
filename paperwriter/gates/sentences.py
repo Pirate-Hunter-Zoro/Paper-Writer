@@ -43,6 +43,10 @@ Seven measurements, and each one names a specific way a sentence stops being rea
     shown", "reported separately". A sentence that describes an analysis and then
     declines to report it. It advertises a result the reader cannot check, and it
     spends the paper's credibility on work that is not in the paper.
+  * **equivalence claimed without an equivalence test** — a whole-document check
+    rather than a sentence one. A paper whose Methods say no equivalence margin was
+    prespecified, and whose Discussion then calls the result "parity" sixteen times,
+    is arguing with itself in the reader's hands. See `equivalence_overclaim`.
 
 Everything here is arithmetic over a string. No model, no I/O, no opinion — which is
 the point, because "your prose is dense" is an argument and "23% of your sentences are
@@ -107,6 +111,59 @@ _ANTICIPATORY = (
     "some might argue", "we would argue that", "it could be argued that",
     "while it is true that", "lest it be thought", "this is not to say",
 )
+
+# A figure written as a word, which is how a quantity gets past the numbers gate.
+#
+# "That interval is roughly a third the width of the marginal ones" is a measurement.
+# It is a ratio of two reported quantities, it is load-bearing — the sentence uses it
+# to argue the null is precise rather than blurry — and it is wrong: the intervals
+# printed two sentences above are 0.029 and 0.030 wide against a paired 0.022, which is
+# three quarters, not a third. No gate saw it, because `numbers` looks up numerals in
+# the evidence ledger and there is no numeral here.
+#
+# So a ratio stated in words, in a sentence carrying no measured value, is refused. The
+# repair is to write the number, at which point the numbers gate can do its job.
+_RATIO_WORDS = (
+    r"an?\s+(?:third|quarter|fifth|half)\s+(?:the|as)",
+    r"(?:twice|thrice|double|triple|quadruple)\s+(?:the|as)",
+    r"(?:two|three|four|five|six|seven|eight|nine|ten)\s+times\s+(?:the|as|wider|"
+    r"narrower|larger|smaller|longer|higher|lower)",
+    r"orders?\s+of\s+magnitude",
+    r"an?\s+(?:order)\s+of\s+magnitude",
+    # The unquantified magnitude comparison, which is the same defect without the
+    # arithmetic. "The two effects are of comparable magnitude" sat one paragraph
+    # below +0.028 against -0.013 to -0.022, which is not comparable by any reading.
+    # "order" is deliberately absent from the nouns below. "The six specifications
+    # ordered in the same order as Table 4" is a sequence, not a magnitude, and it was
+    # the one false positive this check produced on a real supplement. "The same order
+    # of magnitude" is already covered by the pattern above.
+    r"(?:comparable|similar|equivalent|the\s+same)\s+(?:in\s+)?"
+    r"(?:magnitude|size|scale)",
+    r"(?:roughly|approximately|about)\s+(?:equal|the\s+same\s+size)",
+    r"(?:far|much|vastly|substantially)\s+"
+    r"(?:larger|smaller|wider|narrower|greater|higher|lower)\s+than",
+)
+_RATIO_RE = re.compile("|".join(_RATIO_WORDS), re.IGNORECASE)
+
+# What makes the sentence self-checking: an actual measured value in it. A bare "two"
+# inside "two orders of magnitude" is part of the idiom, not a measurement, so the
+# numeral has to look like data — a decimal, a percentage, or a thousands-grouped count.
+_MEASURED_VALUE_RE = re.compile(r"\d+\.\d|\d+\s?%|\d{1,3}(?:,\d{3})+|\bCI\b")
+
+
+def _wordy_ratio(sentence):
+    """A ratio asserted in words by a sentence that reports no number, or "".
+
+    The gate is not against the phrase. It is against the phrase standing alone: write
+    "0.022 against 0.029" and the same sentence passes, and the numbers gate can then
+    check both figures against the evidence."""
+    match = _RATIO_RE.search(sentence)
+    if not match:
+        return ""
+    if _MEASURED_VALUE_RE.search(sentence):
+        return ""
+    return " ".join(match.group(0).split()).lower()
+
 
 # Work the paper describes and then declines to report.
 #
@@ -284,6 +341,76 @@ def _empty_opener(sentence):
     return ""
 
 
+# Words that assert the two things are the SAME, as against words that say no
+# difference was found. The distinction is the whole of the check: "the two tie", "a
+# null result", "no advantage was detected" are all honest reports of a wide interval.
+# "Parity", "equivalent", "as good as", "no different from" are claims about the world,
+# and a claim about the world needs a test designed to support it.
+_EQUIVALENCE_WORDS = (
+    "parity", "equivalent", "equivalence", "equally good", "as good as",
+    "no different from", "no different than", "statistically equivalent",
+    "identical performance", "the same performance", "interchangeable",
+    "on par with", "on a par with", "noninferior", "non-inferior",
+)
+_EQUIVALENCE_RE = re.compile(
+    r"(?<![a-z])(?:" + "|".join(w.replace(" ", r"\s+") for w in _EQUIVALENCE_WORDS) +
+    r")(?![a-z])", re.IGNORECASE)
+
+# The sentence a careful paper writes, and the reason this check can exist at all: it
+# is the paper telling us, in its own Methods, that the vocabulary above is unavailable
+# to it. Without this disclaimer the gate has no ground to stand on and stays silent —
+# a paper that DID prespecify a margin is entitled to every word in the list.
+_NO_MARGIN_RE = re.compile(
+    r"no\s+(?:formal\s+)?(?:equivalence|noninferiority|non-inferiority)"
+    r"(?:\s+or\s+(?:equivalence|noninferiority|non-inferiority))?\s+"
+    r"(?:margin|bound|threshold|test)\w*\s+(?:was|were|is|are)?\s*"
+    r"(?:pre-?specified|specified|set|defined|declared|prespecified)",
+    re.IGNORECASE)
+
+# A sentence may name the word in order to REFUSE it. "Absence of an advantage is not
+# equivalence" is the correct sentence, and refusing it would be the gate demanding the
+# paper stop saying the true thing.
+# The window is generous, and generous is the right direction here. "It is not that
+# the two representations are equivalent" puts five words between the negation and the
+# word. A false negative leaves one overclaim standing; a false positive tells an
+# author to delete the sentence that correctly refuses the overclaim.
+_DISAVOWAL_RE = re.compile(
+    r"(?:not|never|cannot|can\s*not|rather\s+than|no)\b[^.;:]{0,70}?"
+    r"(?:parity|equivalen\w*|noninferior\w*|non-inferior\w*|on\s+a?\s*par\b)"
+    r"|(?:parity|equivalen\w*)[^.;:]{0,40}?(?:was|were|is|are)\s+not",
+    re.IGNORECASE)
+
+
+def equivalence_overclaim(text):
+    """Sentences claiming equivalence in a document that disclaims an equivalence test.
+
+    A whole-document check, not a per-sentence one, because the licence lives in the
+    Methods and the claim lives in the Discussion. It returns nothing unless the
+    document itself says no margin was prespecified — which is the paper handing over
+    the evidence against its own vocabulary.
+
+    The failure this was written from: a manuscript whose Methods said "no equivalence
+    or noninferiority margin was prespecified" and whose Limitations carried the
+    heading "Absence of an advantage is not equivalence", while the word "parity"
+    appeared sixteen times in between. The analysis was right and the vocabulary
+    asserted something the analysis could not support, and no gate could see it because
+    every sentence was individually defensible.
+
+    Returns a list of (sentence, word)."""
+    body = prose.strip_structure(text)
+    if not _NO_MARGIN_RE.search(body):
+        return []
+    out = []
+    for sentence in prose.sentences(body):
+        match = _EQUIVALENCE_RE.search(sentence)
+        if not match:
+            continue
+        if _DISAVOWAL_RE.search(sentence):
+            continue                    # the paper refusing the word, correctly
+        out.append((sentence, match.group(0).lower()))
+    return out
+
+
 @dataclass
 class SentenceReport:
     words: int
@@ -304,6 +431,7 @@ class SentenceReport:
     anticipatory: list = field(default_factory=list)    # (sentence, phrase)
     undefined_comparisons: list = field(default_factory=list)  # (sentence, verb)
     unreported: list = field(default_factory=list)      # (sentence, phrase)
+    wordy_ratios: list = field(default_factory=list)     # (sentence, phrase)
     passed: bool = True
     reasons: list = field(default_factory=list)
 
@@ -382,6 +510,7 @@ def score(text, section_name=""):
     vague = [(s, verb) for s in sents if (verb := _undefined_comparison(s))]
     unreported = [(s, phrase) for s in sents
                   if (phrase := _unreported_analysis(s))]
+    ratios = [(s, phrase) for s in sents if (phrase := _wordy_ratio(s))]
     welded = [s for s in sents
               if _SEMICOLON_RE.search(s) or _dash_welds(s)]
 
@@ -393,7 +522,8 @@ def score(text, section_name=""):
         over_hard_max=over_hard, long_sentences=long_ones,
         empty_openers=openers, stacked_hedges=hedged, welded=welded,
         dense_paragraphs=dense, anticipatory=defensive,
-        undefined_comparisons=vague, unreported=unreported)
+        undefined_comparisons=vague, unreported=unreported,
+        wordy_ratios=ratios)
 
     reasons = []
     if mean > config.SENTENCE_MEAN_WORDS_MAX:
@@ -459,6 +589,12 @@ def score(text, section_name=""):
             f"{len(unreported)} sentence(s) describe an analysis and then decline to "
             f"report it ({phrases}). Report it or do not mention it. A result whose "
             f"evidence is a mailing address is not a result the paper can claim.")
+    if ratios:
+        phrases = ', '.join(sorted({p for _, p in ratios})[:3])
+        reasons.append(
+            f"{len(ratios)} sentence(s) state a ratio in words and no number "
+            f"({phrases}). Write the two figures. A quantity spelled out is still a "
+            f"quantity, and spelled out is how it gets past the numbers gate.")
     if vague:
         verbs = ', '.join(sorted({v for _, v in vague})[:3])
         reasons.append(
@@ -495,6 +631,8 @@ def worst_offenders(report, count=None):
         scored[sentence] = scored.get(sentence, 0) + 2
     for sentence, _ in report.unreported:
         scored[sentence] = scored.get(sentence, 0) + 3
+    for sentence, _ in report.wordy_ratios:
+        scored[sentence] = scored.get(sentence, 0) + 2
     for sentence, _, _ in report.dense_paragraphs:
         scored[sentence] = scored.get(sentence, 0) + 2
     ranked = sorted(scored.items(),

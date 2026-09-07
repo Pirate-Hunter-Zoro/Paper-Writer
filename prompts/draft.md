@@ -67,6 +67,15 @@ thousand words — so write inside the numbers rather than hoping.
   "far from being merely", "it might be objected" — the reader has to hold an objection
   nobody made before they can take your point. Make the claim and let it stand. Saying
   what a result does *not* establish is different, and belongs where it is true.
+- **Write a ratio as numbers, not as a word.** "Roughly a third the width", "of
+  comparable magnitude", "an order of magnitude larger" are measurements, and
+  spelling them out is how a wrong one survives — the numbers gate checks numerals
+  and finds nothing to check. Give both figures.
+- **Do not claim equivalence you did not test for.** An interval containing zero means
+  no difference was detected. It does not mean the two are the same. Unless the paper
+  prespecified an equivalence margin, "parity", "equivalent", "as good as" and "on par
+  with" all assert something the analysis cannot support — say "the two tie", "no
+  advantage was detected", or "a null result" instead.
 - **Report an analysis or do not mention it.** "Also evaluated, available from the
   corresponding author", "data not shown", "reported separately" — each of those
   advertises a result the reader cannot check, and spends the paper's credibility on

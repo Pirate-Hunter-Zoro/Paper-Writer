@@ -363,6 +363,85 @@ class TalliedComparisonTests(unittest.TestCase):
         self.assertEqual(sentences.score(text).undefined_comparisons, [])
 
 
+class WordyRatioTests(unittest.TestCase):
+    """A figure written as a word is how a quantity gets past the numbers gate."""
+
+    def test_a_ratio_with_no_number_is_refused(self):
+        text = ("The interval is roughly a third the width of the marginal ones. That "
+                "matters. It reflects precision rather than power.")
+        report = sentences.score(text)
+        self.assertEqual([p for _, p in report.wordy_ratios], ["a third the"])
+        self.assertTrue(any("still a quantity" in r for r in report.reasons))
+
+    def test_an_unquantified_magnitude_comparison_is_the_same_defect(self):
+        """Sat one paragraph below +0.028 against -0.013 to -0.022, which is not
+        comparable by any reading."""
+        text = ("The two effects are of comparable magnitude and opposite sign. That "
+                "is why it lands on a null. Nothing else explains it.")
+        self.assertTrue(sentences.score(text).wordy_ratios)
+
+    def test_writing_the_figures_clears_it(self):
+        """The gate is not against the phrase. It is against the phrase standing
+        alone, with nothing the numbers gate can check."""
+        text = ("The paired interval is 0.022 wide against marginal intervals of "
+                "0.029 and 0.030, roughly three quarters the width. That is "
+                "precision. It is not power.")
+        self.assertEqual(sentences.score(text).wordy_ratios, [])
+
+    def test_a_sequence_is_not_a_magnitude(self):
+        """"Ordered in the same order as Table 4" was this check's one false
+        positive on a real supplement."""
+        text = ("Each row is a run. The six permutation specifications are listed in "
+                "the same order as Table 4. The baseline is on top.")
+        self.assertEqual(sentences.score(text).wordy_ratios, [])
+
+
+class EquivalenceOverclaimTests(unittest.TestCase):
+    """A word that asserts more than the statistics can support.
+
+    Written from a manuscript whose Methods said "no equivalence or noninferiority
+    margin was prespecified", whose Limitations was headed "Absence of an advantage is
+    not equivalence", and which called the result "parity" sixteen times in between."""
+
+    DISCLAIMER = "No equivalence or noninferiority margin was prespecified. "
+
+    def test_the_word_is_refused_when_the_paper_disclaims_the_test(self):
+        found = sentences.equivalence_overclaim(
+            self.DISCLAIMER + "The result supports parity rather than superiority. "
+            "The two representations are equivalent on this outcome.")
+        self.assertEqual([w for _, w in found], ["parity", "equivalent"])
+
+    def test_the_word_is_allowed_when_the_margin_was_set(self):
+        """A paper that prespecified a margin is entitled to every word in the list."""
+        found = sentences.equivalence_overclaim(
+            "An equivalence margin of 0.02 ROC AUC was prespecified. The result "
+            "supports parity rather than superiority. Both intervals fall inside it.")
+        self.assertEqual(found, [])
+
+    def test_refusing_the_word_is_not_claiming_it(self):
+        """"Absence of an advantage is not equivalence" is the correct sentence.
+        A gate that refuses it demands the paper stop saying the true thing."""
+        found = sentences.equivalence_overclaim(
+            self.DISCLAIMER + "Absence of an advantage is not equivalence. It is not "
+            "that the two representations are equivalent.")
+        self.assertEqual(found, [])
+
+    def test_an_honest_null_is_not_an_equivalence_claim(self):
+        found = sentences.equivalence_overclaim(
+            self.DISCLAIMER + "The embedding did not outperform the feature vector. "
+            "The interval includes zero and the two tie on this cohort.")
+        self.assertEqual(found, [])
+
+    def test_it_is_a_whole_document_check(self):
+        """The licence lives in the Methods and the claim lives in the Discussion.
+        Neither section can see the defect from inside itself."""
+        discussion_only = ("The result supports parity rather than superiority. "
+                           "Both read the same content. That is the finding.")
+        self.assertEqual(sentences.equivalence_overclaim(discussion_only), [])
+        self.assertTrue(sentences.equivalence_overclaim(
+            self.DISCLAIMER + discussion_only))
+
+
 class UnreportedAnalysisTests(unittest.TestCase):
     """Report it or do not mention it. There is no third option."""
 
