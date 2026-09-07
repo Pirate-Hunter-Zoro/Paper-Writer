@@ -337,6 +337,14 @@ ECHO_MIN_CONTENT_WORDS = int(os.environ.get("PAPER_ECHO_MIN_CONTENT_WORDS", "8")
 PARAGRAPH_EXEMPT_SECTIONS = ("abstract", "title page", "declarations", "references",
                              "acknowledgements", "keywords", "abbreviations")
 
+# Sections a paper is SUPPOSED to restate itself in. The paragraph-shape rules still
+# apply to a conclusions section — it is prose and it has topic sentences — so this is
+# its own list rather than a reuse of PARAGRAPH_EXEMPT_SECTIONS. A conclusions that
+# introduced new material would be the defect; one that repeats the Discussion is the
+# section working, and counting it makes the normal arc of a paper look like a fault.
+ECHO_EXEMPT_SECTIONS = tuple(sorted(set(PARAGRAPH_EXEMPT_SECTIONS) |
+                                    {"conclusions", "conclusion", "summary"}))
+
 # --- Terminology drift -------------------------------------------------------
 #
 # The terminology gate can only forbid the synonyms somebody thought to list. The

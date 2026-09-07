@@ -1066,6 +1066,20 @@ class RepetitionGateTests(unittest.TestCase):
         ])
         self.assertEqual(len(repetition.check(doc).echoes), 0)
 
+    def test_a_conclusions_section_restating_the_paper_is_the_section_working(self):
+        """A different list from the paragraph gate's: a conclusions section is prose
+        and its SHAPE is still checked. Only its echoes are forgiven."""
+        doc = self._doc([
+            ("Introduction", self.POINT),
+            ("Discussion", "Predictor selection happened once, before either "
+                           "representation existed, and both arms encoded that chosen "
+                           "inventory of fields."),
+            ("Conclusions", "Predictor selection ran once before either "
+                            "representation existed, and both arms encoded the same "
+                            "chosen inventory of fields."),
+        ])
+        self.assertTrue(repetition.check(doc).passed)
+
     def test_captions_share_boilerplate_by_design(self):
         """Three clusters of perfectly correct captions, on the first run."""
         cap = ("***Table {n}.** Discrimination of the four classifiers on each "

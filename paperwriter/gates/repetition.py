@@ -20,8 +20,11 @@ a point never uses the same words twice.
 
 **What it deliberately excludes.**
 
-  * Front and back matter. An abstract restates the paper; that is its job, and a
-    conclusions section that introduced new material would be the defect.
+  * Front and back matter, and the conclusions. An abstract restates the paper and
+    so does a conclusions section; that is their job, and one that introduced new
+    material would be the defect. Note this is a different list from the one the
+    paragraph gate uses — a conclusions section is prose and its shape is still
+    checked; only its echoes are forgiven.
   * Captions. "Discrimination of the four classifiers on each representation (held-out
     test set). 95% CIs are bootstrap percentile intervals." is boilerplate by design,
     shared across every table in the paper, and counting it flagged three clusters of
@@ -84,7 +87,7 @@ def _bag(sentence):
 def _body_sentences(text):
     """Every body-prose sentence with the section it sits in. Front matter, back
     matter and captions are dropped."""
-    exempt = {s.lower() for s in config.PARAGRAPH_EXEMPT_SECTIONS}
+    exempt = {s.lower() for s in config.ECHO_EXEMPT_SECTIONS}
     parts = _SECTION_RE.split(text or "")
     out = []
     # split() yields [preamble, hashes, name, body, hashes, name, body, ...]
