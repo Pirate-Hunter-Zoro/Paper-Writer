@@ -67,6 +67,10 @@ thousand words — so write inside the numbers rather than hoping.
   "far from being merely", "it might be objected" — the reader has to hold an objection
   nobody made before they can take your point. Make the claim and let it stand. Saying
   what a result does *not* establish is different, and belongs where it is true.
+- **Do not predict the future.** "That constraint is likely to move", "as models
+  improve", "it will get easier" — a reader can act on "future work should test
+  X" and can only wait for "X will improve". Say what the limitation means for
+  this paper. If somebody else has forecast it on the record, cite them.
 - **Write a ratio as numbers, not as a word.** "Roughly a third the width", "of
   comparable magnitude", "an order of magnitude larger" are measurements, and
   spelling them out is how a wrong one survives — the numbers gate checks numerals

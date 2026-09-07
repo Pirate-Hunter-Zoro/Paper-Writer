@@ -363,6 +363,41 @@ class TalliedComparisonTests(unittest.TestCase):
         self.assertEqual(sentences.score(text).undefined_comparisons, [])
 
 
+class ForecastTests(unittest.TestCase):
+    """A prediction the paper cannot support, standing where a finding should be."""
+
+    def test_a_bare_forecast_is_refused(self):
+        text = ("The encoder accepts a bounded input. That constraint is a property "
+                "of the tooling and is likely to move. The question stands.")
+        report = sentences.score(text)
+        self.assertEqual([p for _, p in report.forecasts], ["is likely to move"])
+        self.assertTrue(any("only wait" in r for r in report.reasons))
+
+    def test_a_recommendation_is_not_a_forecast(self):
+        """A reader can act on "future work should test X" and can only wait for
+        "X will improve". The first is what a Discussion is for."""
+        text = ("The encoder accepts a bounded input. Future work should test whether "
+                "a longer context changes the result. The question stands.")
+        self.assertEqual(sentences.score(text).forecasts, [])
+
+    def test_a_cited_forecast_is_somebody_else_s_on_the_record(self):
+        """And the citation may sit in the sentence before, which is how a citation
+        attaches in ordinary prose."""
+        text = ("Context length has grown steadily across model generations [12]. It "
+                "will likely improve further. The constraint is not conceptual.")
+        self.assertEqual(sentences.score(text).forecasts, [])
+
+    def test_the_capability_idiom_is_caught_too(self):
+        text = ("The gap is wide today. As models improve the gap will narrow. "
+                "Nothing here settles it.")
+        self.assertTrue(sentences.score(text).forecasts)
+
+    def test_a_conditional_about_this_study_is_not_a_forecast(self):
+        text = ("Discrimination could improve with richer care-process variables. "
+                "That is a data question. It is not tested here.")
+        self.assertEqual(sentences.score(text).forecasts, [])
+
+
 class DoubledWordTests(unittest.TestCase):
     """A hard wrap hides this from every reader and from no machine."""
 

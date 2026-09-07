@@ -112,6 +112,51 @@ _ANTICIPATORY = (
     "while it is true that", "lest it be thought", "this is not to say",
 )
 
+# A prediction the paper cannot support, standing where a finding should be.
+#
+# "That constraint is a property of the tooling and is likely to move." Move which
+# way, by when, on what evidence? It means context windows will get bigger, it carries
+# no citation and no timeframe, and it closed the paragraph — the position where what
+# a limitation MEANS is supposed to go. A methods paper asserting that technology will
+# improve is speculation wearing the clothes of a result.
+#
+# The distinction that keeps this usable: a RECOMMENDATION is not a FORECAST. "Future
+# work should test whether a longer context changes this" proposes an experiment and a
+# reader can act on it. "Context lengths will improve" predicts the world and a reader
+# can only wait. The first is what a Discussion is for; the second is what this
+# refuses. So the check fires on predictive verbs about capability, and never on
+# should/could/would proposals.
+_FORECAST_RE = re.compile(
+    r"(?<![a-z])(?:is|are|seems?)\s+(?:likely|expected|set|bound|certain)\s+to\s+"
+    r"(?:move|improve|change|grow|increase|expand|shift|ease|fall|rise|close|narrow)"
+    r"|(?<![a-z])will\s+(?:likely\s+|probably\s+|soon\s+|eventually\s+)?"
+    r"(?:improve|change|move|grow|increase|expand|ease|close|narrow|resolve|disappear)"
+    r"|(?<![a-z])as\s+(?:models|encoders|tooling|hardware|methods|context\s+windows|"
+    r"these\s+tools)\s+(?:improve|mature|advance|grow)"
+    r"|(?<![a-z])in\s+the\s+(?:coming|next\s+few)\s+(?:years|months)"
+    r"|(?<![a-z])it\s+is\s+only\s+a\s+matter\s+of\s+time",
+    re.IGNORECASE)
+
+# A citation makes it somebody's forecast on the record rather than the authors' guess,
+# which is a different sentence and not this gate's business.
+_HAS_CITATION_RE = re.compile(r"\[\s*\d|@[A-Za-z]|\(\s*[A-Z][A-Za-z'\u2019-]+[,\s]")
+
+
+def _forecast(sentence, previous=""):
+    """A prediction about future capability, carrying no source, or "".
+
+    The source may sit in the sentence before. "Context length has grown steadily
+    across model generations [12]. It will likely improve further." is one citation
+    covering a trend and the inference drawn from it, which is how a citation attaches
+    in ordinary academic prose, so the window is two sentences rather than one."""
+    match = _FORECAST_RE.search(sentence)
+    if not match:
+        return ""
+    if _HAS_CITATION_RE.search(sentence) or _HAS_CITATION_RE.search(previous or ""):
+        return ""
+    return " ".join(match.group(0).split()).lower()
+
+
 # The same word twice, which a hard-wrapped file hides at a line break.
 #
 # "none exceeds 0.012 ROC\nROC AUC" and "differed by at most 0.005 ROC\nROC AUC" both
@@ -503,6 +548,7 @@ class SentenceReport:
     wordy_ratios: list = field(default_factory=list)     # (sentence, phrase)
     doubled: list = field(default_factory=list)          # (sentence, word)
     split_hedges: list = field(default_factory=list)     # (sentence, claim)
+    forecasts: list = field(default_factory=list)        # (sentence, phrase)
     passed: bool = True
     reasons: list = field(default_factory=list)
 
@@ -584,6 +630,8 @@ def score(text, section_name=""):
     ratios = [(s, phrase) for s in sents if (phrase := _wordy_ratio(s))]
     doubled = [(s, w) for s in sents if (w := _doubled_word(s))]
     split_hedges = _stacked_across_sentences(sents)
+    forecasts = [(s, ph) for prev, s in zip([""] + sents, sents)
+                 if (ph := _forecast(s, prev))]
     welded = [s for s in sents
               if _SEMICOLON_RE.search(s) or _dash_welds(s)]
 
@@ -596,7 +644,8 @@ def score(text, section_name=""):
         empty_openers=openers, stacked_hedges=hedged, welded=welded,
         dense_paragraphs=dense, anticipatory=defensive,
         undefined_comparisons=vague, unreported=unreported,
-        wordy_ratios=ratios, doubled=doubled, split_hedges=split_hedges)
+        wordy_ratios=ratios, doubled=doubled, split_hedges=split_hedges,
+        forecasts=forecasts)
 
     reasons = []
     if mean > config.SENTENCE_MEAN_WORDS_MAX:
@@ -667,6 +716,13 @@ def score(text, section_name=""):
         reasons.append(
             f"{len(doubled)} sentence(s) repeat a word ({words}). A hard wrap hides "
             f"this from every reader and from no machine.")
+    if forecasts:
+        phrases = ', '.join(sorted({p for _, p in forecasts})[:3])
+        reasons.append(
+            f"{len(forecasts)} sentence(s) predict the future with no source "
+            f"({phrases}). A reader can act on \"future work should test X\" and can "
+            f"only wait for \"X will improve\". Say what the limitation means for "
+            f"this paper instead.")
     if split_hedges:
         reasons.append(
             f"{len(split_hedges)} sentence(s) retract a claim the sentence before "
@@ -720,6 +776,8 @@ def worst_offenders(report, count=None):
     for sentence, _ in report.doubled:
         scored[sentence] = scored.get(sentence, 0) + 3
     for sentence, _ in report.split_hedges:
+        scored[sentence] = scored.get(sentence, 0) + 2
+    for sentence, _ in report.forecasts:
         scored[sentence] = scored.get(sentence, 0) + 2
     for sentence, _, _ in report.dense_paragraphs:
         scored[sentence] = scored.get(sentence, 0) + 2
