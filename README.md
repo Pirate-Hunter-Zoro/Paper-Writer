@@ -106,7 +106,7 @@ repetition is deliberate. An instruction is not a mechanism — the draft templa
 | Standard deviation of sentence length, floor 4 | Every sentence the same length is the single loudest tell that a machine wrote the paragraph. The only check here that fires on prose which is individually fine. |
 | Share of sentences past 35 words, ceiling 8% | A few long sentences are legitimate. One in five is a systematic problem, not a few bad lines. |
 | Hard ceiling of 55 words | No sentence that long is doing one job, whatever the mean says. |
-| Semicolons and em-dashes per 1,000 words, ceiling 2 each | Both are almost always two sentences pretending to be one. Rationed, not banned. |
+| Semicolons and em-dashes per 1,000 words, ceiling 2 each | Both are almost always two sentences pretending to be one. Rationed, not banned, and **not counted inside a caption or a parenthesis** — "(held-out test set; primary Qwen3-Embedding-8B encoder)" is a label, and nothing inside a parenthetical can be welding two independent clauses. |
 | Empty openers | "It is worth noting", "Importantly", "Taken together" — a sentence whose only job is to introduce another one. |
 | Stacked hedges | Two qualifications on one claim is a claim the author does not want to be held to. |
 | Mean words per sentence **inside one paragraph**, ceiling 26 | The section average is bought with easy sentences elsewhere. A real Methods section passed at 20.8 while carrying a four-sentence paragraph at 27.2, and a reader does not read the average. |

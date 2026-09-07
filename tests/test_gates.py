@@ -189,6 +189,32 @@ class SentenceGateTests(unittest.TestCase):
         self.assertFalse(report.passed)
         self.assertTrue(any("semicolon" in r for r in report.reasons))
 
+    def test_a_caption_semicolon_is_a_label_not_a_weld(self):
+        """"(held-out test set; primary Qwen3-Embedding-8B encoder)" and "(A) history
+        length; (B) gap; (C) count" accounted for every semicolon the ration refused
+        in one Results section. The convention is the journal's, and the only repair
+        available to a writer is to damage the caption."""
+        text = (support.CLEAN_PROSE + "\n\n"
+                "***Figure 2.** Discrimination by representation and classifier "
+                "(held-out test set, n = 8,516; primary Qwen3-Embedding-8B encoder). "
+                "(A) pre-index history length; (B) MDD-to-index gap; (C) encounter "
+                "count.*\n")
+        self.assertEqual(sentences.score(text).semicolons_per_kword, 0.0)
+
+    def test_a_semicolon_inside_a_parenthesis_separates_items(self):
+        """A parenthetical is already a subordinate aside, so a semicolon in one
+        cannot be welding two independent clauses."""
+        text = ("The penalty left 385 of 4,096 dimensions with nonzero weight, and 179 "
+                "carried 80% of the magnitude (236 carried 90%; Figure 7). Fewer than "
+                "5% of the dimensions account for the fit. The checks agree.")
+        self.assertEqual(sentences.score(text).semicolons_per_kword, 0.0)
+
+    def test_a_caption_is_still_measured_for_everything_else(self):
+        """Only the weld budget forgives a caption. A caption a reader cannot parse is
+        a real defect."""
+        long_caption = ("***Figure 9.** " + "word " * 60 + "end.*")
+        self.assertTrue(sentences.score(long_caption).long_sentences)
+
     def test_a_numeric_range_is_not_a_dash_weld(self):
         """A dash between two numbers is a range, not a second claim. Counting
         confidence intervals as welds measured the density of the results rather

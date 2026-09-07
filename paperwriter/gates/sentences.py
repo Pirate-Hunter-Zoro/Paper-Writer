@@ -22,8 +22,9 @@ Seven measurements, and each one names a specific way a sentence stops being rea
     section where one in five is has a systematic problem, not a few bad lines.
   * **the hard ceiling** — one sentence of 55 words is a defect wherever it appears
     and whatever the mean says.
-  * **welds** — semicolons and em-dashes per thousand words. Both are almost always
-    two sentences pretending to be one.
+  * **welds** — semicolons and em-dashes per thousand words, counted outside captions.
+    Both are almost always two sentences pretending to be one, except in a caption,
+    where a semicolon is a panel label and the convention is the journal's.
   * **empty openers** — "It is worth noting", "Importantly", "Taken together". A
     sentence whose only job is to introduce another one.
   * **stacked hedges** — two qualifications on one claim. One hedge is honest; two is
@@ -442,6 +443,36 @@ def _undefined_comparison(sentence):
 # a writer away from the bulleted list that fixes the long sentence in the first place.
 _SEMICOLON_RE = re.compile(r";(?![ \t]*(?:\n|$))")
 
+# A caption's semicolons are labels, not welds.
+#
+# "Discrimination by representation and classifier (held-out test set, n = 8,516;
+# primary Qwen3-Embedding-8B encoder)" and "(A) pre-index history length; (B)
+# MDD-to-index gap; (C) encounter count" are the two shapes, and between them they
+# accounted for every semicolon in a Results section that the ration refused. A caption
+# is a labelled enumeration by convention, the convention is the journal's rather than
+# the author's, and the only repair available to a writer is to damage the caption.
+#
+# So the RATION is counted over prose with the captions removed. Everything else about
+# a caption is still measured — its sentence lengths, its openers, its hedges — because
+# a caption a reader cannot parse is a real defect. Only the weld budget forgives it.
+_CAPTION_BLOCK_RE = re.compile(
+    r"^\s*\*{2,3}\s*(?:Table|Figure|Fig\.?|Panel)\b.*?\*\s*$",
+    re.MULTILINE | re.DOTALL)
+
+
+# A parenthetical is already a subordinate aside, so a semicolon inside one cannot be
+# welding two independent clauses. It is separating items: "(236 carried 90%; Figure
+# 7)", "(held-out test set; primary Qwen3-Embedding-8B encoder)". Blanking the contents
+# rather than deleting them keeps every other measurement — word counts, sentence
+# boundaries — exactly where it was.
+_PAREN_RE = re.compile(r"\(([^()\n]{0,200})\)")
+
+
+def _weld_body(text):
+    """The prose a weld ration applies to: not a caption, not inside a parenthesis."""
+    body = _CAPTION_BLOCK_RE.sub(" ", text)
+    return _PAREN_RE.sub(lambda m: "(" + m.group(1).replace(";", ",") + ")", body)
+
 # A dash weld joins two CLAUSES, and that is the only thing this ration is about. The
 # en-dash has two other jobs in a quantitative paper and neither of them is a weld:
 #
@@ -664,9 +695,10 @@ def score(text, section_name=""):
                  if n > config.SENTENCE_HARD_MAX_WORDS]
     long_share = len(long_ones) / len(sents)
 
-    per_kword = 1000.0 / max(n_words, 1)
-    semis = len(_SEMICOLON_RE.findall(body)) * per_kword
-    dashes = len(_dash_welds(body)) * per_kword
+    ration_body = _weld_body(body)
+    per_kword = 1000.0 / max(len(ration_body.split()), 1)
+    semis = len(_SEMICOLON_RE.findall(ration_body)) * per_kword
+    dashes = len(_dash_welds(ration_body)) * per_kword
 
     openers = [(s, phrase) for s in sents if (phrase := _empty_opener(s))]
     hedged = [s for s in sents if _hedge_count(s) >= 2]
@@ -682,8 +714,9 @@ def score(text, section_name=""):
     forecasts = [(s, ph) for prev, s in zip([""] + sents, sents)
                  if (ph := _forecast(s, prev))]
     thresholds = [(s, ph) for s in sents if (ph := _vague_threshold(s))]
+    caption_free = _weld_body(body)
     welded = [s for s in sents
-              if _SEMICOLON_RE.search(s) or _dash_welds(s)]
+              if (_SEMICOLON_RE.search(s) or _dash_welds(s)) and s in caption_free]
 
     report = SentenceReport(
         words=n_words, count=len(sents), mean=round(mean, 2),
