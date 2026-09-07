@@ -363,6 +363,48 @@ class TalliedComparisonTests(unittest.TestCase):
         self.assertEqual(sentences.score(text).undefined_comparisons, [])
 
 
+class DoubledWordTests(unittest.TestCase):
+    """A hard wrap hides this from every reader and from no machine."""
+
+    def test_a_repeated_word_is_caught(self):
+        text = ("All ten contrasts include zero and none exceeds 0.012 ROC ROC AUC. "
+                "The gap held. Nothing changed.")
+        report = sentences.score(text)
+        self.assertEqual([w for _, w in report.doubled], ["ROC"])
+        self.assertFalse(report.passed)
+
+    def test_a_word_english_really_doubles_is_left_alone(self):
+        text = ("The cohort had had one prior trial. That was the floor. It held "
+                "across arms.")
+        self.assertEqual(sentences.score(text).doubled, [])
+
+    def test_it_survives_a_line_break(self):
+        """Which is the only reason it shipped three times in one manuscript."""
+        text = "The gap was 0.005 ROC\nROC AUC. It held. Nothing changed."
+        self.assertTrue(sentences.score(text).doubled)
+
+
+class SplitHedgeTests(unittest.TestCase):
+    """The stacked hedge again, moved behind a full stop where the per-sentence
+    check cannot see it."""
+
+    def test_retracting_a_claim_never_made_is_refused(self):
+        text = ("This pattern is consistent with a decision boundary captured by a "
+                "regularized linear model. It does not establish that the latent "
+                "structure is intrinsically linear. The point stands.")
+        report = sentences.score(text)
+        self.assertEqual([c for _, c in report.split_hedges], ["consistent with"])
+        self.assertTrue(any("never made" in r for r in report.reasons))
+
+    def test_a_scope_statement_after_a_firm_claim_is_honest(self):
+        """"It does not establish X" is the right sentence when the paper actually
+        claimed something. It is only noise after a hedge."""
+        text = ("The embedding reorganizes the available signal. It does not "
+                "establish that narrative adds information. That bound is stated in "
+                "Limitations.")
+        self.assertEqual(sentences.score(text).split_hedges, [])
+
+
 class WordyRatioTests(unittest.TestCase):
     """A figure written as a word is how a quantity gets past the numbers gate."""
 
@@ -430,6 +472,22 @@ class EquivalenceOverclaimTests(unittest.TestCase):
         found = sentences.equivalence_overclaim(
             self.DISCLAIMER + "The embedding did not outperform the feature vector. "
             "The interval includes zero and the two tie on this cohort.")
+        self.assertEqual(found, [])
+
+    def test_the_adverb_does_not_slip_past(self):
+        """"The models perform equivalently across sexes" is the claim, and a
+        word-boundary match on "equivalent" does not see it."""
+        found = sentences.equivalence_overclaim(
+            self.DISCLAIMER + "The models perform equivalently across sexes. All ten "
+            "contrasts include zero.")
+        self.assertEqual([w for _, w in found], ["equivalently"])
+
+    def test_a_restatement_connective_is_not_a_claim(self):
+        """"Equivalently, ..." means "put another way". It was the false positive the
+        adverb widening bought."""
+        found = sentences.equivalence_overclaim(
+            self.DISCLAIMER + "Equivalently, the outcome required at least 2 "
+            "post-index antidepressant changes. The window was fixed.")
         self.assertEqual(found, [])
 
     def test_it_is_a_whole_document_check(self):

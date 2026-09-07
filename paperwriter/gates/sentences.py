@@ -112,6 +112,63 @@ _ANTICIPATORY = (
     "while it is true that", "lest it be thought", "this is not to say",
 )
 
+# The same word twice, which a hard-wrapped file hides at a line break.
+#
+# "none exceeds 0.012 ROC\nROC AUC" and "differed by at most 0.005 ROC\nROC AUC" both
+# shipped in one manuscript, three of them in total. A doubled word is invisible on a
+# read-through precisely because the reader's eye supplies the sentence it expected,
+# and it is trivial to find by machine, which is the whole argument for machines.
+#
+# The list of exceptions is short and every entry is a word English really does
+# double: "had had", "that that", "very very".
+_DOUBLE_OK = {"had", "that", "very", "no", "so", "long"}
+_DOUBLED_RE = re.compile(r"(?<![\w-])([A-Za-z][\w-]{1,})\s+\1(?![\w-])")
+
+
+def _doubled_word(sentence):
+    """The word this sentence says twice in a row, or "". Case-sensitive on purpose:
+    "That that" opening a clause is ordinary and "the The" is a typo."""
+    for match in _DOUBLED_RE.finditer(sentence):
+        if match.group(1).lower() in _DOUBLE_OK:
+            continue
+        return match.group(1)
+    return ""
+
+
+# A hedge, then a sentence retracting what the hedge already declined to claim.
+#
+# "This pattern is consistent with a decision boundary efficiently captured by a
+# regularized linear model. It does not establish that the latent clinical structure
+# is intrinsically linear, since differences in regularization, dimensionality, and
+# inductive bias provide alternative explanations."
+#
+# The first sentence says "consistent with", which by definition establishes nothing.
+# The second spends twenty-five words un-claiming something nobody claimed. This is
+# the stacked hedge again, split across a full stop so that the per-sentence check
+# cannot see it, and the repair is always to delete the second sentence.
+_SOFT_CLAIM_RE = re.compile(
+    r"(?<![a-z])(?:consistent\s+with|compatible\s+with|suggests?|suggestive|may\s+"
+    r"reflect|might\s+reflect|could\s+reflect|points?\s+toward|is\s+in\s+keeping"
+    r"\s+with|appears?\s+to)(?![a-z])", re.IGNORECASE)
+_RETRACTION_RE = re.compile(
+    r"^\s*(?:it|this|that|the\s+\w+)\s+(?:does|do)\s+not\s+"
+    r"(?:establish|prove|show|demonstrate|imply|mean|entail|confirm)"
+    r"|^\s*(?:it|this|that)\s+is\s+not\s+evidence\b"
+    r"|^\s*(?:none|neither)\s+of\s+(?:this|these|that)\s+(?:establishes|proves|"
+    r"shows|demonstrates)", re.IGNORECASE)
+
+
+def _stacked_across_sentences(sentences):
+    """Sentences that retract a claim the sentence before them never made.
+
+    Returns a list of (retracting sentence, the soft claim it follows)."""
+    out = []
+    for prev, cur in zip(sentences, sentences[1:]):
+        if _RETRACTION_RE.match(cur) and _SOFT_CLAIM_RE.search(prev):
+            out.append((cur, " ".join(_SOFT_CLAIM_RE.search(prev).group(0).split())))
+    return out
+
+
 # A figure written as a word, which is how a quantity gets past the numbers gate.
 #
 # "That interval is roughly a third the width of the marginal ones" is a measurement.
@@ -352,9 +409,12 @@ _EQUIVALENCE_WORDS = (
     "identical performance", "the same performance", "interchangeable",
     "on par with", "on a par with", "noninferior", "non-inferior",
 )
+# The adverb slips past a word-boundary match: "the models perform EQUIVALENTLY
+# across sexes" is the claim, and "equivalent" with a trailing letter class does not
+# see it. An optional -ly is all it takes and it costs nothing.
 _EQUIVALENCE_RE = re.compile(
     r"(?<![a-z])(?:" + "|".join(w.replace(" ", r"\s+") for w in _EQUIVALENCE_WORDS) +
-    r")(?![a-z])", re.IGNORECASE)
+    r")(?:ly)?(?![a-z])", re.IGNORECASE)
 
 # The sentence a careful paper writes, and the reason this check can exist at all: it
 # is the paper telling us, in its own Methods, that the vocabulary above is unavailable
@@ -379,6 +439,13 @@ _DISAVOWAL_RE = re.compile(
     r"(?:parity|equivalen\w*|noninferior\w*|non-inferior\w*|on\s+a?\s*par\b)"
     r"|(?:parity|equivalen\w*)[^.;:]{0,40}?(?:was|were|is|are)\s+not",
     re.IGNORECASE)
+
+
+# "Equivalently, the outcome required at least 2 post-index antidepressant changes."
+# That is a restatement connective — "put another way" — and it is the false positive
+# the -ly widening bought. A performance claim never opens a sentence with the adverb
+# and a comma; a restatement always does.
+_RESTATEMENT_RE = re.compile(r"^\s*Equivalently\s*,", re.IGNORECASE)
 
 
 def equivalence_overclaim(text):
@@ -407,6 +474,8 @@ def equivalence_overclaim(text):
             continue
         if _DISAVOWAL_RE.search(sentence):
             continue                    # the paper refusing the word, correctly
+        if _RESTATEMENT_RE.match(sentence):
+            continue                    # "Equivalently, ..." is "put another way"
         out.append((sentence, match.group(0).lower()))
     return out
 
@@ -432,6 +501,8 @@ class SentenceReport:
     undefined_comparisons: list = field(default_factory=list)  # (sentence, verb)
     unreported: list = field(default_factory=list)      # (sentence, phrase)
     wordy_ratios: list = field(default_factory=list)     # (sentence, phrase)
+    doubled: list = field(default_factory=list)          # (sentence, word)
+    split_hedges: list = field(default_factory=list)     # (sentence, claim)
     passed: bool = True
     reasons: list = field(default_factory=list)
 
@@ -511,6 +582,8 @@ def score(text, section_name=""):
     unreported = [(s, phrase) for s in sents
                   if (phrase := _unreported_analysis(s))]
     ratios = [(s, phrase) for s in sents if (phrase := _wordy_ratio(s))]
+    doubled = [(s, w) for s in sents if (w := _doubled_word(s))]
+    split_hedges = _stacked_across_sentences(sents)
     welded = [s for s in sents
               if _SEMICOLON_RE.search(s) or _dash_welds(s)]
 
@@ -523,7 +596,7 @@ def score(text, section_name=""):
         empty_openers=openers, stacked_hedges=hedged, welded=welded,
         dense_paragraphs=dense, anticipatory=defensive,
         undefined_comparisons=vague, unreported=unreported,
-        wordy_ratios=ratios)
+        wordy_ratios=ratios, doubled=doubled, split_hedges=split_hedges)
 
     reasons = []
     if mean > config.SENTENCE_MEAN_WORDS_MAX:
@@ -589,6 +662,17 @@ def score(text, section_name=""):
             f"{len(unreported)} sentence(s) describe an analysis and then decline to "
             f"report it ({phrases}). Report it or do not mention it. A result whose "
             f"evidence is a mailing address is not a result the paper can claim.")
+    if doubled:
+        words = ', '.join(sorted({f'"{w} {w}"' for _, w in doubled})[:3])
+        reasons.append(
+            f"{len(doubled)} sentence(s) repeat a word ({words}). A hard wrap hides "
+            f"this from every reader and from no machine.")
+    if split_hedges:
+        reasons.append(
+            f"{len(split_hedges)} sentence(s) retract a claim the sentence before "
+            f"them never made. The first already said '{split_hedges[0][1]}', which "
+            f"establishes nothing. Delete the retraction rather than stacking a "
+            f"second hedge behind a full stop.")
     if ratios:
         phrases = ', '.join(sorted({p for _, p in ratios})[:3])
         reasons.append(
@@ -632,6 +716,10 @@ def worst_offenders(report, count=None):
     for sentence, _ in report.unreported:
         scored[sentence] = scored.get(sentence, 0) + 3
     for sentence, _ in report.wordy_ratios:
+        scored[sentence] = scored.get(sentence, 0) + 2
+    for sentence, _ in report.doubled:
+        scored[sentence] = scored.get(sentence, 0) + 3
+    for sentence, _ in report.split_hedges:
         scored[sentence] = scored.get(sentence, 0) + 2
     for sentence, _, _ in report.dense_paragraphs:
         scored[sentence] = scored.get(sentence, 0) + 2
