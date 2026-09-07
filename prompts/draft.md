@@ -67,6 +67,10 @@ thousand words — so write inside the numbers rather than hoping.
   "far from being merely", "it might be objected" — the reader has to hold an objection
   nobody made before they can take your point. Make the claim and let it stand. Saying
   what a result does *not* establish is different, and belongs where it is true.
+- **Give the number of any threshold you lean on.** "Below the conventional
+  events-per-variable threshold" asks a reader to accept a comparison against a
+  value you declined to state. Numbers elsewhere in the sentence do not help —
+  those are the measurements; the bar is what is missing.
 - **Do not predict the future.** "That constraint is likely to move", "as models
   improve", "it will get easier" — a reader can act on "future work should test
   X" and can only wait for "X will improve". Say what the limitation means for

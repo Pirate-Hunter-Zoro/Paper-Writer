@@ -112,6 +112,51 @@ _ANTICIPATORY = (
     "while it is true that", "lest it be thought", "this is not to say",
 )
 
+# A threshold invoked by name and never given a value.
+#
+# "The embedded representation runs below the conventional events-per-variable
+# threshold by construction on three of the four encoders." Below WHAT? The reader is
+# asked to accept a comparison against a number the sentence declines to state, and in
+# this manuscript the number — 10 — was sitting in a supplement section the sentence
+# does not point at. Every ingredient of a checkable claim was present except the one
+# that makes it checkable.
+#
+# The pattern is narrow on purpose: a threshold noun, qualified by a word that appeals
+# to convention rather than to a value, in a sentence carrying no number of its own. A
+# threshold the paper defines elsewhere in the same sentence is fine, and a threshold
+# stated outright is the thing this gate is asking for.
+_VAGUE_THRESHOLD_RE = re.compile(
+    r"(?<![a-z])(?:conventional|standard|accepted|usual|customary|typical|"
+    r"recommended|traditional|nominal|established|common)\s+"
+    r"(?:[a-z-]+\s+){0,3}"
+    r"(?:threshold|cut-?off|criteri(?:on|a)|limit|floor|ceiling|bound|minimum|maximum)"
+    r"|(?<![a-z])(?:threshold|cut-?off|criteri(?:on|a))\s+"
+    r"(?:is\s+)?(?:conventionally|customarily|usually|typically)\s+"
+    r"(?:used|applied|accepted|taken)",
+    re.IGNORECASE)
+
+# The value has to sit NEXT TO the threshold, not merely somewhere in the sentence.
+# The version of this check that accepted any digit anywhere passed the sentence it was
+# written for: "runs below the conventional events-per-variable threshold ... (EPV
+# 1.5-2.3), whereas the feature-vector model comfortably exceeds it at 65" is full of
+# numbers and states the bar nowhere. Those numbers are the measurements being
+# compared, which is exactly the sentence shape that makes the missing bar invisible.
+_NEARBY_NUMBER_AFTER = re.compile(r"^[^.]{0,28}?\d")
+_NEARBY_NUMBER_BEFORE = re.compile(r"\d[^.]{0,28}?$")
+
+
+def _vague_threshold(sentence):
+    """A threshold appealed to by convention and never given, or ""."""
+    match = _VAGUE_THRESHOLD_RE.search(sentence)
+    if not match:
+        return ""
+    if _NEARBY_NUMBER_AFTER.search(sentence[match.end():]):
+        return ""
+    if _NEARBY_NUMBER_BEFORE.search(sentence[:match.start()]):
+        return ""
+    return " ".join(match.group(0).split()).lower()
+
+
 # A prediction the paper cannot support, standing where a finding should be.
 #
 # "That constraint is a property of the tooling and is likely to move." Move which
@@ -549,6 +594,7 @@ class SentenceReport:
     doubled: list = field(default_factory=list)          # (sentence, word)
     split_hedges: list = field(default_factory=list)     # (sentence, claim)
     forecasts: list = field(default_factory=list)        # (sentence, phrase)
+    vague_thresholds: list = field(default_factory=list)  # (sentence, phrase)
     passed: bool = True
     reasons: list = field(default_factory=list)
 
@@ -632,6 +678,7 @@ def score(text, section_name=""):
     split_hedges = _stacked_across_sentences(sents)
     forecasts = [(s, ph) for prev, s in zip([""] + sents, sents)
                  if (ph := _forecast(s, prev))]
+    thresholds = [(s, ph) for s in sents if (ph := _vague_threshold(s))]
     welded = [s for s in sents
               if _SEMICOLON_RE.search(s) or _dash_welds(s)]
 
@@ -645,7 +692,7 @@ def score(text, section_name=""):
         dense_paragraphs=dense, anticipatory=defensive,
         undefined_comparisons=vague, unreported=unreported,
         wordy_ratios=ratios, doubled=doubled, split_hedges=split_hedges,
-        forecasts=forecasts)
+        forecasts=forecasts, vague_thresholds=thresholds)
 
     reasons = []
     if mean > config.SENTENCE_MEAN_WORDS_MAX:
@@ -716,6 +763,12 @@ def score(text, section_name=""):
         reasons.append(
             f"{len(doubled)} sentence(s) repeat a word ({words}). A hard wrap hides "
             f"this from every reader and from no machine.")
+    if thresholds:
+        phrases = ', '.join(sorted({p for _, p in thresholds})[:3])
+        reasons.append(
+            f"{len(thresholds)} sentence(s) compare against a threshold and never "
+            f"say what it is ({phrases}). Below what? Give the number in the sentence "
+            f"that leans on it.")
     if forecasts:
         phrases = ', '.join(sorted({p for _, p in forecasts})[:3])
         reasons.append(
@@ -778,6 +831,8 @@ def worst_offenders(report, count=None):
     for sentence, _ in report.split_hedges:
         scored[sentence] = scored.get(sentence, 0) + 2
     for sentence, _ in report.forecasts:
+        scored[sentence] = scored.get(sentence, 0) + 2
+    for sentence, _ in report.vague_thresholds:
         scored[sentence] = scored.get(sentence, 0) + 2
     for sentence, _, _ in report.dense_paragraphs:
         scored[sentence] = scored.get(sentence, 0) + 2

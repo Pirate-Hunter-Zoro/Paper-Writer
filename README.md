@@ -111,6 +111,7 @@ repetition is deliberate. An instruction is not a mechanism — the draft templa
 | Stacked hedges | Two qualifications on one claim is a claim the author does not want to be held to. |
 | Mean words per sentence **inside one paragraph**, ceiling 26 | The section average is bought with easy sentences elsewhere. A real Methods section passed at 20.8 while carrying a four-sentence paragraph at 27.2, and a reader does not read the average. |
 | Anticipatory rebuttals | "And not only a limitation", "it might be objected", "far from being a". The paper arguing with a reviewer who has not spoken yet. It is hard to read because it asks you to hold an objection nobody made. |
+| A threshold with no value | "Below the conventional events-per-variable threshold." Below what? The number — 10 — was in a supplement the sentence does not point at. Numbers elsewhere in the sentence do not excuse it: those are the measurements, and the bar is what is missing. |
 | A forecast with no source | "That constraint is a property of the tooling and is likely to move." Move which way, by when, on what evidence? A reader can act on "future work should test X" and can only wait for "X will improve". Recommendations pass; predictions about capability do not, unless cited. |
 | The same word twice | "None exceeds 0.012 ROC ROC AUC", three times in one manuscript. A hard wrap hides it from every reader and from no machine. |
 | A hedge stacked behind a full stop | "This is consistent with X. It does not establish X." The first sentence establishes nothing by construction, so the second spends 25 words un-claiming what nobody claimed — the stacked-hedge defect, moved where the per-sentence check cannot see it. |
@@ -349,6 +350,39 @@ catches the excision.
 
 Pointed at the manuscript immediately after a by-hand renumbering pass, it found one
 dangling reference that three careful reads had missed.
+
+### One thing the contract asks for and no gate measures
+
+The prose contract says **verbs, not nominalizations** — "the model did worse when the
+chart said unspecified", never "discrimination decreased for patients coded
+unspecified". `prompts/draft.md` says it, `memory/digest.py` says it, and nothing
+counts it. That is not an oversight, it is a decision, and it was taken by measuring.
+
+A paragraph that passed every gate — mean 20.4 words, nothing past 35, correct shape —
+was unreadable for exactly this reason: "validation of the label against chart-reviewed
+or symptom-confirmed non-response" is ten words with no verb among them. So the obvious
+check is nominalization density, counting words ending in *-tion, -ment, -ance, -ity*.
+
+Run against the manuscript, that check flags 44 sentences at four or more. The densest
+are these:
+
+> Domains included depression characteristics, psychiatric and substance-use
+> comorbidity, medical comorbidity, and social determinants of health.
+
+> Performance in the held-out test set was characterized using ROC AUC, calibration
+> slope and intercept, and precision–recall.
+
+Both are correct. In a paper whose subject matter *is* discrimination, calibration,
+representation and distribution, nominalization density measures the topic rather than
+the prose, and a gate that fires on every Methods section is a gate somebody switches
+off — the same failure the dash ration and the tallied-comparison check were both
+narrowed to avoid.
+
+What is checkable is the narrow case, and it is the one that carries the defect: a
+threshold named without its value, a ratio spelled out as a word, a comparison tallied
+without an axis. Each of those is a nominalization doing damage in a way arithmetic can
+see. The general rule stays in the prompt, where a writer reads it, and out of the
+gates, where it would only teach a writer to rename the analysis.
 
 **One design note that recurs.** Several gates measure a whole-text statistic that
 cannot be anchored to a span — a mean sentence length is a property of every sentence

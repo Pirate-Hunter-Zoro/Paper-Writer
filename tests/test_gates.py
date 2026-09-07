@@ -363,6 +363,39 @@ class TalliedComparisonTests(unittest.TestCase):
         self.assertEqual(sentences.score(text).undefined_comparisons, [])
 
 
+class VagueThresholdTests(unittest.TestCase):
+    """A threshold invoked by name and never given a value."""
+
+    def test_a_threshold_with_no_value_is_refused(self):
+        text = ("The embedded representation runs below the conventional "
+                "events-per-variable threshold on three of the four encoders. "
+                "The feature vector clears it. That bounds what the embedded arm "
+                "can be asked to do.")
+        report = sentences.score(text)
+        self.assertTrue(report.vague_thresholds)
+        self.assertTrue(any("Below what" in r for r in report.reasons))
+
+    def test_numbers_elsewhere_in_the_sentence_do_not_excuse_it(self):
+        """The version that accepted any digit anywhere passed the sentence it was
+        written for. Those numbers are the measurements being compared, which is what
+        makes the missing bar invisible."""
+        text = ("The embedded representation runs below the conventional "
+                "events-per-variable threshold on three of the four encoders (EPV "
+                "1.5 to 2.3), whereas the feature-vector model exceeds it at 65. "
+                "That is a property of dimensionality. It bounds the arm.")
+        self.assertTrue(sentences.score(text).vague_thresholds)
+
+    def test_stating_the_value_clears_it(self):
+        text = ("Only the smallest encoder exceeds the conventional threshold of 10 "
+                "events per variable. The rest fall below. That is by construction.")
+        self.assertEqual(sentences.score(text).vague_thresholds, [])
+
+    def test_a_threshold_named_before_its_value_also_clears(self):
+        text = ("The 10-events-per-variable conventional threshold is met by one "
+                "encoder only. The rest fall below. That is by construction.")
+        self.assertEqual(sentences.score(text).vague_thresholds, [])
+
+
 class ForecastTests(unittest.TestCase):
     """A prediction the paper cannot support, standing where a finding should be."""
 
