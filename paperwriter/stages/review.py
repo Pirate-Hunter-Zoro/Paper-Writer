@@ -234,7 +234,7 @@ def run_gates(prose, section, memory, references=None):
     heading = section.get("heading", "")
     evidence = memory.evidence_document()
 
-    read = readability.score(prose)
+    read = readability.score(prose, section_name=heading)
     sent = sentences.score(prose, section_name=heading)
     para = paragraphs.check(prose, section_name=heading)
     nums = numbers.check(prose, evidence)

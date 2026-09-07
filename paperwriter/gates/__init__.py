@@ -22,12 +22,16 @@ each returns a verdict a person can check by hand:
                     second name for one method reads as a third method.
   * `numbers`     — is every figure in the prose one the analysis actually produced?
                     The most valuable gate here, and the only defence against a model
-                    that invents a number which looks exactly right.
-  * `citations`   — do the markers resolve, are the references used, and does every
-                    borrowed claim carry a source?
-  * `crossrefs`   — do the pointers the paper makes to ITSELF resolve, and is the
-                    numbering contiguous? The defect a cut section leaves behind, and
-                    the one thing no per-section gate can see.
+                    that invents a number which looks exactly right. A bibliographic
+                    number is not a finding, so the reference list is not scanned; the
+                    abstract emphatically is.
+  * `citations`   — do the markers resolve, are the references used, is the list
+                    numbered in ORDER OF FIRST APPEARANCE, and does every borrowed
+                    claim carry a source?
+  * `crossrefs`   — do the pointers the paper makes to ITSELF resolve, is the
+                    numbering contiguous, and does every pointer NAME its target? The
+                    defect a cut section leaves behind, and the one thing no
+                    per-section gate can see.
   * `procedures`  — is every named procedure SPECIFIED? A correction without its error
                     rate, a bootstrap without its resample count. Whole-document,
                     because a caption should not restate what the Methods stated.
@@ -40,6 +44,12 @@ each returns a verdict a person can check by hand:
                     ceiling is the half that matters.
   * `prose`       — the shared splitter. Words, sentences, paragraphs, once, so no two
                     gates can disagree about how many sentences a section has.
+
+The `venue` gate is not in the list above because it asks a different question — will
+the journal accept the file at all — and it is where two whole-document structural
+checks live: a heading marker swallowed into the middle of a line, and the IMRaD
+headings a manuscript is not a manuscript without. Both were added after a missing
+newline deleted a Methods heading from a built document with every gate here passing.
 
 Everything here is trivially testable, which is the point: these are the rules a
 confidently wrong model is not allowed to talk its way past. "Your prose is dense" is

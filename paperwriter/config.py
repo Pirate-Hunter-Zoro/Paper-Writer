@@ -390,6 +390,118 @@ ECHO_MIN_CONTENT_WORDS = int(os.environ.get("PAPER_ECHO_MIN_CONTENT_WORDS", "8")
 PARAGRAPH_EXEMPT_SECTIONS = ("abstract", "title page", "declarations", "references",
                              "acknowledgements", "keywords", "abbreviations")
 
+# Sections where READABILITY is not measured, because both its numbers are
+# dominated by syllables per word and a methods section's syllable count is its
+# subject matter.
+#
+# Flesch reading ease and Flesch-Kincaid grade are driven by two things: sentence
+# length, which `gates.sentences` already measures directly and far more precisely,
+# and word length, which is the part this gate exists for. In a Methods section the
+# word length is not a choice. "Psychiatric and substance-use comorbidity, medical
+# comorbidity, prior antidepressant exposure and medication burden, health-care
+# utilization, and sociodemographic characteristics" is a list of the domains the
+# study used, every word of it required, and nothing a writer does to that sentence
+# improves it.
+#
+# Measured on a real manuscript the gate refused nine sections — the main Methods and
+# eight of thirteen Supplementary Methods, at reading ease 5 to 19 against a floor of
+# 20 — and all nine were correct. The lowest was a predictor-selection section at
+# -1.0, which is a list of clinical domains and cannot be raised without renaming the
+# analysis. That is the third time this project has met the same failure: a measure
+# right about prose in general is wrong about prose whose subject IS the thing being
+# measured. Nominalization density and caption restatement both died on it.
+#
+# What is left is the sections where the vocabulary is a choice — Introduction,
+# Results, Discussion, Conclusions — and there the gate stays live and passes at
+# reading ease 30 to 38. The rule itself stays in `prompts/draft.md`, where a writer
+# reads it, and out of the gate, where it would only teach a writer to rename the
+# analysis.
+# Matched as a heading PREFIX, so "supplement m" covers a Supplementary Methods
+# section — M1 through M13 are methods and score the same way the main Methods does.
+READABILITY_EXEMPT_SECTIONS = tuple(sorted(
+    {"methods", "materials and methods", "material and methods",
+     "supplementary methods", "supplement m"}
+    | set(PARAGRAPH_EXEMPT_SECTIONS)))
+
+# Sections whose numbers are BIBLIOGRAPHIC rather than findings, so the number gate
+# does not scan them.
+#
+# This is deliberately NOT PARAGRAPH_EXEMPT_SECTIONS, and the difference is the
+# abstract. An abstract is exempt from paragraph shape because it is one structured
+# block, and it is the LAST place a number should go unchecked: rounding 0.712 to 0.71
+# in the abstract while the results say 0.712 is the defect the number gate exists for.
+# So the abstract stays under the gate, and so does a declarations section.
+#
+# What comes out is the front and back matter that carries citations and labels. A
+# Vancouver reference is a dense block of numbers and not one of them is a result — a
+# volume, an issue, a page range, a DOI prefix, an arXiv id — and no evidence ledger
+# will ever contain doi:10.1145/3626772.3657878. On an assembled 30-reference
+# manuscript the gate returned 58 unsupported numbers, all 58 bibliographic, against
+# 257 real figures every one of which traced.
+NUMBER_EXEMPT_SECTIONS = ("references", "title page", "abbreviations", "keywords",
+                          "acknowledgements")
+
+# The top-level headings a manuscript is not a manuscript without.
+#
+# IMRaD, and it is checked against the ASSEMBLED document rather than the outline,
+# because the outline had all five and the file did not. A newline went missing in
+# front of "# Methods" during an edit, so the marker ended up inside the last sentence
+# of the Introduction — "...is documented in Supplement S8. # Methods" — and pandoc
+# rendered it as four literal characters of body text. The built .docx had no Methods
+# heading anywhere and every gate in this project passed, because a gate handed one
+# section at a time cannot notice that a section boundary stopped existing.
+#
+# Matched on a lowercased heading that STARTS WITH one of these, so "Materials and
+# methods" is not matched by "methods" but "Methods and analysis" is. Each entry is a
+# tuple of acceptable openings for the same section.
+MANUSCRIPT_REQUIRED_HEADINGS = (
+    ("abstract",),
+    ("introduction", "background"),
+    ("methods", "materials and methods", "material and methods"),
+    ("results", "findings"),
+    ("discussion",),
+)
+
+# Sections whose words are SOMEBODY ELSE'S, so a locked term does not govern them.
+#
+# Exactly one, and the narrowness is the point. A reference list is other people's
+# titles: a lock forbidding "resistant depression" in favour of "TRD" flagged two
+# entries whose published titles are "Treatment resistant depression in electronic
+# health records: definitions matter" and "Treatment resistant depression:
+# socio-demographic characteristics...". You cannot rename somebody else's paper, and
+# the only repair the gate offered was to misquote a citation.
+#
+# The ABSTRACT is not on this list and must not be. It is the author's own prose and
+# the part of the paper most people read, so a forbidden synonym there is a defect in
+# the worst possible place. Nor is the abbreviation table, which is the paper's own
+# vocabulary written out, or the keyword line, which the author chose.
+TERM_BORROWED_SECTIONS = ("references",)
+
+# Sections where a CLOSING CROSS-REFERENCE is the paragraph's conclusion rather than a
+# substitute for one, so the signpost rule does not run.
+#
+# A methods paragraph's job is to specify a procedure. When the fuller specification
+# lives in a supplement — which is the whole design of a condensed Methods with a
+# thirteen-section Supplementary Methods behind it — the pointer IS the rest of that
+# paragraph's content, not a dodge in place of its meaning. "Full index-selection rules
+# are given in Supplement M2" is where the paragraph goes, and there is nothing else
+# for it to close on.
+#
+# This was measured rather than assumed. Pointed at a real Methods section the rule
+# refused eight of twenty-one paragraphs, and all eight were correct as written: the
+# data-version paragraph, the eligibility cascade, the index-selection rules, the
+# inferential boundary, the predictor rationale, the missingness frequencies, the
+# leakage safeguards, the retrieval equations. A gate that fires on eight correct
+# paragraphs in one section is a gate somebody switches off, which is the same
+# calculation that narrowed the dash ration and the nominalization count.
+#
+# Everything else about a methods paragraph is still checked, including the OPENER.
+# Matching is on a lowercased section name containing one of these, so "Methods",
+# "Materials and methods" and "Supplement M4. Predictor selection" all qualify — a
+# supplementary methods section is a methods section.
+SIGNPOST_EXEMPT_SECTIONS = ("methods", "supplement m", "supplementary method",
+                            "appendix")
+
 # Sections a paper is SUPPOSED to restate itself in. The paragraph-shape rules still
 # apply to a conclusions section — it is prose and it has topic sentences — so this is
 # its own list rather than a reuse of PARAGRAPH_EXEMPT_SECTIONS. A conclusions that

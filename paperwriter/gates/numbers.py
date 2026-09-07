@@ -131,11 +131,53 @@ _CONVENTIONAL = {"0.05", "0.01", "0.001", "95", "99", "90", "100", "0", "1", "2"
                  "5", "10", "50", "0.5", "1.96", "42"}
 
 
-def _spans_to_skip(text):
-    """Character ranges the scanner must not look inside."""
+def _spans_to_skip(text, headings_in=None):
+    """Character ranges the scanner must not look inside.
+
+    `headings_in` is the UNSTRIPPED text, when the caller has it. Section headings are
+    blanked by `prose.strip_structure`, so the section scan has to read the original —
+    and it can, because blanking preserves every offset."""
     spans = []
     for pattern in _SKIP_SPANS:
         spans.extend((m.start(), m.end()) for m in pattern.finditer(text))
+    spans.extend(_non_prose_sections(headings_in if headings_in is not None else text))
+    return spans
+
+
+_SECTION_HEADING_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+
+
+def _non_prose_sections(text):
+    """The sections whose numbers are not findings, as character ranges.
+
+    **A REFERENCE IS THE CASE THIS EXISTS FOR.** A Vancouver entry is a dense block of
+    numbers and not one of them is a result: a volume, an issue, a page range, a DOI
+    prefix, an arXiv id. No evidence ledger will ever contain
+    `doi:10.1145/3626772.3657878`, and no ledger should, so every one of them reports
+    as a figure the analysis never produced.
+
+    Run against an assembled 30-reference manuscript the gate returned 58 unsupported
+    numbers, all 58 of them bibliographic, against 348 real figures every one of which
+    traced. That is not a gate reporting a defect; it is a gate nobody can read, and an
+    editor handed the list is being asked to look up a page number in the evidence.
+
+    The list is `config.NUMBER_EXEMPT_SECTIONS`, and it is deliberately NOT the
+    paragraph gate's exempt list. The difference is the abstract, which is exempt from
+    paragraph shape and is the last place a number should go unchecked — an abstract
+    rounding 0.712 to 0.71 while the results say 0.712 is the defect this gate exists
+    for. What comes out is the front and back matter that carries citations and labels.
+
+    Section scope when a section is drafted alone, and it is what makes the WHOLE
+    -manuscript pass usable, which is where a reference list first appears at all."""
+    spans, start, cutting = [], 0, False
+    for match in _SECTION_HEADING_RE.finditer(text or ""):
+        if cutting:
+            spans.append((start, match.start()))
+        cutting = (match.group(1).strip().lower()
+                   in config.NUMBER_EXEMPT_SECTIONS)
+        start = match.end()
+    if cutting:
+        spans.append((start, len(text or "")))
     return spans
 
 
@@ -217,7 +259,7 @@ def extract(text):
     # being read as findings.
     body = prose_mod.strip_structure(text or "")
     spans = prose_mod.sentence_spans(body)
-    skip = _spans_to_skip(body)
+    skip = _spans_to_skip(body, text or "")
 
     out = []
     for match in _NUMBER_RE.finditer(body):

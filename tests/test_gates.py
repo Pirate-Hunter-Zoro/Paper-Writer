@@ -711,6 +711,60 @@ class TerminologyDriftTests(unittest.TestCase):
         self.assertEqual([d for d in report.defects if d.kind == "drift"], [])
 
 
+class WeldRationTests(unittest.TestCase):
+    """The semicolon and dash rations, and the notation they must not punish."""
+
+    def test_a_semicolon_inside_a_parenthesis_is_a_label(self):
+        text = ("Discrimination held across encoders (held-out test set; primary "
+                "Qwen3-Embedding-8B encoder). Nothing moved by more than 0.012 in "
+                "either direction across the four. The band is narrow.")
+        self.assertEqual(sentences.score(text).semicolons_per_kword, 0.0)
+
+    def test_a_hard_wrapped_parenthesis_is_still_a_parenthesis(self):
+        """Drafted prose arrives hard-wrapped, so a parenthetical two thirds of the
+        way along a line is split across two of them. Excluding the newline switched
+        the exemption off for exactly those, and one wrapped pointer pair scored a
+        supplement section at 2.5 per thousand words with no repair available but to
+        damage the cross-reference."""
+        text = ("The crosswalk bounds the null, and the main text states the bound in\n"
+                "its own voice (Methods, *Predictors and patient representations*;\n"
+                "Discussion, *Principal findings*). Every row traces to a field that\n"
+                "predictor selection chose. Neither arm was handed a raw record.")
+        self.assertEqual(sentences.score(text).semicolons_per_kword, 0.0)
+
+    def test_a_semicolon_welding_two_clauses_is_still_counted(self):
+        text = ("The split is the frozen one every evaluation uses; nothing was refit "
+                "to produce this table. The distributions are unchanged. Both halves "
+                "inherit the same sampling frame.")
+        self.assertGreater(sentences.score(text).semicolons_per_kword, 0.0)
+
+
+class MeanLengthFloorTests(unittest.TestCase):
+    """The floor catches prose that has gone clipped. A caption's length is set by
+    convention, so counting captions makes a section of tables unfixable."""
+
+    def test_captions_do_not_drag_the_floor_down(self):
+        text = (
+            "The representation comprises fifty-nine source fields, three of which "
+            "were dropped at load time for missingness. Quantitative and boolean "
+            "fields map one-to-one onto model columns. The eight categorical fields "
+            "are one-hot encoded, and five of them carry an additional level for "
+            "patients with no recorded value.\n\n"
+            "***Table A1.** Quantitative predictors (15).*\n\n"
+            "***Table A2.** Boolean predictors (36).*\n\n"
+            "***Table A3.** Categorical predictors (8).*\n\n"
+            "***Table A4.** One-hot levels (41).*\n")
+        report = sentences.score(text)
+        self.assertTrue(report.passed, report.reasons)
+
+    def test_genuinely_clipped_prose_still_fails_the_floor(self):
+        text = ("The model was fit. It scored well. The split was stratified. "
+                "Nothing was refit. The result held. Calibration was fine.")
+        report = sentences.score(text)
+        self.assertFalse(report.passed)
+        self.assertTrue(any("the floor is" in r for r in report.reasons))
+
+
 class ParagraphGateTests(unittest.TestCase):
 
     def test_a_paragraph_opening_on_a_citation_has_no_topic_sentence(self):
@@ -802,6 +856,57 @@ class ParagraphGateTests(unittest.TestCase):
 
     def test_good_prose_passes(self):
         self.assertTrue(paragraphs.check(support.CLEAN_PROSE).passed)
+
+
+class ParagraphShapeExemptionTests(unittest.TestCase):
+    """The blocks that are not paragraphs, and the section where a closing pointer is
+    the conclusion rather than a substitute for one."""
+
+    def test_a_standalone_bold_label_is_not_a_paragraph(self):
+        """"**TRD-positive example.**" above a fenced narrative names what follows. It
+        has no claim and no support and is one sentence long by construction. A
+        supplement reproducing two example narratives reported three too-short
+        paragraphs out of six, on two labels and a horizontal rule."""
+        text = ("The renderer walks a fixed template over the selected fields. Every "
+                "patient reaches the encoder through the same constant form.\n\n"
+                "**TRD-positive example.**\n\n"
+                "---\n\n"
+                "**TRD-negative example.**\n")
+        report = paragraphs.check(text)
+        self.assertEqual([d.kind for d in report.defects], [])
+        self.assertTrue(report.passed)
+
+    def test_a_run_in_heading_with_prose_after_it_is_still_a_paragraph(self):
+        """The label rule is narrow on purpose: the WHOLE block has to be emphasis."""
+        text = "**Strata.** [12] chose six families.\n"
+        report = paragraphs.check(text)
+        self.assertEqual(report.checked, 1)
+        self.assertTrue(report.defects)
+
+    def test_a_methods_paragraph_may_close_on_a_pointer(self):
+        """A methods paragraph's job is to specify a procedure, and when the fuller
+        specification lives in a supplement the pointer IS the rest of that
+        paragraph's content. Pointed at a real Methods section the rule refused eight
+        of twenty-one paragraphs and all eight were correct as written."""
+        text = ("The index date was the earliest antidepressant prescription recorded "
+                "on or after the first documented depression diagnosis. Each patient "
+                "contributed one index date. Full index-selection rules are given in "
+                "Supplement M2.")
+        self.assertNotIn("no concluding sentence",
+                         {d.kind for d in paragraphs.check(
+                             text, section_name="Methods").defects})
+        self.assertNotIn("no concluding sentence",
+                         {d.kind for d in paragraphs.check(
+                             text, section_name="Supplement M2. Index selection"
+                         ).defects})
+
+    def test_a_results_paragraph_may_not(self):
+        text = ("Discrimination was modest in every configuration. The best model "
+                "reached a ROC AUC of 0.657. The full stratified results are in "
+                "Supplement S7.")
+        self.assertIn("no concluding sentence",
+                      {d.kind for d in paragraphs.check(
+                          text, section_name="Results").defects})
 
 
 class NumberGateTests(unittest.TestCase):
@@ -916,6 +1021,29 @@ class NumberGateTests(unittest.TestCase):
         self.assertIn("\n", anchor)
 
 
+class BibliographicNumberTests(unittest.TestCase):
+    """A Vancouver entry is a dense block of numbers and not one is a result."""
+
+    EVIDENCE = {"items": [{"id": "e.1", "statement": "ROC AUC", "values": [0.657]}]}
+
+    def test_a_reference_list_is_not_scanned(self):
+        text = ("# Results\n\nThe best model reached 0.657.\n\n"
+                "# References\n\n"
+                "1. Al-Harbi KS. Treatment-resistant depression. Patient Prefer "
+                "Adherence. 2012;6:369-388. doi:10.2147/PPA.S29716.\n")
+        report = numbers.check(text, self.EVIDENCE)
+        self.assertTrue(report.passed, [u.raw for u in report.unsupported])
+
+    def test_the_abstract_is_still_scanned(self):
+        """The abstract is exempt from paragraph shape and is the LAST place a number
+        should go unchecked. Rounding 0.712 to 0.71 there while the results say 0.712
+        is the defect this gate exists for."""
+        text = "# Abstract\n\nThe model reached a ROC AUC of 0.883.\n"
+        report = numbers.check(text, self.EVIDENCE)
+        self.assertFalse(report.passed)
+        self.assertIn("0.883", [u.raw for u in report.unsupported])
+
+
 class TerminologyGateTests(unittest.TestCase):
 
     LOCK = [
@@ -1008,6 +1136,56 @@ class TerminologyGateTests(unittest.TestCase):
         defect in the part of the paper most people read."""
         manuscript = "# Abstract\n\nThe rule-based approach did worse.\n"
         self.assertFalse(terminology.check_manuscript(manuscript, self.LOCK).passed)
+
+    def test_an_alias_in_a_reference_title_is_not_a_second_name(self):
+        """You cannot rename somebody else's paper. Two entries whose published titles
+        are "Treatment resistant depression in electronic health records: definitions
+        matter" flagged against a lock forbidding "resistant depression", and the only
+        repair on offer was to misquote a citation."""
+        lock = [{"term": "TRD", "aliases": ["resistant depression"],
+                 "first_use": "treatment-resistant depression"}]
+        manuscript = ("# Results\n\nTreatment-resistant depression (TRD) was "
+                      "assigned on the switch count.\n\n"
+                      "# References\n\n"
+                      "1. Iveson MH. Treatment resistant depression in electronic "
+                      "health records: definitions matter. BMC Psychiatry. 2026.\n")
+        self.assertTrue(terminology.check_manuscript(manuscript, lock).passed)
+
+    def test_an_alias_inside_the_term_s_own_expansion_is_not_a_second_name(self):
+        """A lock that abbreviates "treatment-resistant depression" to "TRD" and
+        forbids "resistant depression" flagged every correct first use, because the
+        approved phrase contains the forbidden one."""
+        lock = [{"term": "TRD", "aliases": ["resistant depression"],
+                 "first_use": "treatment-resistant depression"}]
+        text = "Patients with treatment-resistant depression (TRD) were included."
+        self.assertEqual(
+            [d.kind for d in terminology.check(text, lock).defects], [])
+
+    def test_an_alias_in_the_body_is_still_a_second_name(self):
+        lock = [{"term": "TRD", "aliases": ["resistant depression"],
+                 "first_use": "treatment-resistant depression"}]
+        text = "Patients with resistant depression were switched more often."
+        self.assertFalse(terminology.check(text, lock).passed)
+
+    def test_also_called_declares_an_approved_variant(self):
+        """`aliases` forbids and `also_called` permits, and both are needed. A real
+        naming rule reads "the FEATURE representation (feature vector, typed feature
+        vector, feature-vector XGBoost)": three approved names for one arm,
+        deliberately. Drift reported all thirty-one uses and offered "declare it as a
+        separate locked term", which would assert two arms where there is one."""
+        entry = {"term": "feature representation",
+                 "aliases": ["feature matrix"],
+                 "also_called": ["feature vector"]}
+        text = ("The feature vector was built from coded fields. The feature vector "
+                "carried ninety-two columns. Nothing else entered it.")
+        self.assertTrue(terminology.check_manuscript(text, [entry]).passed)
+
+    def test_an_undeclared_variant_is_still_drift(self):
+        entry = {"term": "feature representation", "also_called": ["feature vector"]}
+        text = ("The feature pipeline was built from coded fields. The feature "
+                "pipeline carried ninety-two columns. Nothing else entered it.")
+        report = terminology.check_manuscript(text, [entry])
+        self.assertIn("drift", {d.kind for d in report.defects})
 
     def test_an_empty_lock_disables_the_gate(self):
         self.assertTrue(terminology.check("Anything at all.", []).passed)
@@ -1341,6 +1519,33 @@ class ReadabilityGateTests(unittest.TestCase):
     def test_an_empty_draft_fails(self):
         self.assertFalse(readability.score("").passed)
 
+    def test_a_methods_section_is_measured_but_not_banded(self):
+        """Both numbers are dominated by syllables per word, and in a methods section
+        the syllable count is the subject matter. Measured on a real manuscript the
+        gate refused the main Methods and eight of thirteen Supplementary Methods, at
+        reading ease 5 to 19 against a floor of 20, and all nine were correct. The
+        lowest was a predictor-selection section at -1.0, which is a list of clinical
+        domains and cannot be raised without renaming the analysis."""
+        text = ("Domains included depression characteristics, psychiatric and "
+                "substance-use comorbidity, medical comorbidity, prior antidepressant "
+                "exposure and medication burden, prescribing constraints, health care "
+                "utilization, and sociodemographic and social-determinant variables.")
+        banded = readability.score(text)
+        self.assertFalse(banded.passed)
+        for name in ("Methods", "Supplement M4. Predictor selection"):
+            report = readability.score(text, section_name=name)
+            self.assertTrue(report.passed, name)
+            # Still measured, so the record shows what it scored.
+            self.assertEqual(report.flesch_ease, banded.flesch_ease)
+
+    def test_a_results_section_is_still_banded(self):
+        """What is left is the sections where the vocabulary is a choice."""
+        text = ("Domains included depression characteristics, psychiatric and "
+                "substance-use comorbidity, medical comorbidity, prior antidepressant "
+                "exposure and medication burden, prescribing constraints, health care "
+                "utilization, and sociodemographic and social-determinant variables.")
+        self.assertFalse(readability.score(text, section_name="Results").passed)
+
     def test_academic_prose_sits_in_the_band(self):
         report = readability.score(support.CLEAN_PROSE)
         self.assertGreaterEqual(report.fk_grade, 0)
@@ -1442,6 +1647,70 @@ class ArgumentGateTests(unittest.TestCase):
         self.assertTrue(any("e.9" in w for w in report.warnings))
 
 
+class UnnamedPointerTests(unittest.TestCase):
+    """A pointer with no identifier is not a pointer any resolver can follow, so
+    nothing was looking for it."""
+
+    MAN = ("# Results\n\n"
+           "***Table 1.** Selected cohort characteristics by TRD status. %s*\n\n"
+           "| Characteristic | Overall |\n| --- | ---: |\n| Age | 55 |\n")
+
+    def test_a_pointer_that_names_nothing_is_refused(self):
+        """"Full table in supporting material" appeared in a finished manuscript. No
+        such document existed, the caption's own sentence above it said "Table 1 gives
+        every selected characteristic", and every gate passed."""
+        report = crossrefs.check(self.MAN % "Full table in supporting material.")
+        self.assertFalse(report.passed)
+        self.assertIn("unnamed", {d.kind for d in report.defects})
+
+    def test_a_pointer_that_names_its_target_passes(self):
+        man = (self.MAN % "The stratified version is in Supplement S7."
+               + "\n# Supplement S7. Subgroups\n\nRows.\n")
+        self.assertNotIn("unnamed",
+                         {d.kind for d in crossrefs.check(man).defects})
+
+    def test_a_supplement_pointer_with_a_bracketed_table_passes(self):
+        man = self.MAN % "The crosswalk is in the supplement (Table S9)."
+        self.assertNotIn("unnamed",
+                         {d.kind for d in crossrefs.check(man).defects})
+
+    def test_a_numbered_appendix_is_named(self):
+        man = self.MAN % "The complete inventory is in Appendix 1."
+        self.assertNotIn("unnamed",
+                         {d.kind for d in crossrefs.check(man).defects})
+
+
+class ReferenceOrderTests(unittest.TestCase):
+    """Vancouver numbers by order of first appearance. Every marker resolves, every
+    entry is cited, the list is contiguous, and it is still wrong."""
+
+    REFS = {str(n): {} for n in range(1, 5)}
+
+    def test_markers_out_of_first_appearance_order_are_refused(self):
+        text = ("# Introduction\n\nOthers looked at this [3]. So did others [1]. "
+                "And more [2]. And one more [4].\n")
+        report = citations.check_manuscript(text, self.REFS)
+        self.assertFalse(report.passed)
+        self.assertEqual(report.misordered, (1, 3, 1))
+
+    def test_markers_in_order_pass(self):
+        text = ("# Introduction\n\nOthers looked at this [1]. Two agree [2,3]. "
+                "One more [4].\n")
+        report = citations.check_manuscript(text, self.REFS)
+        self.assertIsNone(report.misordered)
+        self.assertTrue(report.passed, report.reasons)
+
+    def test_a_group_contributes_its_numbers_in_ascending_order(self):
+        """A marker naming several references reaches them in the order they are
+        printed inside it, so [1-3] is 1 then 2 then 3."""
+        self.assertEqual(
+            citations.first_appearance_order("First [1-3]. Then [4]."),
+            [1, 2, 3, 4])
+
+    def test_a_manuscript_with_no_numeric_markers_is_not_judged(self):
+        self.assertIsNone(citations.out_of_order("No markers here at all."))
+
+
 class VenueGateTests(unittest.TestCase):
     """The journal's own rules. Every other gate asks whether the manuscript is good;
     this one asks whether the file will be accepted, which an editorial assistant
@@ -1456,7 +1725,10 @@ class VenueGateTests(unittest.TestCase):
         "**Results.** " + "word " * 30 + "\n\n"
         "**Conclusions.** " + "word " * 20 + "\n\n"
         "**Keywords.** one; two; three; four; five; six\n\n"
+        "# Introduction\n\nThe question is open. Nobody has answered it.\n\n"
         "# Methods\n\nThe cohort was assembled from records. Nothing was refit.\n\n"
+        "# Results\n\nThe model discriminated modestly. Calibration was adequate.\n\n"
+        "# Discussion\n\nThe finding is a null. It bounds one comparison only.\n\n"
         "# Declarations\n\n**Funding.** None.\n\n"
         "**Conflicts of interest.** None declared.\n\n"
         "**Ethics and data handling.** Secondary analysis.\n\n"
@@ -1469,6 +1741,25 @@ class VenueGateTests(unittest.TestCase):
     def test_a_compliant_manuscript_passes(self):
         report = venue.check(self.GOOD, "JMIR Mental Health")
         self.assertTrue(report.passed, report.errors)
+
+    def test_a_heading_marker_inside_a_line_is_refused(self):
+        """One absent newline left "...documented in Supplement S8. # Methods" at the
+        end of an Introduction paragraph. Pandoc printed the four characters as body
+        text, the built .docx had no Methods heading anywhere, and every gate passed
+        because the section boundary the gates are handed had stopped existing."""
+        text = self.GOOD.replace(
+            "records. Nothing was refit.\n\n# Results",
+            "records. Nothing was refit. # Results")
+        report = venue.check(text, "JMIR")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("instead of opening" in e for e in report.errors),
+                        report.errors)
+
+    def test_a_missing_imrad_heading_is_refused(self):
+        report = venue.check(self.GOOD.replace("# Results\n", "# Outcomes\n"), "JMIR")
+        self.assertFalse(report.passed)
+        self.assertTrue(any("no `Results` heading" in e for e in report.errors),
+                        report.errors)
 
     def test_an_unprofiled_venue_does_not_pass_silently(self):
         """Writing to a journal nobody has profiled is ordinary. Being told the

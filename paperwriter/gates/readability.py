@@ -58,10 +58,21 @@ class ReadabilityReport:
     reasons: list           # human-readable reasons it failed the band (empty on pass)
 
 
-def score(text):
+def score(text, section_name=""):
     """Compute the readability metrics for a block of prose and gate them against
-    the configured band. Returns a ReadabilityReport."""
+    the configured band. Returns a ReadabilityReport.
+
+    `section_name` exempts the sections where neither number means anything. Both are
+    dominated by syllables per word, and in a methods section the syllable count is
+    the subject matter rather than the writing — see
+    `config.READABILITY_EXEMPT_SECTIONS`. An exempt section is still MEASURED and the
+    numbers are still reported; only the band is not enforced, so the record shows
+    what the section scored and the editor is not handed a repair that does not
+    exist."""
     body = prose.strip_structure(text)
+    exempt = bool(section_name) and any(
+        section_name.strip().lower().startswith(tag)
+        for tag in config.READABILITY_EXEMPT_SECTIONS)
     words = prose.words(body)
     n_words = len(words)
     n_sentences = max(1, len(prose.sentences(body)))
@@ -81,6 +92,10 @@ def score(text):
     fk_grade = round(0.39 * words_per_sentence + 11.8 * syllables_per_word - 15.59, 2)
 
     reasons = []
+    if exempt:
+        return ReadabilityReport(
+            words=n_words, sentences=n_sentences, syllables=n_syllables,
+            flesch_ease=flesch_ease, fk_grade=fk_grade, passed=True, reasons=[])
     if fk_grade < config.READABILITY_FK_GRADE_MIN:
         reasons.append(
             f"too simple for the venue: FK grade {fk_grade} < floor "

@@ -329,16 +329,16 @@ each returns a verdict a person can check by hand.
 | `claims` | An argument map that is not an argument: a claim resting on nothing, kinds that do not vary, no limitation planned, the same thing claimed twice. |
 | `ladder` | **A paper with no spine, and material that serves nothing.** No declared points or more than three, a claim serving neither a point nor a stated role, a point carried by one claim or by nothing but caveats, and — the check that matters — too many of the planned words sitting in sections that serve no point, or on any one claim. |
 | `structure` | An outline that does not hold together: non-contiguous numbering, Results before Methods, budgets over the venue's limit, a claim placed twice or not at all, a paragraph with no declared topic sentence, and a claim the section carries that no paragraph advances. |
-| `numbers` | **A figure in the prose that the analysis never produced.** The most valuable gate here. |
-| `terminology` | A forbidden synonym for a locked term; an undeclared near-variant of one; an abbreviation used before it is expanded, or expanded twice. |
-| `citations` | A marker that resolves to nothing; a reference nobody cites; a borrowed claim carrying no source; two citation styles in one section. |
-| `crossrefs` | **A pointer the paper makes to itself that resolves to nothing, and a gap in the numbering.** Whole-document, because a pointer is the one defect no per-section gate can see. |
+| `numbers` | **A figure in the prose that the analysis never produced.** The most valuable gate here. A bibliographic number is not a finding, so the reference list is not scanned; the abstract is. |
+| `terminology` | A forbidden synonym for a locked term; an undeclared near-variant of one; an abbreviation used before it is expanded, or expanded twice. A locked term now says which second names are *approved* as well as which are banned. |
+| `citations` | A marker that resolves to nothing; a reference nobody cites; a borrowed claim carrying no source; two citation styles in one section; **and a reference list not numbered in order of first appearance.** |
+| `crossrefs` | **A pointer the paper makes to itself that resolves to nothing, a gap in the numbering, and a pointer that names no target at all.** Whole-document, because a pointer is the one defect no per-section gate can see. |
 | `procedures` | **A named procedure whose defining parameter the paper never states.** Benjamini-Hochberg without its false discovery rate; a bootstrap without its resample count. Both numbers existed in the analysis code and neither reached the paper. Whole-document, because a caption should not restate what the Methods stated. |
 | `repetition` | **One point restated in three sections or more.** Two is a Discussion picking up what the Results said. Three is a paper that does not trust its reader. Front matter and captions exempt. |
 | `sentences` | The one-read rule, measured at the section and again inside each paragraph. See the table above. |
-| `paragraphs` | Every structural way a paragraph fails to open on its claim, or closes on a citation or a signpost instead of what it means. |
-| `readability` | Flesch and Flesch-Kincaid, banded for an academic venue. Measures word length, which sentence statistics do not. |
-| `venue` | The journal's own stated limits, plus two that hold whatever the journal says: **a title too long to read, and a short title too long to be a running head.** A venue that states a character limit wins. Most state none, which meant nothing checked a title at all — one manuscript reached 34 words and 272 characters with every word of it accurate. |
+| `paragraphs` | Every structural way a paragraph fails to open on its claim, or closes on a citation or a signpost instead of what it means. A standalone label is not a paragraph, and a methods paragraph may close on a pointer. |
+| `readability` | Flesch and Flesch-Kincaid, banded for an academic venue. Measures word length, which sentence statistics do not — so it is measured everywhere and **banded only where the vocabulary is a choice.** |
+| `venue` | The journal's own stated limits, plus four that hold whatever the journal says: **a title too long to read, a short title too long to be a running head, a heading marker swallowed into the middle of a line, and a missing IMRaD section.** A venue that states a character limit wins. Most state none, which meant nothing checked a title at all — one manuscript reached 34 words and 272 characters with every word of it accurate. |
 | `length` | A section outside the band around its planned budget. The ceiling is the half that matters: over the venue's limit is a desk rejection before a reviewer reads a sentence. It also **warns** on a Results section spending too many words per number reported. |
 
 Everything there is trivially testable, which is the point. `tests/test_gates.py` is
@@ -369,6 +369,61 @@ catches the excision.
 Pointed at the manuscript immediately after a by-hand renumbering pass, it found one
 dangling reference that three careful reads had missed.
 
+**And the pointer that names nothing.** A resolver can only follow a pointer that has
+an identifier in it, so a pointer without one was invisible by construction. "Full
+table in supporting material" sat in a Table 1 caption of a finished manuscript. There
+is no such document; the full table did not exist anywhere in the packet; and the
+caption's own body sentence two lines above read "Table 1 gives every selected
+characteristic". Every gate passed. It is the "data not shown" defect wearing a
+cross-reference's clothes — a reader is sent somewhere and there is nowhere to go.
+
+The check is narrow, because the phrase is common and usually fine. A pointer that
+names its target passes however awkwardly it reads: "in Supplement M6", "the
+supplement (Table S9)", "Appendix 1", "the Discussion, *Limitations*". What fails is a
+bare gesture at the paper's own material with no number, label or section title
+attached to it.
+
+### The order a reference list is numbered in
+
+`citations` already asked whether `[27]` resolves and whether reference 27 is cited
+anywhere. It did not ask whether 27 is the right number, and Vancouver — with every
+journal that uses it — numbers by **order of first appearance**.
+
+That rule is pure copyediting, which is exactly why nothing catches it. A finished
+manuscript from this project asserted the rule in its own header comment, and opened
+its Introduction with `[23-25]` three paragraphs before it first cited `[4]`. The true
+order of first appearance ran 1, 19, 10, 2, 3, 23, 24, 25, 26, 27, 28, 29, 20, 21, 9,
+17, 18, 4 ... Every marker resolved. Every entry was cited. The list was contiguous
+from 1 to 30. Three gates said yes and a copyeditor would have sent it back.
+
+So the whole-manuscript pass walks the markers in reading order and reports the first
+number that is not the one a list numbered by appearance would have there. Only numeric
+markers can be out of order; a manuscript using author-year or pandoc keys has no
+ordering to check and is skipped rather than passed. Repairing it is a remap of every
+marker in the manuscript and the supplement at once, which is why the gate says so in
+the message: renumbering one document and not the other is worse than not renumbering
+at all.
+
+### The heading that stopped being a heading
+
+Markdown makes a heading out of `#` only when it opens the line. Anywhere else it is
+four literal characters, and pandoc prints them.
+
+One missing newline is the whole failure. An edit left `...is documented in Supplement
+S8. # Methods` at the end of an Introduction paragraph. The built `.docx` carried
+"# Methods" as body text and had no Methods heading anywhere in it — a fifteen-hundred
+word Methods section rendered as a continuation of the Introduction. Every gate in this
+project passed, and the reason is structural rather than careless: a gate handed one
+section at a time cannot notice that a section boundary has stopped existing. The
+outline had a Methods section. The splitter, which reads `# Methods` wherever it finds
+it, produced a correct Methods part file. Only the assembled document was wrong, and
+the assembled document is the artifact.
+
+`venue` now refuses a `#` run that sits inside a line rather than opening one, and
+separately checks that the assembled manuscript carries the five IMRaD headings at
+all. The venue gate is the right home for both: this is the gate that asks whether the
+file will be accepted, and a paper with no Methods heading will not be.
+
 ### Measuring how much of a Results section is reporting
 
 A Results section's job is to give numbers. How many words it spends per number is
@@ -390,6 +445,24 @@ words. Blocking would tell that section to invent numbers.
 Both were written for real defects, both looked obviously right, and both failed
 against the manuscript. They are recorded because the next person to have the idea
 should not have to rediscover the answer.
+
+**Readability, in a methods section.** Not unshipped — shipped, and then scoped, which
+makes it the third instance of the same lesson rather than a fourth idea. Flesch reading
+ease and Flesch-Kincaid grade are driven by sentence length, which `sentences` already
+measures directly and far better, and by syllables per word, which is the part this gate
+is for. In a Methods section the syllables are not a choice. "Psychiatric and
+substance-use comorbidity, medical comorbidity, prior antidepressant exposure and
+medication burden, health-care utilization, and sociodemographic characteristics" is the
+list of domains the study used, every word required, and nothing done to that sentence
+improves it.
+
+Pointed at a finished manuscript the band refused nine sections — the main Methods and
+eight of thirteen Supplementary Methods, at reading ease 5 to 19 against a floor of 20 —
+and all nine were correct. The lowest scored **-1.0**, and it is a list of clinical
+domains. So the gate now measures every section and bands only the ones where the
+vocabulary is chosen: Introduction, Results, Discussion, Conclusions, which pass at 30
+to 38. An exempt section still records its numbers, because the record should show what
+a section scored; what it does not get is a repair that does not exist.
 
 **Nominalization density.** The contract says *verbs, not nominalizations*, and a
 paragraph that passed every gate was unreadable for exactly that reason. Counting words
@@ -828,6 +901,55 @@ line, or when the line opens with emphasis and a caption label.
 If a gate fires on something that is plainly correct, suspect the gate first. All nine
 were found by pointing the gates at real prose, and not one of them would have shown up
 on a fixture.
+
+**A final review of that manuscript found four more, and all four were the same
+shape.** A gate scoping rule that was right about prose in general and wrong about the
+part of a paper it was pointed at.
+
+The `numbers` gate scanned the reference list. A Vancouver entry is a dense block of
+numbers and not one of them is a result — a volume, an issue, a page range, a DOI
+prefix, an arXiv id — and no evidence ledger will ever contain
+`doi:10.1145/3626772.3657878`. The gate returned 58 unsupported numbers, all 58
+bibliographic, against 288 real figures every one of which traced. That is not a gate
+reporting a defect, it is a gate nobody can read. The reference list is now out of
+scope and **the abstract emphatically is not**, because an abstract rounding 0.712 to
+0.71 while the results say 0.712 is the defect the gate exists for.
+
+The `terminology` gate flagged two reference titles. A lock forbidding "resistant
+depression" in favour of "TRD" matched inside "Treatment resistant depression in
+electronic health records: definitions matter", which is somebody else's published
+title. You cannot rename another author's paper, and the only repair on offer was to
+misquote a citation. The same gate also flagged the term's own approved expansion,
+because "treatment-resistant depression" contains "resistant depression" — the same
+false positive the code already handled one level out for "AUC" inside "ROC AUC".
+
+The weld ration's parenthesis exemption silently switched off whenever the parenthetical
+was hard-wrapped. Drafted prose arrives hard-wrapped as a matter of course, so a
+parenthetical starting two thirds of the way along a line is routinely split across two
+of them; excluding the newline from the exemption meant those were counted. One wrapped
+pointer pair scored a supplement section at 2.5 semicolons per thousand words against a
+ration of 2, and the only repair available was to damage the cross-reference.
+
+The mean-sentence-length **floor** counted captions. A caption's length is set by
+convention, not by the writer's rhythm: "***Table A1.** Quantitative predictors (15;
+continuous, standardized).*" is eight words because that is what a table label is. A
+predictor-inventory appendix of five tables and one lead-in paragraph measured 10.8
+words per sentence against a floor of 12, on prose that averages twenty. The ceiling
+still counts captions, because a caption a reader cannot parse on one pass is a real
+defect. The floor cannot.
+
+**And two paragraph-shape rules were narrowed by the same measurement.** A block that
+is nothing but a bold label — `**TRD-positive example.**` above a fenced narrative — is
+not a paragraph, and neither is a `---` rule; a supplement reproducing two example
+narratives reported three too-short paragraphs out of six, on two labels and a
+horizontal rule. And the closing-signpost rule does not run in a methods section. A
+methods paragraph's job is to specify a procedure, and when the fuller specification
+lives in a supplement the pointer *is* the rest of that paragraph's content: "Full
+index-selection rules are given in Supplement M2" is where the paragraph goes and there
+is nothing else for it to close on. Pointed at a real Methods section the rule refused
+eight of twenty-one paragraphs and all eight were correct as written. The narrowing is
+by section name, so a supplementary methods section counts as one, and everything else
+about a methods paragraph — including its opener — is still checked.
 
 ## What comes out
 

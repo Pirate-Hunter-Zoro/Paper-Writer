@@ -69,7 +69,7 @@ _OUR_WORK = re.compile(
 
 @dataclass
 class CitationDefect:
-    kind: str                 # "unresolved", "uncited", "missing"
+    kind: str                 # "unresolved", "uncited", "missing", "out of order"
     detail: str
     anchor: str = ""          # the sentence to repair, when there is one
 
@@ -82,6 +82,7 @@ class CitationReport:
     uncited: list = field(default_factory=list)      # references never cited
     missing: list = field(default_factory=list)      # CitationDefect, borrowed claims
     styles: list = field(default_factory=list)       # which marker styles appeared
+    misordered: tuple = None  # (position, number found, number expected), or None
     passed: bool = True
     reasons: list = field(default_factory=list)
 
@@ -90,6 +91,12 @@ class CitationReport:
                 f"reference(s); {len(self.unresolved)} unresolved, "
                 f"{len(self.uncited)} uncited, {len(self.missing)} claim(s) "
                 f"needing a source")
+
+
+def _ordinal(n):
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }".replace(" ", "")
 
 
 def keys_used(text):
@@ -133,6 +140,56 @@ def keys_used(text):
             keys.add(" ".join(match.group(0).strip("()").split()))
 
     return keys, sorted(styles)
+
+
+# The order a numbered reference list is numbered in.
+#
+# Vancouver, and every journal that uses it, numbers by ORDER OF FIRST APPEARANCE. It
+# is a copyediting rule rather than a matter of substance, which is exactly why nobody
+# catches it: the markers all resolve, every entry is cited, the list is contiguous,
+# and it is still wrong. One finished manuscript claimed the rule in its own header
+# comment and opened its Introduction with [23-25] before it had cited [4]; the true
+# order of first appearance was 1, 19, 10, 2, 3, 23, 24, 25, 26 ... and the copyeditor
+# would have sent it back.
+#
+# Only NUMERIC markers can be out of order. Author-year and pandoc keys have no
+# order to be in, so a manuscript using those is skipped rather than passed.
+
+
+def first_appearance_order(text):
+    """Every numeric reference number, in the order the text first reaches it.
+
+    A marker naming several references contributes them in ascending order, because
+    that is the order they appear on the page inside the marker."""
+    body = prose.strip_structure(text)
+    order = []
+    for match in _NUMERIC_MARKER.finditer(body):
+        found = set()
+        for part in re.split(r"\s*,\s*", match.group(1)):
+            bounds = re.split(r"\s*[–-]\s*", part)
+            if len(bounds) == 2 and all(b.strip().isdigit() for b in bounds):
+                lo, hi = int(bounds[0]), int(bounds[1])
+                if lo > 0 and 0 < hi - lo < 200:
+                    found.update(range(lo, hi + 1))
+                    continue
+            if part.strip().isdigit() and int(part.strip()) > 0:
+                found.add(int(part.strip()))
+        for num in sorted(found):
+            if num not in order:
+                order.append(num)
+    return order
+
+
+def out_of_order(text):
+    """The first place the numbering stops running upward, or None.
+
+    Returns (position, number, expected) — the 1-based index into the first-appearance
+    sequence, the number found there, and the number that should have been there."""
+    order = first_appearance_order(text)
+    for i, num in enumerate(order, start=1):
+        if num != i:
+            return (i, num, i)
+    return None
 
 
 def _has_marker(sentence):
@@ -203,12 +260,27 @@ def check(text, references=None, require_sources=True):
 def check_manuscript(text, references):
     """The whole-manuscript pass, where "cited nowhere" is finally a real defect.
 
-    Run once the manuscript is assembled. Everything `check` reports plus the
-    uncited-reference sweep, which cannot be run against one section because a
-    reference cited only in the Discussion is legitimately absent from the Methods."""
+    Run once the manuscript is assembled. Everything `check` reports, plus two things
+    that only exist at document scope: the uncited-reference sweep, which cannot be run
+    against one section because a reference cited only in the Discussion is
+    legitimately absent from the Methods, and the numbering ORDER, which no section can
+    see because first appearance is a property of the whole text."""
     report = check(text, references)
     used, _ = keys_used(text)
     known = {str(k) for k in (references or {})}
+    misordered = out_of_order(text)
+    if misordered is not None:
+        position, found, expected = misordered
+        report.misordered = misordered
+        report.reasons.append(
+            f"the reference numbering is not in order of first appearance: the "
+            f"{_ordinal(position)} reference the text reaches is [{found}], and a "
+            f"list numbered by appearance would have it as [{expected}]. Every "
+            f"marker resolves and every entry is cited, which is why nothing else "
+            f"here sees it — and a copyeditor will. Renumber by first appearance and "
+            f"remap every marker in the manuscript and the supplement together.")
+        report.passed = False
+
     report.uncited = sorted(known - used)
     if report.uncited:
         report.reasons.append(

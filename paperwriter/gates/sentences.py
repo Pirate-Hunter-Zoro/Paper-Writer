@@ -465,7 +465,18 @@ _CAPTION_BLOCK_RE = re.compile(
 # 7)", "(held-out test set; primary Qwen3-Embedding-8B encoder)". Blanking the contents
 # rather than deleting them keeps every other measurement — word counts, sentence
 # boundaries — exactly where it was.
-_PAREN_RE = re.compile(r"\(([^()\n]{0,200})\)")
+#
+# **A NEWLINE INSIDE THE PARENTHESIS IS STILL THE SAME PARENTHESIS.** Drafted prose
+# arrives hard-wrapped, so a parenthetical that begins two thirds of the way along a
+# line is routinely split across two of them. Excluding the newline from the contents
+# switched the whole exemption off for exactly those, silently, and a supplement
+# section scored 2.5 semicolons per thousand words on one wrapped pointer pair —
+# "(Methods, *Predictors and patient representations*; Discussion, *Principal
+# findings*)". The only repair available to a writer there is to damage the
+# cross-reference. `prose.collapse_pattern` makes the same allowance for the same
+# reason: whitespace is whitespace, and where the line happens to end is not a fact
+# about the prose.
+_PAREN_RE = re.compile(r"\(([^()]{0,200}?)\)", re.DOTALL)
 
 
 def _weld_body(text):
@@ -641,6 +652,22 @@ class SentenceReport:
                 f"{self.emdashes_per_kword:.1f} dashes per 1,000 words")
 
 
+def _floor_body(text):
+    """The prose the mean-length FLOOR applies to: not a caption.
+
+    A caption's length is set by convention rather than by the writer's rhythm.
+    "***Table A1.** Quantitative predictors (15; continuous, standardized).*" is eight
+    words because that is what a table label is, and no amount of writing makes it
+    longer. The CEILING still counts captions, because a caption a reader cannot parse
+    on one pass is a real defect. The floor cannot, because it exists to catch prose
+    that has gone clipped, and a section that is mostly tables is nearly all caption.
+
+    A predictor inventory in a real manuscript measured 10.8 words per sentence
+    against a floor of 12, on five table captions plus five sentences of prose that
+    average twenty. The only repair the gate left was to pad the captions."""
+    return _CAPTION_BLOCK_RE.sub(" ", text)
+
+
 def _dense_paragraphs(text):
     """Paragraphs whose own mean is over the local ceiling, worst first.
 
@@ -695,6 +722,10 @@ def score(text, section_name=""):
                  if n > config.SENTENCE_HARD_MAX_WORDS]
     long_share = len(long_ones) / len(sents)
 
+    floor_sents = prose.sentences(_floor_body(body))
+    floor_mean = (statistics.fmean(len(s.split()) for s in floor_sents)
+                  if floor_sents else mean)
+
     ration_body = _weld_body(body)
     per_kword = 1000.0 / max(len(ration_body.split()), 1)
     semis = len(_SEMICOLON_RE.findall(ration_body)) * per_kword
@@ -736,11 +767,11 @@ def score(text, section_name=""):
             f"sentences average {mean:.1f} words; the ceiling is "
             f"{config.SENTENCE_MEAN_WORDS_MAX:.0f}. Split the longest ones — a "
             f"sentence carrying two claims is two sentences.")
-    if mean < config.SENTENCE_MEAN_WORDS_MIN:
+    if floor_mean < config.SENTENCE_MEAN_WORDS_MIN:
         reasons.append(
-            f"sentences average {mean:.1f} words; the floor is "
-            f"{config.SENTENCE_MEAN_WORDS_MIN:.0f}. This reads as clipped rather "
-            f"than clear. Let the sentences that carry a real claim run.")
+            f"sentences average {floor_mean:.1f} words outside the captions; the "
+            f"floor is {config.SENTENCE_MEAN_WORDS_MIN:.0f}. This reads as clipped "
+            f"rather than clear. Let the sentences that carry a real claim run.")
     if len(lengths) >= 5 and stdev < config.SENTENCE_STDEV_MIN:
         reasons.append(
             f"every sentence is nearly the same length (sd {stdev:.1f} words, floor "

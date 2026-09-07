@@ -16,10 +16,23 @@ at one section at a time, and a pointer is the one defect that cannot be seen fr
 inside the section that makes it.
 
 **What it checks, and what it deliberately does not.** It checks that every pointer
-resolves and that every numbered item is contiguous from 1, because a supplement that
-skips S4 tells a reader a section was lost. It does NOT check that the pointer aims at
-the *right* thing — nothing can, short of reading the paper. Contiguity is what catches
-the excision; resolution is what catches the renumber.
+resolves, that every numbered item is contiguous from 1 — because a supplement that
+skips S4 tells a reader a section was lost — and that no pointer is UNNAMED. It does
+NOT check that a named pointer aims at the *right* thing; nothing can, short of reading
+the paper. Contiguity is what catches the excision, resolution is what catches the
+renumber, and the unnamed check is what catches the pointer that was never resolvable.
+
+**The unnamed pointer.** "Full table in supporting material" appeared in a Table 1
+caption of a finished manuscript. There is no such document. The full table did not
+exist anywhere in the packet, the caption's own sentence two lines above said "Table 1
+gives every selected characteristic", and every gate passed — because a pointer with no
+number is not a pointer any resolver can follow, so nothing was looking for it. It is
+the "data not shown" defect in a cross-reference's clothing: a reader is sent somewhere
+and there is nowhere to go.
+
+A pointer that names its target passes, however awkward. "described in Supplement M5",
+"Table S9", "the Discussion, *Limitations*" all resolve for a reader. What fails is a
+bare gesture at the paper's own material with no identifier attached.
 
 Numbered items are recognised by their caption, in the form the manuscripts here use:
 `***Table S3.** ...*` or `***Figure 4.** ...*`, and `# Supplement S3.` for a section.
@@ -50,10 +63,28 @@ _SECTION_REF_RE = re.compile(
 
 _TRAILING_NUM_RE = re.compile(r"[SM]?(\d+)")
 
+# A gesture at the paper's own material with nothing named. The trailing lookahead is
+# what makes it narrow: an identifier immediately after the phrase — a number, an
+# S-or-M label, a section title in emphasis, a colon introducing one — means the
+# pointer names its target and is somebody's ordinary prose.
+#
+# "in the supplement (Table S9)" passes. "in supporting material." does not.
+_VAGUE_POINTER_RE = re.compile(
+    r"(?<![A-Za-z])"
+    r"(?:in|see|are\s+in|is\s+in|available\s+in|reported\s+in|given\s+in|"
+    r"shown\s+in|provided\s+in|listed\s+in|found\s+in|detailed\s+in)\s+"
+    r"(?:the\s+)?"
+    r"(?:supp(?:orting|lementary|lement(?:al)?)\s+"
+    r"(?:material|materials|information|file|files|data|appendix)"
+    r"|supplement(?:ary)?|appendix|online\s+material)"
+    r"(?![A-Za-z])"
+    r"(?!\s*[,(]?\s*(?:[SM]\s?\d|\d|[Tt]able|[Ff]igure|[Ff]ig|[Ss]ection|[*_]))",
+    re.IGNORECASE)
+
 
 @dataclass
 class CrossrefDefect:
-    kind: str                 # "unresolved" or "gap"
+    kind: str                 # "unresolved", "unnamed" or "gap"
     label: str                # "Table S12", "Supplement S4"
     detail: str
     sentence: str = ""        # verbatim, for the edit anchor
@@ -150,6 +181,17 @@ def check(manuscript, supplement=""):
                 f"{min(have)}-{max(have)}.",
                 _anchor(match.start())))
 
+    # An unnamed pointer. Nothing downstream can resolve it, which is exactly why no
+    # resolver was ever going to report it.
+    for match in _VAGUE_POINTER_RE.finditer(both):
+        phrase = " ".join(match.group(0).split())
+        defects.append(CrossrefDefect(
+            "unnamed", phrase,
+            f"\"{phrase}\" points at the paper's own material and names nothing, so "
+            f"there is no target to follow and no gate that can resolve it. Name the "
+            f"section, table or figure, or drop the pointer and report the thing here.",
+            _anchor(match.start())))
+
     # Contiguity. A gap is what a removed section leaves behind, and it is visible to a
     # reader as a missing page rather than as a broken link.
     for key, nums in sorted(defined.items()):
@@ -169,6 +211,12 @@ def check(manuscript, supplement=""):
             f"{len(unresolved)} cross-reference(s) resolve to nothing: "
             f"{', '.join(unresolved[:6])}. Cutting a section renumbers everything "
             f"below it, and this is what is left when a pointer is missed.")
+    unnamed = [d for d in defects if d.kind == "unnamed"]
+    if unnamed:
+        reasons.append(
+            f"{len(unnamed)} pointer(s) name no target: "
+            f"{', '.join(sorted({d.label for d in unnamed})[:6])}. A reader is sent "
+            f"somewhere and there is nowhere to go.")
     gaps = [d for d in defects if d.kind == "gap"]
     if gaps:
         reasons.append(

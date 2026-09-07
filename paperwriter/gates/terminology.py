@@ -82,12 +82,43 @@ def _whole_phrase(needle):
     return prose.collapse_pattern(needle)
 
 
-def _quoted_spans(text):
-    """Character ranges inside a quotation, where borrowed wording is allowed."""
+def _quoted_spans(text, headings_in=None):
+    """Character ranges where the wording is somebody else's, so a locked term does
+    not govern it: a quotation, a blockquote, and the reference list.
+
+    **A BIBLIOGRAPHIC TITLE IS THE CASE THAT WAS MISSING.** A lock that forbids
+    "resistant depression" in favour of "TRD" flagged two reference entries whose
+    published titles are "Treatment resistant depression in electronic health records:
+    definitions matter" and "Treatment resistant depression: socio-demographic
+    characteristics...". Both were correct. You cannot rename somebody else's paper,
+    and the only repair the gate offered was to misquote a citation.
+
+    The list is `config.TERM_BORROWED_SECTIONS` and it holds exactly one section. The
+    ABSTRACT is deliberately not on it: an abstract is the author's own prose and the
+    part of the paper most people read, so a forbidden synonym there is a defect in the
+    worst place there is. Sections are found by heading, read off the UNSTRIPPED text,
+    because `prose.strip_structure` blanks a heading and a blanked heading cannot be
+    matched — blanking preserves offsets, so a span found in the original is the same
+    span in the stripped copy."""
     spans = []
     for pattern in (re.compile(r'"[^"]{0,400}"'), re.compile(r'“[^”]{0,400}”'),
                     re.compile(r"^\s{0,3}>.*$", re.MULTILINE)):
         spans.extend((m.start(), m.end()) for m in pattern.finditer(text))
+    spans.extend(_borrowed_sections(headings_in if headings_in is not None else text))
+    return spans
+
+
+def _borrowed_sections(text):
+    """The sections whose words are not the author's, as character ranges."""
+    spans, start, cutting = [], 0, False
+    for match in _SECTION_RE.finditer(text or ""):
+        if cutting:
+            spans.append((start, match.start()))
+        cutting = (match.group(1).strip().lower()
+                   in config.TERM_BORROWED_SECTIONS)
+        start = match.end()
+    if cutting:
+        spans.append((start, len(text or "")))
     return spans
 
 
@@ -114,7 +145,10 @@ def check(text, lock, whole_manuscript=False):
 
     body = prose.strip_structure(text)
     spans = prose.sentence_spans(body)
-    quoted = _quoted_spans(body)
+    # The section scan reads the UNSTRIPPED text: `strip_structure` blanks headings, so
+    # "# References" is invisible in `body`. Blanking preserves every offset, so a span
+    # found in the original is the same span in the stripped copy.
+    quoted = _quoted_spans(body, text or "")
     defects = []
 
     for entry in terms:
@@ -127,6 +161,16 @@ def check(text, lock, whole_manuscript=False):
         # one. The editor is then handed a repair that replaces "AUC" with "ROC AUC"
         # inside "ROC AUC", which is both wrong and unrepairable.
         own = [(m.start(), m.end()) for m in _whole_phrase(term).finditer(body)]
+        # And where its DECLARED EXPANSION appears. An alias nested inside the
+        # approved long form is the same false positive one level out: a lock that
+        # abbreviates "treatment-resistant depression" to "TRD" and forbids "resistant
+        # depression" flags every correct first use, because the approved phrase
+        # contains the forbidden one. The editor is then handed a repair that replaces
+        # two words inside the expansion the lock itself requires.
+        expansion_text = str(entry.get("first_use") or "").strip()
+        if expansion_text:
+            own += [(m.start(), m.end())
+                    for m in _whole_phrase(expansion_text).finditer(body)]
         # Longest alias first, and overlapping hits suppressed. Aliases nest — a lock
         # that forbids both "rule-based" and "rule-based approach" would otherwise
         # report one span twice, and the editor is then asked to repair the same four
@@ -221,7 +265,21 @@ def _drift(body, spans, entry, quoted):
     "feature-vector" and "feature vector" are the same defect.
 
     A single use is ordinary English and is not reported. A phrase used
-    `TERM_DRIFT_MIN_USES` times is a name whether or not anybody declared it one."""
+    `TERM_DRIFT_MIN_USES` times is a name whether or not anybody declared it one.
+
+    **`aliases` FORBIDS AND `also_called` PERMITS, AND BOTH ARE NEEDED.** Before
+    `also_called` existed the only way to silence drift was to ban the phrase, which is
+    the opposite of what an approved second head means. A real packet's naming rule
+    reads "the FEATURE representation (feature vector, typed feature vector,
+    feature-vector XGBoost)": three approved names for one arm, deliberately, because
+    the paper needs a word for the per-patient vector and a word for the concept. The
+    gate reported all thirty-one uses of "feature vector" as drift and offered "declare
+    it as a separate locked term", which would have made the lock assert two arms where
+    there is one. Meanwhile the genuinely undeclared name in the same manuscript —
+    "feature matrix", eleven uses — was reported identically and got lost in the noise.
+
+    A phrase in neither list is still drift, which is the whole point: the lock has to
+    say out loud which second names it means."""
     term = str(entry["term"]).strip()
     parts = re.split(r"[\s-]+", term.lower())
     if len(parts) < 2:
@@ -230,6 +288,8 @@ def _drift(body, spans, entry, quoted):
     if modifier in config.TERM_ROLE_NOUNS:
         return []                    # "regression model" — the modifier is itself a role
     declared = {str(a).strip().lower() for a in entry.get("aliases") or []}
+    approved = {" ".join(str(a).strip().lower().replace("-", " ").split())
+                for a in entry.get("also_called") or []}
 
     alternatives = "|".join(n for n in config.TERM_ROLE_NOUNS if n != head)
     pattern = re.compile(r"(?<![A-Za-z])" + re.escape(modifier) + r"[\s-]+(" +
@@ -242,6 +302,8 @@ def _drift(body, spans, entry, quoted):
         phrase = " ".join(match.group(0).split()).lower().replace("-", " ")
         if phrase in declared:
             continue                 # already banned; the alias rule owns it
+        if phrase in approved:
+            continue                 # declared as an approved second name
         seen.setdefault(phrase, []).append(match.start())
 
     out = []

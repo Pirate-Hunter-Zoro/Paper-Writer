@@ -193,6 +193,30 @@ def _is_caption(paragraph):
     return bool(_CAPTION_RE.match(paragraph))
 
 
+# A block that is nothing but an emphasized label, and a thematic break. Neither is a
+# paragraph.
+#
+# "**TRD-positive example.**" above a fenced narrative and "**(A) Nearest retrieval**"
+# above a figure are labels: they name what follows, they have no claim and no support,
+# and they are one "sentence" long by construction. A `---` rule is not even text. The
+# paragraph parser sees all three as blocks, so a supplement section reproducing two
+# example narratives reported three too-short paragraphs out of six and failed at 50%,
+# on two labels and a horizontal rule.
+#
+# The label rule is deliberately narrow: the WHOLE block has to be emphasis, so
+# "**Strata.** Six sociodemographic families and two clinical ones." is still a
+# paragraph and still checked. A run-in heading with prose after it is prose.
+_LABEL_ONLY_RE = re.compile(r"^\s*(?:\*{1,3}|_{1,3})[^*_]{1,120}(?:\*{1,3}|_{1,3})"
+                            r"\s*$")
+_THEMATIC_BREAK_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+
+
+def _is_label(paragraph):
+    """Whether a block is a standalone label or a horizontal rule rather than prose."""
+    return bool(_THEMATIC_BREAK_RE.match(paragraph)
+                or _LABEL_ONLY_RE.match(paragraph))
+
+
 def _introduces_a_list(paragraph):
     """Whether a block is a stem introducing a list rather than a paragraph.
 
@@ -204,8 +228,11 @@ def _introduces_a_list(paragraph):
     return paragraph.rstrip().endswith(":")
 
 
-def _check_one(index, paragraph):
-    """Every shape defect in one paragraph."""
+def _check_one(index, paragraph, signposts_count=True):
+    """Every shape defect in one paragraph.
+
+    `signposts_count` is False in a methods section, where a closing cross-reference
+    is the paragraph's conclusion — see `config.SIGNPOST_EXEMPT_SECTIONS`."""
     out = []
     sents = prose.sentences(paragraph)
     if not sents:
@@ -267,7 +294,7 @@ def _check_one(index, paragraph):
                 index, "no concluding sentence",
                 f"paragraph {index} ends on a bare number. Close on what it means.",
                 last))
-        elif _ends_on_signpost(last):
+        elif signposts_count and _ends_on_signpost(last):
             out.append(ParagraphDefect(
                 index, "no concluding sentence",
                 f"paragraph {index} ends on a pointer to somewhere else in the "
@@ -282,18 +309,24 @@ def check(text, section_name=""):
 
     `section_name` exempts the sections where the rules do not apply: an abstract is
     one structured block, a declarations section is a list, and references are not
-    prose at all."""
+    prose at all. It also turns OFF the closing-signpost rule in a methods section,
+    where a pointer at the fuller specification is what the paragraph concludes on
+    rather than a substitute for its conclusion."""
     if section_name and section_name.strip().lower() in config.PARAGRAPH_EXEMPT_SECTIONS:
         return ParagraphReport(total=0, checked=0, passed=True)
+
+    name = (section_name or "").strip().lower()
+    signposts_count = not any(tag in name
+                              for tag in config.SIGNPOST_EXEMPT_SECTIONS)
 
     blocks = prose.paragraphs(text)
     checkable = [(i + 1, p) for i, p in enumerate(blocks)
                  if not prose.is_list_item(p) and not _introduces_a_list(p)
-                 and not _is_caption(p)]
+                 and not _is_caption(p) and not _is_label(p)]
 
     defects = []
     for index, paragraph in checkable:
-        defects.extend(_check_one(index, paragraph))
+        defects.extend(_check_one(index, paragraph, signposts_count))
 
     checked = len(checkable)
     # One paragraph can carry two defects; the share is of paragraphs, not of defects,

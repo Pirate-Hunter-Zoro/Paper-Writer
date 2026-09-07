@@ -53,6 +53,11 @@ _HEADING = re.compile(r"^(#{1,2})\s+(.+?)\s*$", re.M)
 # what a reader reads, and a reference list is not that.
 _NOT_BODY = ("title page", "references", "abbreviations")
 
+# A `#` run that is not at the start of its line. Markdown makes a heading only out of
+# the ones that are; the rest print verbatim. The preceding character must be
+# non-space, which is what separates a swallowed heading from an indented one.
+_INLINE_HEADING = re.compile(r"\S[ \t]+#{1,6}[ \t]+\S[^\n]{0,60}")
+
 
 def sections(text):
     """The manuscript as {heading: body}, in order, comments and code fences gone."""
@@ -244,6 +249,43 @@ def check(text, venue, profile=None, today=None):
                 f"the short title is {len(short)} characters against a ceiling of "
                 f"{config.SHORT_TITLE_MAX_CHARS}. It is a running head, and the limit "
                 f"is what fits in a page margin.")
+
+    # 9. A heading marker that is not at the start of a line.
+    #
+    #    Markdown only makes a heading out of `#` when it opens the line. Anywhere else
+    #    it is four literal characters, and pandoc prints them. The whole failure is
+    #    one absent newline: an edit left "...is documented in Supplement S8. # Methods"
+    #    at the end of an Introduction paragraph, so the built .docx carried "# Methods"
+    #    as body text and had no Methods heading at all. The outline had one. Every
+    #    per-section gate passed, because the section boundary the gates are handed had
+    #    simply stopped existing.
+    #
+    #    A `#` inside a code span or a fenced block is content and is left alone, which
+    #    is why this reads the stripped body.
+    stripped = prose.strip_structure(re.sub(r"<!--.*?-->", "", text or "", flags=re.S))
+    swallowed = [" ".join(m.group(0).split())
+                 for m in _INLINE_HEADING.finditer(stripped)]
+    stats["swallowed_headings"] = len(swallowed)
+    if swallowed:
+        errors.append(
+            f"{len(swallowed)} heading marker(s) sit inside a line instead of opening "
+            f"one: {'; '.join(swallowed[:3])}. Markdown renders those as literal "
+            f"characters of body text and the section they were meant to start does "
+            f"not exist in the built document. Put a blank line in front of each.")
+
+    # 10. The headings a manuscript is not a manuscript without.
+    #
+    #     The venue's own `required_sections` covers what THIS journal demands. This
+    #     covers IMRaD, which every journal demands and none bothers to state, and it
+    #     is checked here because this is the gate that reads the assembled file.
+    present = [h.strip().lower() for h in parts]
+    for openings in config.MANUSCRIPT_REQUIRED_HEADINGS:
+        if any(h.startswith(o) for h in present for o in openings):
+            continue
+        errors.append(
+            f"the assembled manuscript has no `{openings[0].title()}` heading. A "
+            f"section with no heading is a section a reader and a copyeditor both "
+            f"lose, whatever the outline says is there.")
 
     return VenueReport(venue=profile["name"], passed=not errors, errors=errors,
                        warnings=warnings, stats=stats)
