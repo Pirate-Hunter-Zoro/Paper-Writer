@@ -6,7 +6,9 @@ standing between a confidently wrong model and a published manuscript, and every
 them is cheap enough to test exhaustively.
 """
 
+import os                                                          # noqa: E402
 import support                                                      # noqa: F401
+from unittest import mock                                           # noqa: E402
 import unittest                                                     # noqa: E402
 
 from paperwriter import config                                      # noqa: E402
@@ -359,6 +361,43 @@ class TalliedComparisonTests(unittest.TestCase):
         text = ("All ten contrasts include zero. None of them exceeds 0.05. The "
                 "conclusion holds across strata.")
         self.assertEqual(sentences.score(text).undefined_comparisons, [])
+
+
+class UnreportedAnalysisTests(unittest.TestCase):
+    """Report it or do not mention it. There is no third option."""
+
+    def test_an_analysis_described_and_then_withheld_is_refused(self):
+        text = ("Two further weightings derived from a clinical-similarity score were "
+                "also evaluated. They added no discrimination and are reported "
+                "separately, available from the corresponding author. The rest "
+                "follows.")
+        report = sentences.score(text)
+        self.assertTrue(report.unreported)
+        self.assertTrue(any("mailing address" in r for r in report.reasons))
+
+    def test_data_not_shown_is_the_same_defect(self):
+        text = ("Sensitivity analyses using an alternative outcome window gave the "
+                "same ordering (data not shown). The gap held. Nothing changed.")
+        self.assertTrue(sentences.score(text).unreported)
+
+    def test_a_code_availability_statement_is_required_not_refused(self):
+        """Journals ask for this sentence. A gate that refuses it is a gate that
+        makes the paper worse."""
+        text = ("The cohort was assembled from one health system. Analysis code is "
+                "available from the corresponding author. Nothing else was used.")
+        self.assertEqual(sentences.score(text).unreported, [])
+
+    def test_a_data_availability_statement_is_not_refused_either(self):
+        text = ("The extract held 42,579 patients. Data are available on request, "
+                "subject to institutional review. The split was fixed in advance.")
+        self.assertEqual(sentences.score(text).unreported, [])
+
+    def test_the_sentence_is_quoted_for_the_editor(self):
+        text = ("A re-run with the two largest asymmetries closed leaves the contrast "
+                "a null. That analysis is available from the corresponding author. It "
+                "bounds the claim.")
+        report = sentences.score(text)
+        self.assertIn(report.unreported[0][0], sentences.worst_offenders(report))
 
 
 class SignpostEndingTests(unittest.TestCase):
@@ -1457,6 +1496,40 @@ class OutlineStructureTests(unittest.TestCase):
         self.assertEqual(structure.phase_of("Statistical analysis"), "methods")
         self.assertEqual(structure.phase_of("Declarations"), "back")
         self.assertEqual(structure.phase_of("Something Else"), "")
+
+
+class PandocResolutionTests(unittest.TestCase):
+    """Pandoc is usually installed and usually not on PATH.
+
+    Conversion is optional, so a pandoc the harness cannot find does not fail a run —
+    it leaves an old .docx beside a new .md, which is worse than missing because
+    nothing announces it."""
+
+    def test_an_explicit_setting_wins_and_is_not_second_guessed(self):
+        with mock.patch.dict(os.environ, {"PAPER_PANDOC_BIN": "/nowhere/pandoc"}):
+            self.assertEqual(config._find_pandoc(), "/nowhere/pandoc")
+
+    def test_path_is_used_when_pandoc_is_on_it(self):
+        with mock.patch.dict(os.environ, {"PAPER_PANDOC_BIN": ""}), \
+             mock.patch("shutil.which", return_value="/usr/bin/pandoc"):
+            self.assertEqual(config._find_pandoc(), "/usr/bin/pandoc")
+
+    def test_a_known_location_is_found_when_path_has_nothing(self):
+        """The conda case: condabin/ is on PATH and bin/ is not."""
+        with mock.patch.dict(os.environ, {"PAPER_PANDOC_BIN": ""}, clear=False), \
+             mock.patch("shutil.which", return_value=None), \
+             mock.patch.object(config, "_PANDOC_CANDIDATES", ("/opt/conda/bin/pandoc",)), \
+             mock.patch("os.path.isfile", lambda p: p == "/opt/conda/bin/pandoc"), \
+             mock.patch("os.access", lambda p, m: p == "/opt/conda/bin/pandoc"):
+            self.assertEqual(config._find_pandoc(), "/opt/conda/bin/pandoc")
+
+    def test_the_bare_name_is_the_last_resort_not_the_default(self):
+        """It still fails, but it fails loudly instead of skipping conversion."""
+        with mock.patch.dict(os.environ, {"PAPER_PANDOC_BIN": "",
+                                          "CONDA_PREFIX": "", "CONDA_EXE": ""}), \
+             mock.patch("shutil.which", return_value=None), \
+             mock.patch.object(config, "_PANDOC_CANDIDATES", ()):
+            self.assertEqual(config._find_pandoc(), "pandoc")
 
 
 class ConfigBandTests(unittest.TestCase):

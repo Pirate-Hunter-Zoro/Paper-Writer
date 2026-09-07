@@ -111,6 +111,7 @@ repetition is deliberate. An instruction is not a mechanism — the draft templa
 | Stacked hedges | Two qualifications on one claim is a claim the author does not want to be held to. |
 | Mean words per sentence **inside one paragraph**, ceiling 26 | The section average is bought with easy sentences elsewhere. A real Methods section passed at 20.8 while carrying a four-sentence paragraph at 27.2, and a reader does not read the average. |
 | Anticipatory rebuttals | "And not only a limitation", "it might be objected", "far from being a". The paper arguing with a reviewer who has not spoken yet. It is hard to read because it asks you to hold an objection nobody made. |
+| Unreported analyses | "Available from the corresponding author", "data not shown", "reported separately". A sentence that describes an analysis and then declines to report it advertises a result nobody can check. Report it or do not mention it — a data- or code-availability statement is different, and is required. |
 | Tallied comparisons with no axis | "Ten of the eleven favour the narrative" asserts eleven comparative judgements and defines none of them. The count reads as evidence, which is why it survives a read that a vague sentence would not. |
 
 ### What is measured, at the paragraph
@@ -488,11 +489,42 @@ Nothing outside the Python standard library is required to run the harness. Pand
 optional — the Markdown manuscript is the deliverable, and a missing pandoc skips the
 conversion and says so rather than blocking delivery.
 
+**Pandoc is usually installed and usually not on `PATH`.** It ships inside conda
+distributions, inside RStudio Server, inside Quarto, and `which pandoc` finds none of
+them. Believing it absent on that evidence is a mistake this project made once and
+paid for: conversion is optional, so the run reported success, and the `.docx` beside
+each Markdown file quietly went on being an old file that still looked like an
+artifact. Stale is worse than missing, because nothing announces it.
+
+So `config.PANDOC_BIN` **searches** rather than guessing a name. `PAPER_PANDOC_BIN`
+first and unquestioned, then `PATH`, then the usual install locations, then
+`$CONDA_PREFIX/bin`, and only then the bare name — which at least fails loudly. On the
+machine this was written on it resolves inside the Anaconda tree, whose `condabin/` is
+on `PATH` and whose `bin/` is not.
+
+**To rebuild the documents of a paper by hand**, use the harness's own converter rather
+than a bare pandoc line, so the invocation matches what the pipeline produced:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, '.')
+from pathlib import Path
+from paperwriter.stages import building
+for src in Path('~/Research-Journey/paper1-trd-prediction').expanduser().rglob('*.md'):
+    building.convert_one(src, 'docx', log_fn=print)
+"
+```
+
+`convert_one` sets `--resource-path` to the file's own directory, which is what lets a
+manuscript's `../results/*.png` figures resolve. A bare `pandoc x.md -o x.docx` drops
+every figure without saying so.
+
 **Prerequisites**
 
 - Python 3.9 or newer.
 - The `claude` CLI, logged in. There is no API key anywhere in this project.
-- `pandoc`, if you want a `.docx`.
+- `pandoc`, if you want a `.docx`. Check for it with `config.PANDOC_BIN` rather
+  than `which pandoc` — see above.
 
 **One-off setup**
 
@@ -736,6 +768,7 @@ is overridable with a `PAPER_`-prefixed environment variable. The ones worth kno
 | `PAPER_EVIDENCE_COVERAGE_MIN` | `0.85` | How much of the intended argument the evidence must support before drafting starts. |
 | `PAPER_EDIT_MAX_PASSES` | `3` | Editorial passes before the loop asks whether it is still improving. |
 | `PAPER_BUILD_FORMATS` | `docx` | What pandoc is asked for, for every document. Markdown is always kept. |
+| `PAPER_PANDOC_BIN` | searched | The pandoc to use. Unset means: `PATH`, then the usual conda/RStudio/Quarto locations, then the bare name. |
 | `PAPER_POINTS_MAX` | `3` | How many points a paper may be about. Four is the count at which the author has stopped choosing. |
 | `PAPER_UNLADDERED_WORDS_MAX` | `0.30` | Share of planned words allowed in sections that serve no point. |
 | `PAPER_SHIP_REPO` | off | A git working tree to commit delivered papers into. |

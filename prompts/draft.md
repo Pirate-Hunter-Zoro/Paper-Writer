@@ -67,6 +67,12 @@ thousand words — so write inside the numbers rather than hoping.
   "far from being merely", "it might be objected" — the reader has to hold an objection
   nobody made before they can take your point. Make the claim and let it stand. Saying
   what a result does *not* establish is different, and belongs where it is true.
+- **Report an analysis or do not mention it.** "Also evaluated, available from the
+  corresponding author", "data not shown", "reported separately" — each of those
+  advertises a result the reader cannot check, and spends the paper's credibility on
+  work that is not in the paper. There is no third option in which the sentence stays
+  and the numbers do not. Saying where the *code* or the *data* lives is different, and
+  is required.
 - **Name the axis of every comparison you count.** "Ten of the eleven favour the
   narrative" asserts eleven judgements and defines none of them, and the number makes
   it read as evidence. Say what favouring is: more fields, finer values, free text

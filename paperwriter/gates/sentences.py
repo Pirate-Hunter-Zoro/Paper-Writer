@@ -39,6 +39,10 @@ Seven measurements, and each one names a specific way a sentence stops being rea
     comparison whose dimension is never stated. The number looks precise and the
     sentence says nothing, which is worse than vagueness because it does not read as
     vague.
+  * **unreported analyses** — "available from the corresponding author", "data not
+    shown", "reported separately". A sentence that describes an analysis and then
+    declines to report it. It advertises a result the reader cannot check, and it
+    spends the paper's credibility on work that is not in the paper.
 
 Everything here is arithmetic over a string. No model, no I/O, no opinion — which is
 the point, because "your prose is dense" is an argument and "23% of your sentences are
@@ -103,6 +107,67 @@ _ANTICIPATORY = (
     "some might argue", "we would argue that", "it could be argued that",
     "while it is true that", "lest it be thought", "this is not to say",
 )
+
+# Work the paper describes and then declines to report.
+#
+# "Two further weightings derived from an outcome-blind clinical-similarity score were
+# also evaluated. They added no discrimination and are reported separately, available
+# from the corresponding author." Two sentences, one whole analysis, no numbers, and a
+# reader who cannot check any of it.
+#
+# This is the "data not shown" defect, which journals have objected to for decades,
+# wearing politer phrases. The rule that makes it checkable is simple and the repair
+# is always one of exactly two things: report it, or do not mention it. There is no
+# third option in which the sentence stays and the result does not, because a claim
+# whose evidence is a mailing address is not a claim the paper can make.
+#
+# The narrow reading matters. "Code is available from the corresponding author" is a
+# DATA-AVAILABILITY statement, not an unreported analysis, and journals require it. So
+# the phrase alone is not the defect: it is the defect when the sentence is about a
+# result. That is why the check looks for the availability phrase together with a verb
+# of analysis in the same sentence.
+_UNREPORTED_PHRASES = (
+    "available from the corresponding author", "available on request",
+    "available upon request", "data not shown", "results not shown",
+    "not shown here", "not reported here", "reported separately",
+    "are reported elsewhere", "is reported elsewhere", "omitted for brevity",
+    "in a forthcoming", "in preparation",
+)
+
+# What makes the sentence about a RESULT rather than about a file.
+_ANALYSIS_WORDS = (
+    "analys", "evaluat", "estimat", "compar", "test", "fit", "model", "result",
+    "discrimination", "auc", "finding", "experiment", "ablation", "sensitivity",
+    "re-run", "rerun", "weighting", "arm", "contrast",
+)
+
+# What makes it a data-availability statement, which is required rather than refused.
+_AVAILABILITY_SUBJECTS = (
+    "code", "data", "dataset", "script", "software", "materials", "protocol",
+    "questionnaire", "instrument", "source code", "repository",
+)
+
+
+def _unreported_analysis(sentence):
+    """The phrase by which this sentence declines to report an analysis, or "".
+
+    Both halves are required. A sentence saying the code is available on request is a
+    data-availability statement and a journal asks for it; a sentence saying an
+    evaluation was run and its numbers are available on request is the paper spending
+    credibility on work nobody can see."""
+    low = sentence.lower()
+    phrase = next((p for p in _UNREPORTED_PHRASES if p in low), "")
+    if not phrase:
+        return ""
+    if not any(w in low for w in _ANALYSIS_WORDS):
+        return ""
+    # A data-availability sentence names what is available before the phrase.
+    head = low.split(phrase)[0]
+    if any(re.search(r"(?<![a-z])" + s + r"s?(?![a-z])", head)
+           for s in _AVAILABILITY_SUBJECTS):
+        return ""
+    return phrase
+
 
 # A comparison with no dimension.
 #
@@ -238,6 +303,7 @@ class SentenceReport:
     dense_paragraphs: list = field(default_factory=list)  # (opening sentence, mean, n)
     anticipatory: list = field(default_factory=list)    # (sentence, phrase)
     undefined_comparisons: list = field(default_factory=list)  # (sentence, verb)
+    unreported: list = field(default_factory=list)      # (sentence, phrase)
     passed: bool = True
     reasons: list = field(default_factory=list)
 
@@ -314,6 +380,8 @@ def score(text, section_name=""):
     defensive = [(s, phrase) for s in sents
                  if (phrase := next((a for a in _ANTICIPATORY if a in s.lower()), ""))]
     vague = [(s, verb) for s in sents if (verb := _undefined_comparison(s))]
+    unreported = [(s, phrase) for s in sents
+                  if (phrase := _unreported_analysis(s))]
     welded = [s for s in sents
               if _SEMICOLON_RE.search(s) or _dash_welds(s)]
 
@@ -325,7 +393,7 @@ def score(text, section_name=""):
         over_hard_max=over_hard, long_sentences=long_ones,
         empty_openers=openers, stacked_hedges=hedged, welded=welded,
         dense_paragraphs=dense, anticipatory=defensive,
-        undefined_comparisons=vague)
+        undefined_comparisons=vague, unreported=unreported)
 
     reasons = []
     if mean > config.SENTENCE_MEAN_WORDS_MAX:
@@ -385,6 +453,12 @@ def score(text, section_name=""):
             f"{len(defensive)} sentence(s) argue with a reviewer who has not spoken "
             f"({', '.join(sorted({p for _, p in defensive})[:3])}). Make the claim "
             f"and let it stand.")
+    if unreported:
+        phrases = ', '.join(sorted({p for _, p in unreported})[:3])
+        reasons.append(
+            f"{len(unreported)} sentence(s) describe an analysis and then decline to "
+            f"report it ({phrases}). Report it or do not mention it. A result whose "
+            f"evidence is a mailing address is not a result the paper can claim.")
     if vague:
         verbs = ', '.join(sorted({v for _, v in vague})[:3])
         reasons.append(
@@ -419,6 +493,8 @@ def worst_offenders(report, count=None):
         scored[sentence] = scored.get(sentence, 0) + 2
     for sentence, _ in report.undefined_comparisons:
         scored[sentence] = scored.get(sentence, 0) + 2
+    for sentence, _ in report.unreported:
+        scored[sentence] = scored.get(sentence, 0) + 3
     for sentence, _, _ in report.dense_paragraphs:
         scored[sentence] = scored.get(sentence, 0) + 2
     ranked = sorted(scored.items(),

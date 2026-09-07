@@ -13,6 +13,7 @@ Every environment variable is prefixed `PAPER_`.
 """
 
 import os
+import shutil
 from pathlib import Path
 
 # --- Roots -------------------------------------------------------------------
@@ -495,7 +496,50 @@ SHIP_PUSH = _env_flag("PAPER_SHIP_PUSH", False)
 #
 # The manuscript is authored in Markdown and built to the format a journal actually
 # accepts. Pandoc does the conversion; a reference .docx supplies the styles.
-PANDOC_BIN = os.environ.get("PAPER_PANDOC_BIN", "pandoc")
+#
+# **Why this is a search and not a string.** Pandoc is very often installed somewhere
+# that is not on PATH — inside a conda distribution, inside an RStudio Server tree,
+# inside a Quarto bundle. On the machine this harness was written on it lives in an
+# Anaconda `bin/` whose `condabin/` is on PATH and whose `bin/` is not. Defaulting to
+# the bare name "pandoc" then means conversion silently does not happen, the run
+# reports success because the Markdown IS the deliverable, and the .docx beside it
+# quietly goes stale. That is the worst of the three outcomes: not a failure, not a
+# conversion, just an old file that still looks like an artifact.
+#
+# So the default resolves: PATH first, then the usual places, and only then the bare
+# name, which at least produces a clear error. An explicit PAPER_PANDOC_BIN always
+# wins and is never second-guessed.
+_PANDOC_CANDIDATES = (
+    "/opt/apps/easybuild/software/Anaconda3/2025.06-0/bin/pandoc",
+    "/usr/lib/rstudio-server/bin/pandoc/pandoc",
+    "/usr/lib/rstudio/bin/pandoc/pandoc",
+    "/opt/quarto/bin/tools/pandoc",
+    "/usr/local/bin/pandoc",
+)
+
+
+def _find_pandoc():
+    explicit = os.environ.get("PAPER_PANDOC_BIN", "").strip()
+    if explicit:
+        return explicit
+    found = shutil.which("pandoc")
+    if found:
+        return found
+    for candidate in _PANDOC_CANDIDATES:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    for root in (os.environ.get("CONDA_PREFIX"), os.environ.get("CONDA_EXE")):
+        if not root:
+            continue
+        base = Path(root)
+        base = base.parent.parent if base.is_file() else base
+        candidate = base / "bin" / "pandoc"
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return "pandoc"
+
+
+PANDOC_BIN = _find_pandoc()
 
 # The output formats built for every finished paper, in order. Markdown is always
 # kept — it is the source — so this is what is built FROM it.
