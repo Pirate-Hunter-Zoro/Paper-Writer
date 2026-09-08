@@ -789,15 +789,50 @@ first and unquestioned, then `PATH`, then the usual install locations, then
 machine this was written on it resolves inside the Anaconda tree, whose `condabin/` is
 on `PATH` and whose `bin/` is not.
 
-**To rebuild the documents of a paper by hand**, after editing the Markdown:
+**To rebuild the documents of a paper by hand**, after editing the Markdown, stand in
+the paper's repository and say:
+
+```bash
+rebuild
+```
+
+That is the loop, and one word is the point of it. `rebuild` is a shell function defined
+in `config/rebuild-alias.sh` and sourced from `~/.bashrc`:
+
+```bash
+if [ -r "$HOME/Paper-Writer/config/rebuild-alias.sh" ]; then
+    . "$HOME/Paper-Writer/config/rebuild-alias.sh"
+fi
+```
+
+The definition lives in the repository rather than in the profile so it stays tracked,
+for the plain reason that a profile is the one file on a machine nobody has a copy of.
+Arguments pass straight through — `rebuild --all`, `rebuild --list`, `rebuild
+some/paper`, `rebuild path/to/one.md`.
+
+**A function rather than an alias, and the default lives in the script.** An alias
+cannot both default to the current directory and pass a path through: `alias
+rebuild='rebuild-docs.sh .'` turns `rebuild some/paper` into two targets and quietly
+rebuilds the whole repository alongside the folder you named. Putting the default in
+the *function* is the same trap one layer up, and it is the one I walked into —
+`"${@:-.}"` supplies nothing when an argument is present, so `rebuild --list` ran with
+no path at all and fell through to the output folder. The default belongs where the
+argument parser is.
+
+The script is fine to call directly, and takes the same arguments:
 
 ```bash
 scripts/rebuild-docs.sh ~/Research-Journey            # or a paper, or one file
 ```
 
-With no path it walks `PAPER_DOCS_DIRS`, colon-separated, so one line in a shell
-profile makes it argument-free. That variable belongs to the script rather than to the
-harness, and is the only one below that `config.py` does not read.
+With no path it walks the repository you are standing in. Failing that it falls back to
+`PAPER_DOCS_DIRS`, colon-separated, and then to `OUT_DIR`. **The current directory
+outranks the environment variable**, which reads oddly and is right: typing a bare
+`rebuild` while standing in a paper repository is an instruction about *that*
+repository, and a variable set once in a profile should not silently redirect it
+somewhere else. `PAPER_DOCS_DIRS` is for the runs made from somewhere else — a cron
+job, a home directory — and is the only variable in the table below that `config.py`
+does not read.
 
 That is the loop the script exists for. Open a `.md`, cut the clause that was bothering
 you, run this, ship the repository. The Markdown is the source and the `.docx` is built
@@ -882,6 +917,11 @@ cd Paper-Writer
 git config core.hooksPath .githooks        # strips assistant attribution from commits
 cp service/paperwriter.env{,.local}        # optional: keep your machine's config apart
 $EDITOR service/paperwriter.env            # set PAPER_SOURCE_DIRS and PAPER_OUT_DIR
+
+# and, for the `rebuild` command, one guarded block in ~/.bashrc:
+#   if [ -r "$HOME/Paper-Writer/config/rebuild-alias.sh" ]; then
+#       . "$HOME/Paper-Writer/config/rebuild-alias.sh"
+#   fi
 ```
 
 **Run one cycle by hand**
@@ -1238,6 +1278,7 @@ paperwriter/
 prompts/     the committed base prompts. Load-bearing non-code artifacts.
 service/     systemd units, the launcher, and the deployed configuration.
 scripts/     what a person runs by hand: rebuild the .docx of a tree, commit and push.
+config/      shell profile fragments, sourced not run. `rebuild` lives here.
 tests/       200+ tests, standard library only, no network.
 ```
 

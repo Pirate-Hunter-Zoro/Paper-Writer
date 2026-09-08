@@ -15,11 +15,12 @@
 #   --format FMT            what to build (default docx; repeatable)
 #   PATH ...                files or directories to walk
 #
-# With no PATH, walks $PAPER_DOCS_DIRS (colon-separated), and failing that the
-# harness's own output folder. So the usual setup is one line in your shell
-# profile:
+# With no PATH it walks the repository you are standing in, so the usual call
+# from inside a paper repo is the bare command. Failing that it falls back to
+# $PAPER_DOCS_DIRS (colon-separated) and then to the harness's own output
+# folder, which is what a run from somewhere else needs.
 #
-#   export PAPER_DOCS_DIRS=$HOME/Research-Journey
+# `config/rebuild-alias.sh` puts this on a shell profile as `rebuild`.
 #
 # **Only the stale are rebuilt.** A .docx younger than its .md is already the
 # document, and rebuilding it would churn a binary file in git for nothing. A
@@ -93,10 +94,49 @@ done
 
 [ ${#FORMATS[@]} -gt 0 ] || FORMATS=(docx)
 
+# --- Which tree a document belongs to ----------------------------------------
+#
+# The enclosing repository, and it has to be the repository rather than
+# whatever path was typed on the command line. Both of the things resolved
+# below -- the styles template, and where pandoc looks for a figure -- are
+# properties of the PAPER, not of the argument: `../results/roc.png` in a
+# section under `parts/manuscript/` was written relative to the paper folder,
+# and it has to resolve the same way whether the run was pointed at the whole
+# repository or at that one file. Deriving either from the argument makes
+# rebuilding one file produce a different document from rebuilding all of them,
+# which is the one thing a rebuild script must never do.
+
+tree_of() {
+  local dir
+  dir="$(cd "$1" 2>/dev/null && pwd)" || return 1
+  while [ "$dir" != "/" ]; do
+    [ -e "$dir/.git" ] && { echo "$dir"; return 0; }
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
+dir_of() {
+  if [ -d "$1" ]; then echo "$1"; else dirname "$1"; fi
+}
+
 # --- Where to walk -----------------------------------------------------------
+#
+# A named path, then the directory you are standing in if it is inside a
+# repository, then PAPER_DOCS_DIRS, then the harness's own output folder.
+#
+# **The current directory outranks the environment variable**, which is the
+# order that reads oddly and is right. Typing a bare `rebuild` while standing in
+# a paper repository is an instruction about THAT repository, and a variable set
+# once in a profile should not silently redirect it to a different one.
+# PAPER_DOCS_DIRS is for the runs made from somewhere else -- a cron job, a home
+# directory -- which is the only time nothing better is known.
 
 if [ ${#TARGETS[@]} -eq 0 ]; then
-  if [ -n "${PAPER_DOCS_DIRS:-}" ]; then
+  here="$(tree_of . || true)"
+  if [ -n "$here" ]; then
+    TARGETS=("$here")
+  elif [ -n "${PAPER_DOCS_DIRS:-}" ]; then
     IFS=: read -r -a TARGETS <<< "$PAPER_DOCS_DIRS"
   else
     out="$(cd "$ROOT" && python3 -c "
@@ -137,32 +177,6 @@ if ! "$PANDOC" --version >/dev/null 2>&1; then
   echo "set PAPER_PANDOC_BIN to the one you want, or put pandoc on PATH."
   exit 1
 fi
-
-# --- Which tree a document belongs to ----------------------------------------
-#
-# The enclosing repository, and it has to be the repository rather than
-# whatever path was typed on the command line. Both of the things resolved
-# below -- the styles template, and where pandoc looks for a figure -- are
-# properties of the PAPER, not of the argument: `../results/roc.png` in a
-# section under `parts/manuscript/` was written relative to the paper folder,
-# and it has to resolve the same way whether the run was pointed at the whole
-# repository or at that one file. Deriving either from the argument makes
-# rebuilding one file produce a different document from rebuilding all of them,
-# which is the one thing a rebuild script must never do.
-
-tree_of() {
-  local dir
-  dir="$(cd "$1" 2>/dev/null && pwd)" || return 1
-  while [ "$dir" != "/" ]; do
-    [ -e "$dir/.git" ] && { echo "$dir"; return 0; }
-    dir="$(dirname "$dir")"
-  done
-  return 1
-}
-
-dir_of() {
-  if [ -d "$1" ]; then echo "$1"; else dirname "$1"; fi
-}
 
 # --- The styles template -----------------------------------------------------
 #
