@@ -77,7 +77,7 @@ SKIP_NAMES=(
 )
 
 # Directories that hold no paper, whatever is in them.
-SKIP_DIRS=(.git node_modules .claude .venv __pycache__ live _inbox state tooling)
+SKIP_DIRS=(.git node_modules .claude .venv __pycache__ live _inbox state)
 
 FORCE=0
 DRY=0

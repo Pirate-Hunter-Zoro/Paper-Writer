@@ -2465,9 +2465,8 @@ class LostFigureTests(unittest.TestCase):
 class FigureLayoutTests(unittest.TestCase):
     """The two ways a figure that is present still ruins the page.
 
-    Ported from `Research-Journey/tooling/build_docx.py`, which is where these were
-    learned and which they replace. Its own version was blind to a captioned figure,
-    because its pattern required the alt text to be empty."""
+    Both were learned from a real manuscript whose panels stopped lining up with the
+    labels above them, and neither is visible in the Markdown."""
 
     WIDE = 6.0                                  # the JMIR template's printable width
 
@@ -2477,7 +2476,8 @@ class FigureLayoutTests(unittest.TestCase):
         self.assertIn("no width=", problems[0])
 
     def test_a_captioned_figure_with_no_width_is_caught_too(self):
-        """The case the tool this replaced could not see."""
+        """A caption changes nothing: an unsized image is a full-page import either
+        way, so the pattern must not require the alt text to be empty."""
         self.assertEqual(len(figures.check("![Figure 1](a.png)", "x.md", self.WIDE)), 1)
 
     def test_a_single_figure_at_the_printable_width_fits(self):

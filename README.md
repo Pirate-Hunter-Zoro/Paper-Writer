@@ -925,12 +925,9 @@ Both warn and neither blocks. They are properties of a document somebody wrote, 
 today's conversion, and a figure that has always been too wide is not a reason to refuse
 to rebuild the paper. `rebuild-docs.sh --strict` is the run to make before submitting.
 
-This gate is a port. It came from `Research-Journey/tooling/build_docx.py`, which is
-where the failures were learned and which it replaced — everything else that tool did,
-`rebuild-docs.sh` already did better, and its own missing-file check resolved paths from
-the document's own directory and so reported 56 false alarms on a tree with none. The
-port catches one thing the original could not: a captioned figure with no width, which
-its pattern was blind to because it required the alt text to be empty.
+A caption does not exempt a figure. `![Figure 1](roc.png)` with no width is the same
+full-page import as `![](roc.png)` with no width, so the pattern matches an image
+whatever its alt text says.
 
 **Prerequisites**
 
