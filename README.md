@@ -844,6 +844,29 @@ the part converts the way the whole does.
 
 A bare `pandoc x.md -o x.docx` has the same failure and no caller to fix it.
 
+**The pipeline's own builds needed a knob, not a search.** The harness converts inside
+the state tree, and `../results/roc.png` resolves to nothing from there. The fix cannot
+be "put the analysis tree on the resource path", because the `..` is doing the work:
+what pandoc needs is a directory whose *sibling* is the results folder, not the results
+folder itself. Only the author knows which directory that is, so `PAPER_BUILD_RESOURCE_DIRS`
+names it and every conversion picks it up:
+
+```
+PAPER_BUILD_RESOURCE_DIRS=$HOME/Research-Journey/paper1-trd-prediction
+```
+
+Empty is the right setting for a paper this harness wrote on its own. It has no way to
+emit an image reference — "figure" in every one of its prompts means a number, and no
+stage writes Markdown image syntax. This is for the manuscript a person has since put
+figures into, which is every manuscript, eventually.
+
+**And the build is checked against its own output.** A resolved path is not something
+to take on trust, because the failure mode is a warning and a zero exit status.
+`figures_lost` opens the built `.docx`, counts the images actually in it, subtracts any
+the reference template brought along, and compares that to the distinct images the
+Markdown asks for. A document that came up short is named in the log with its count.
+`rebuild-docs.sh` fails the run on it, because you were about to ship it.
+
 **Prerequisites**
 
 - Python 3.9 or newer.
@@ -1147,6 +1170,7 @@ is overridable with a `PAPER_`-prefixed environment variable. The ones worth kno
 | `PAPER_EDIT_MAX_PASSES` | `3` | Editorial passes before the loop asks whether it is still improving. |
 | `PAPER_BUILD_FORMATS` | `docx` | What pandoc is asked for, for every document. Markdown is always kept. |
 | `PAPER_PANDOC_BIN` | searched | The pandoc to use. Unset means: `PATH`, then the usual conda/RStudio/Quarto locations, then the bare name. |
+| `PAPER_BUILD_RESOURCE_DIRS` | none | Extra directories pandoc looks in for a figure. Set it to the folder the delivered paper will sit in, not to the results tree — see below. |
 | `PAPER_POINTS_MAX` | `3` | How many points a paper may be about. Four is the count at which the author has stopped choosing. |
 | `PAPER_UNLADDERED_WORDS_MAX` | `0.30` | Share of planned words allowed in sections that serve no point. |
 | `PAPER_SWEEP_LOG_FINDINGS` | `10` | Blocking findings the final sweep prints to the log. The full list always reaches `report.md`. |

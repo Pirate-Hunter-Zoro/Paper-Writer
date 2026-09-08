@@ -38,8 +38,14 @@
 # section's `../results/*.png` resolve; a bare `pandoc x.md -o x.docx` drops
 # every figure and still exits 0.
 #
-# Exits 0 when every document that needed building was built. Any other exit
-# means at least one did not, and pandoc's reason is on stdout.
+# **A figure that vanished is a failure here.** Pandoc reports an image it could
+# not find as a warning and exits 0, so a document converts successfully and
+# arrives with every figure missing. Each built .docx is opened and its images
+# counted against the ones its Markdown asks for, and a document that came up
+# short is named and fails the run -- you are about to ship it.
+#
+# Exits 0 when every document that needed building was built, with its figures.
+# Any other exit means at least one was not, and the reason is on stdout.
 # ---------------------------------------------------------------------------
 set -uo pipefail
 
@@ -79,7 +85,7 @@ while [ $# -gt 0 ]; do
     --format)
       [ $# -ge 2 ] || { echo "--format needs a format"; exit 2; }
       FORMATS+=("$2"); shift 2 ;;
-    -h|--help)  sed -n '3,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  sed -n '3,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)         echo "unknown option: $1"; exit 2 ;;
     *)          TARGETS+=("$1"); shift ;;
   esac
@@ -281,10 +287,11 @@ refdoc = os.environ.get("PW_REFDOC") or None
 stop = Path(os.environ["PW_ROOT"]).resolve()
 
 failed = 0
+holed = 0
 for raw in sys.argv[1:]:
     source = Path(raw)
     # Figures are looked for beside the document, then in each directory above
-    # it up to the tree being walked. A split section carries the whole
+    # it up to the top of the repository. A split section carries the whole
     # document's figure paths, and those were written relative to the paper.
     here = source.parent.resolve()
     roots = []
@@ -297,13 +304,20 @@ for raw in sys.argv[1:]:
         while walk != stop:
             walk = walk.parent
             roots.append(walk)
-    if building.convert_one(source, fmt, reference_docx=refdoc,
-                            resource_roots=tuple(roots), log_fn=print) is None:
+    built = building.convert_one(source, fmt, reference_docx=refdoc,
+                                 resource_roots=tuple(roots), log_fn=print)
+    if built is None:
         failed += 1
+    elif building.figures_lost(source, built, reference_docx=refdoc):
+        # convert_one has already named the document and the count. This only
+        # decides the exit status, because you are about to ship the thing.
+        holed += 1
 
 if failed:
     print(f"{failed} document(s) did not convert")
-sys.exit(1 if failed else 0)
+if holed:
+    print(f"{holed} document(s) built without all of their figures")
+sys.exit(1 if failed or holed else 0)
 PY
     [ $? -eq 0 ] || status=1
     echo "$base_dir: ${#build[@]} built, $fresh already current," \

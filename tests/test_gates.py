@@ -7,6 +7,8 @@ them is cheap enough to test exhaustively.
 """
 
 import os                                                          # noqa: E402
+import tempfile                                                    # noqa: E402
+import zipfile                                                     # noqa: E402
 import support                                                      # noqa: F401
 from unittest import mock                                           # noqa: E402
 import unittest                                                     # noqa: E402
@@ -2394,6 +2396,89 @@ class ResourcePathTests(unittest.TestCase):
     def test_naming_no_roots_is_the_old_behaviour(self):
         self.assertEqual(building._resource_path(Path("/paper/manuscript.md"), ()),
                          "/paper")
+
+
+class LostFigureTests(unittest.TestCase):
+    """Pandoc reports a figure it could not find as a warning and exits 0.
+
+    So a document converts successfully, is written, is a plausible size, and is
+    missing its evidence. The check counts what is in the built file rather than
+    believing what the tool said about it."""
+
+    def _docx(self, media, extra=("word/document.xml",)):
+        """A .docx carrying `media` images. Enough of one for a count."""
+        path = Path(tempfile.mkdtemp()) / "built.docx"
+        with zipfile.ZipFile(path, "w") as archive:
+            for name in extra:
+                archive.writestr(name, "<x/>")
+            for i in range(media):
+                archive.writestr(f"word/media/image{i}.png", b"x")
+        return path
+
+    def _md(self, text):
+        path = Path(tempfile.mkdtemp()) / "doc.md"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_every_figure_arriving_is_no_loss(self):
+        source = self._md("![](a.png)\n\n![](b.png)\n")
+        self.assertEqual(building.figures_lost(source, self._docx(2)), 0)
+
+    def test_a_figure_that_did_not_arrive_is_counted(self):
+        """The real failure: twenty referenced, none embedded, exit status 0."""
+        source = self._md("\n".join(f"![](../results/f{i}.png)" for i in range(20)))
+        self.assertEqual(building.figures_lost(source, self._docx(0)), 20)
+
+    def test_the_same_file_twice_is_one_figure(self):
+        """Pandoc embeds one copy, so counting references would read as a loss."""
+        source = self._md("![](a.png)\n\n![](a.png)\n")
+        self.assertEqual(building.figures_lost(source, self._docx(1)), 0)
+
+    def test_a_remote_image_is_not_the_resource_paths_problem(self):
+        source = self._md("![](https://example.org/a.png)\n\n![](b.png)\n")
+        self.assertEqual(building._image_targets(source.read_text()), ["b.png"])
+
+    def test_a_template_carrying_a_logo_cannot_cover_for_a_lost_figure(self):
+        """Three logos in the reference doc would otherwise hide three lost
+        figures, and the document would look complete at exactly the wrong count."""
+        source = self._md("\n".join(f"![](f{i}.png)" for i in range(3)))
+        template = self._docx(3)
+        self.assertEqual(building.figures_lost(source, self._docx(3),
+                                               reference_docx=template), 3)
+
+    def test_a_document_with_no_figures_has_nothing_to_check(self):
+        self.assertIsNone(building.figures_lost(self._md("# Methods\n"),
+                                                self._docx(0)))
+
+    def test_a_format_that_cannot_be_opened_is_not_guessed_at(self):
+        source = self._md("![](a.png)\n")
+        self.assertIsNone(building.figures_lost(source, Path("/tmp/out.pdf")))
+
+    def test_an_image_target_in_angle_brackets_is_read(self):
+        self.assertEqual(building._image_targets("![](<a file.png>)"), ["a file.png"])
+
+    def test_pandoc_attributes_are_not_part_of_the_target(self):
+        self.assertEqual(building._image_targets("![](a.png){width=6in}"), ["a.png"])
+
+
+class BuildResourceDirTests(unittest.TestCase):
+    """The knob that exists because the `..` is doing the work.
+
+    A manuscript's `![](../results/roc.png)` needs a directory whose SIBLING is the
+    results folder. Naming the results folder itself does not help, which is why this
+    is a setting and not a search."""
+
+    def test_nothing_configured_is_an_empty_tuple_not_a_path_to_nowhere(self):
+        with mock.patch.dict(os.environ, {"PAPER_BUILD_RESOURCE_DIRS": ""}):
+            self.assertEqual(
+                tuple(Path(d).expanduser() for d in "".split(os.pathsep) if d.strip()),
+                ())
+        self.assertEqual(config.BUILD_RESOURCE_DIRS, ())
+
+    def test_the_configured_directories_land_after_the_documents_own(self):
+        path = building._resource_path(Path("/paper/manuscript.md"),
+                                       (Path("/journey/paper1"),))
+        self.assertEqual(path.split(os.pathsep), ["/paper", "/journey/paper1"])
 
 
 class ConfigBandTests(unittest.TestCase):

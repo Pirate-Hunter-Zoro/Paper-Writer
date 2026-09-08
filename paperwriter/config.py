@@ -754,6 +754,29 @@ REFERENCE_DOCX = Path(_REFDOC_RAW).expanduser() if _REFDOC_RAW else None
 # delivered.
 BUILD_REQUIRED = _env_flag("PAPER_BUILD_REQUIRED", False)
 
+# Extra directories on pandoc's resource path, for every conversion. Colon-separated.
+#
+# **What this is for, and why it is not PAPER_SOURCE_DIRS.** A manuscript refers to its
+# figures the way the FINISHED paper will: `![](../results/roc.png)`, relative to the
+# folder the document will live in. The harness converts in the state tree, where that
+# path resolves to nothing, so pandoc drops the figure — and a dropped figure is a
+# warning on stderr and a zero exit status, which is to say silence.
+#
+# The fix cannot be "add the analysis tree", because the `..` is doing the work: what
+# pandoc needs is a directory whose SIBLING is the results folder, not the results
+# folder itself. Only the author knows which directory that is, so this is a knob and
+# not a search. Set it to the folder the delivered paper will sit in:
+#
+#   PAPER_BUILD_RESOURCE_DIRS=$HOME/Research-Journey/paper1-trd-prediction
+#
+# Leaving it empty is correct for a paper with no figures, which is every paper this
+# harness writes on its own — it has no way to emit an image reference, and "figure" in
+# every one of its prompts means a number. This exists for the manuscript a person has
+# since put figures into, which is every manuscript, eventually.
+_BUILD_RESOURCE_RAW = os.environ.get("PAPER_BUILD_RESOURCE_DIRS", "")
+BUILD_RESOURCE_DIRS = tuple(
+    Path(d).expanduser() for d in _BUILD_RESOURCE_RAW.split(os.pathsep) if d.strip())
+
 # --- Stalling: what happens instead of failing -------------------------------
 #
 # Nothing in this harness has a terminal failure state. A unit that cannot advance

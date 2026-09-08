@@ -17,6 +17,12 @@ and the author can convert a Markdown file themselves in one command.
 Set `PAPER_BUILD_REQUIRED=1` to invert that, for a workflow where the .docx is the
 only artifact anyone will look at.
 
+**Conversion is verified against its own output.** Pandoc reports a figure it could
+not find as a warning and exits 0, so a document can convert successfully and arrive
+with every figure missing. `figures_lost` opens the built .docx and counts what is
+actually in it, because the tool's account of its own work is the one thing this
+repository never accepts.
+
 **The final sweep runs here**, between assembly and conversion, and it is
 `stages.sweep`. Every gate, every section, every document the paper produced — on the
 ASSEMBLED text rather than on the staged drafts, because assembly and the hand edits
@@ -31,6 +37,9 @@ on the journal record of every paper this harness has already built.
 import os
 import re
 import subprocess
+import zipfile
+
+from pathlib import Path
 
 from .. import config, paths
 from ..gates import prose
@@ -168,7 +177,9 @@ def convert(project_rec, paper_num, title, fmt, reference_docx=None, log_fn=None
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     command = [config.PANDOC_BIN, str(source), "-o", str(out_path),
-               "--from", "markdown", "--standalone"]
+               "--from", "markdown", "--standalone",
+               "--resource-path", _resource_path(source,
+                                                 config.BUILD_RESOURCE_DIRS)]
     reference = reference_docx or config.REFERENCE_DOCX
     if fmt == "docx" and reference:
         command += ["--reference-doc", str(reference)]
@@ -189,7 +200,92 @@ def convert(project_rec, paper_num, title, fmt, reference_docx=None, log_fn=None
     if log_fn:
         log_fn(f"paper {paper_num}: built {out_path.name} "
                f"({out_path.stat().st_size:,} bytes)")
+    _report_lost_figures(source, out_path, reference, log_fn,
+                         prefix=f"paper {paper_num}: ")
     return out_path
+
+
+# `![alt](target)`, with the target either bare or in angle brackets, and whatever
+# pandoc attributes or title follow it. Reference-style images are not used anywhere in
+# this project's documents and are deliberately not matched: a check that guesses is a
+# check nobody can act on.
+_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)")
+
+_REMOTE_RE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//|^data:", re.IGNORECASE)
+
+
+def _image_targets(text):
+    """Every distinct local image a document refers to, in order of first appearance.
+
+    Distinct, because pandoc embeds one copy of a file referenced twice and counting
+    the references would then read as a loss. Local, because a remote image is
+    pandoc's problem and not the resource path's."""
+    seen, out = set(), []
+    for raw in _IMAGE_RE.findall(text):
+        target = raw.strip("<>").strip()
+        if not target or _REMOTE_RE.match(target) or target in seen:
+            continue
+        seen.add(target)
+        out.append(target)
+    return out
+
+
+def _media_count(docx):
+    """How many image files a .docx actually carries. -1 if it cannot be read."""
+    try:
+        with zipfile.ZipFile(docx) as archive:
+            return sum(1 for name in archive.namelist()
+                       if name.startswith("word/media/"))
+    except (OSError, zipfile.BadZipFile):
+        return -1
+
+
+def figures_lost(source, built, reference_docx=None):
+    """How many of a document's figures did not reach the built file.
+
+    Returns the count, or None when there is nothing to check or no way to check it.
+
+    **Why this is counted from the result rather than read off pandoc's stderr.** A
+    figure whose path does not resolve is a warning and a zero exit status. The build
+    succeeds, the document is written, the file is a plausible size, and twenty figures
+    are simply not in it — and nothing downstream can tell that document from a section
+    that never had one. Trusting the tool's own account of its work is the failure this
+    whole repository is arranged against, so the check opens the .docx and counts.
+
+    The reference document's own images are subtracted, because a template carrying a
+    journal logo would otherwise cover for exactly as many lost figures as it has."""
+    if built is None or built.suffix.lower() != ".docx":
+        return None
+    try:
+        referenced = len(_image_targets(source.read_text(encoding="utf-8")))
+    except OSError:
+        return None
+    if not referenced:
+        return None
+    embedded = _media_count(built)
+    if embedded < 0:
+        return None
+    if reference_docx:
+        template = _media_count(Path(reference_docx))
+        if template > 0:
+            embedded -= template
+    return max(0, referenced - embedded)
+
+
+def _report_lost_figures(source, built, reference, log_fn, prefix=""):
+    """Say it, loudly, when figures did not make it into the built document.
+
+    This is the whole point of the check. Conversion is a convenience and does not
+    block delivery, so the alternative to a loud line here is a .docx that looks
+    finished and is missing its evidence."""
+    lost = figures_lost(source, built, reference_docx=reference)
+    if not lost or not log_fn:
+        return lost
+    referenced = len(_image_targets(source.read_text(encoding="utf-8")))
+    log_fn(f"{prefix}{lost} of {referenced} figure(s) in {source.name} did not reach "
+           f"{built.name}. Their paths are relative to a directory pandoc was not "
+           f"given: name it in PAPER_BUILD_RESOURCE_DIRS.")
+    return lost
 
 
 def _resource_path(source, extra_roots):
@@ -219,15 +315,20 @@ def convert_one(source, fmt, reference_docx=None, resource_roots=(), log_fn=None
 
     Returns the path, or None on any failure that is not the document's fault. The
     Markdown is the deliverable and this is a convenience, so a missing pandoc must
-    never be the reason a finished paper is not delivered."""
+    never be the reason a finished paper is not delivered.
+
+    A document that converted but lost figures still returns its path, and says so.
+    The .docx is worth delivering with a hole in it and a line naming the hole; it is
+    not worth delivering silently."""
     if not source.exists():
         return None
     out_path = paths.built_document_path(source, fmt)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    roots = tuple(resource_roots) + config.BUILD_RESOURCE_DIRS
     command = [config.PANDOC_BIN, str(source), "-o", str(out_path),
                "--from", "markdown", "--standalone",
-               "--resource-path", _resource_path(source, resource_roots)]
+               "--resource-path", _resource_path(source, roots)]
     reference = reference_docx or config.REFERENCE_DOCX
     if fmt == "docx" and reference:
         command += ["--reference-doc", str(reference)]
@@ -246,6 +347,7 @@ def convert_one(source, fmt, reference_docx=None, resource_roots=(), log_fn=None
         return None
     if log_fn:
         log_fn(f"built {out_path.name} ({out_path.stat().st_size:,} bytes)")
+    _report_lost_figures(source, out_path, reference, log_fn)
     return out_path
 
 
