@@ -16,6 +16,7 @@ import unittest                                                     # noqa: E402
 from pathlib import Path                                          # noqa: E402
 from paperwriter import config                                    # noqa: E402
 from paperwriter.stages import building                           # noqa: E402
+from paperwriter.gates import figures                              # noqa: E402
 from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder, venue,
                                procedures,
                                repetition,  # noqa: E402
@@ -2459,6 +2460,89 @@ class LostFigureTests(unittest.TestCase):
 
     def test_pandoc_attributes_are_not_part_of_the_target(self):
         self.assertEqual(building._image_targets("![](a.png){width=6in}"), ["a.png"])
+
+
+class FigureLayoutTests(unittest.TestCase):
+    """The two ways a figure that is present still ruins the page.
+
+    Ported from `Research-Journey/tooling/build_docx.py`, which is where these were
+    learned and which they replace. Its own version was blind to a captioned figure,
+    because its pattern required the alt text to be empty."""
+
+    WIDE = 6.0                                  # the JMIR template's printable width
+
+    def test_a_figure_with_no_width_is_imported_at_full_page_width(self):
+        problems = figures.check("![](a.png)", "x.md", self.WIDE)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("no width=", problems[0])
+
+    def test_a_captioned_figure_with_no_width_is_caught_too(self):
+        """The case the tool this replaced could not see."""
+        self.assertEqual(len(figures.check("![Figure 1](a.png)", "x.md", self.WIDE)), 1)
+
+    def test_a_single_figure_at_the_printable_width_fits(self):
+        self.assertEqual(figures.check("![](a.png){width=6in}", "x.md", self.WIDE), [])
+
+    def test_a_single_figure_wider_than_the_page_does_not(self):
+        problems = figures.check("![](a.png){width=6.5in}", "x.md", self.WIDE)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("6.50in wide but only 6.00in fits", problems[0])
+
+    def test_two_panels_on_one_line_pay_for_the_cell_padding(self):
+        """5.68in of budget, not 6.00: Word spends 0.08in a side on cell margins,
+        and a row that overflows is shrunk rather than refused — which is how the
+        panels stop lining up with the labels above them."""
+        self.assertEqual(figures.check("![](a.png){width=2.8in} ![](b.png){width=2.8in}",
+                                       "x.md", self.WIDE), [])
+        problems = figures.check("![](a.png){width=3.2in} ![](b.png){width=3.2in}",
+                                 "x.md", self.WIDE)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("2 panel(s)", problems[0])
+
+    def test_an_unsized_panel_is_reported_once_and_the_row_sum_is_not_guessed(self):
+        """The sum of the panels that DO declare a width is not the row's width, so
+        reporting it as one would be a second, invented finding."""
+        problems = figures.check("![](a.png){width=2.8in} ![](b.png)", "x.md", self.WIDE)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("no width=", problems[0])
+
+    def test_a_line_on_its_own_is_a_row_and_two_lines_are_not(self):
+        """The two-column table puts side-by-side panels on one line. Stacked figures
+        are separate rows and each gets the full width."""
+        self.assertEqual(figures.check("![](a.png){width=5in}\n![](b.png){width=5in}",
+                                       "x.md", self.WIDE), [])
+
+    def test_prose_with_no_figures_is_not_a_finding(self):
+        self.assertEqual(figures.check("Below the threshold of 10.", "x.md", self.WIDE),
+                         [])
+
+    def test_the_line_number_is_the_line_a_person_has_to_open(self):
+        problems = figures.check("a\n\nb\n![](x.png)", "doc.md", self.WIDE)
+        self.assertEqual(len(problems), 1)
+        self.assertTrue(problems[0].startswith("doc.md:4:"))
+
+
+class TextWidthTests(unittest.TestCase):
+    """The page the figures have to fit on, measured from the venue's own template."""
+
+    def test_no_template_is_us_letter_at_inch_and_a_quarter_margins(self):
+        self.assertEqual(building.text_width_in(None), 6.0)
+
+    def test_a_template_that_is_not_a_docx_falls_back_rather_than_raising(self):
+        """Declining to check is worse than checking against a conventional page."""
+        junk = Path(tempfile.mkdtemp()) / "not.docx"
+        junk.write_bytes(b"this is not a zip")
+        self.assertEqual(building.text_width_in(junk), 6.0)
+
+    def test_the_page_is_measured_in_twips_and_returned_in_inches(self):
+        """12240 twips wide, 1800 a side: 8.5in less 2.5in of margin."""
+        path = Path(tempfile.mkdtemp()) / "ref.docx"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("word/document.xml",
+                             '<w:body><w:sectPr><w:pgSz w:w="12240" w:h="15840"/>'
+                             '<w:pgMar w:top="1440" w:right="1800" w:bottom="1440" '
+                             'w:left="1800"/></w:sectPr></w:body>')
+        self.assertEqual(building.text_width_in(path), 6.0)
 
 
 class BuildResourceDirTests(unittest.TestCase):

@@ -11,6 +11,7 @@
 #
 #   --all, -a               rebuild everything, not just what changed
 #   --list, -n              say what would be built, build nothing
+#   --strict, -s            fail the run on a figure-layout problem too
 #   --reference-doc FILE    the .docx supplying the journal's styles
 #   --format FMT            what to build (default docx; repeatable)
 #   PATH ...                files or directories to walk
@@ -38,6 +39,14 @@
 # produced. That includes the resource path, which is what lets a split
 # section's `../results/*.png` resolve; a bare `pandoc x.md -o x.docx` drops
 # every figure and still exits 0.
+#
+# **Figure layout is checked, and warns.** A figure with no `{width=...in}` is
+# imported by pandoc at full page width and pushes the text off its own page; a
+# row of panels wider than the printable width is silently shrunk by Word until
+# the panels stop lining up with their labels. Both are named with their line
+# number. They warn rather than fail, because a figure that has always been too
+# wide is not a reason to refuse to rebuild the paper today -- pass --strict on
+# the run you make before submitting, and they fail it.
 #
 # **A figure that vanished is a failure here.** Pandoc reports an image it could
 # not find as a warning and exits 0, so a document converts successfully and
@@ -72,6 +81,7 @@ SKIP_DIRS=(.git node_modules .claude .venv __pycache__ live _inbox state tooling
 
 FORCE=0
 DRY=0
+STRICT=0
 REFDOC="${PAPER_REFERENCE_DOCX:-}"
 FORMATS=()
 TARGETS=()
@@ -80,13 +90,14 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -a|--all)   FORCE=1; shift ;;
     -n|--list)  DRY=1; shift ;;
+    -s|--strict) STRICT=1; shift ;;
     --reference-doc)
       [ $# -ge 2 ] || { echo "--reference-doc needs a file"; exit 2; }
       REFDOC="$2"; shift 2 ;;
     --format)
       [ $# -ge 2 ] || { echo "--format needs a format"; exit 2; }
       FORMATS+=("$2"); shift 2 ;;
-    -h|--help)  sed -n '3,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  sed -n '3,57p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)         echo "unknown option: $1"; exit 2 ;;
     *)          TARGETS+=("$1"); shift ;;
   esac
@@ -288,6 +299,7 @@ for target in "${TARGETS[@]}"; do
     # One interpreter for the whole batch, and the harness's own converter
     # inside it, so a hand rebuild and a pipeline build are the same call.
     PW_HARNESS="$ROOT" PW_ROOT="$tree" PW_FORMAT="$fmt" PW_REFDOC="$REFDOC" \
+    PW_STRICT="$STRICT" \
       python3 - "${build[@]}" <<'PY'
 import os
 import sys
@@ -300,8 +312,10 @@ fmt = os.environ["PW_FORMAT"]
 refdoc = os.environ.get("PW_REFDOC") or None
 stop = Path(os.environ["PW_ROOT"]).resolve()
 
+strict = os.environ.get("PW_STRICT") == "1"
 failed = 0
 holed = 0
+skewed = 0
 for raw in sys.argv[1:]:
     source = Path(raw)
     # Figures are looked for beside the document, then in each directory above
@@ -322,16 +336,22 @@ for raw in sys.argv[1:]:
                                  resource_roots=tuple(roots), log_fn=print)
     if built is None:
         failed += 1
-    elif building.figures_lost(source, built, reference_docx=refdoc):
-        # convert_one has already named the document and the count. This only
-        # decides the exit status, because you are about to ship the thing.
+        continue
+    # convert_one has already named both of these and their counts. Re-asking here
+    # only decides the exit status, because you are about to ship the thing.
+    if building.figures_lost(source, built, reference_docx=refdoc):
         holed += 1
+    if building.figure_layout_problems(source, reference_docx=refdoc):
+        skewed += 1
 
 if failed:
     print(f"{failed} document(s) did not convert")
 if holed:
     print(f"{holed} document(s) built without all of their figures")
-sys.exit(1 if failed or holed else 0)
+if skewed:
+    print(f"{skewed} document(s) have a figure that will not sit on the page"
+          + ("" if strict else " (--strict fails the run on these)"))
+sys.exit(1 if failed or holed or (skewed and strict) else 0)
 PY
     [ $? -eq 0 ] || status=1
     echo "$base_dir: ${#build[@]} built, $fresh already current," \

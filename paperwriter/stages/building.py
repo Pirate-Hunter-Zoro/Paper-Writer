@@ -42,6 +42,7 @@ import zipfile
 from pathlib import Path
 
 from .. import config, paths
+from ..gates import figures as figure_gate
 from ..gates import prose
 from ..infra import storage
 from ..memory import store
@@ -202,6 +203,7 @@ def convert(project_rec, paper_num, title, fmt, reference_docx=None, log_fn=None
                f"({out_path.stat().st_size:,} bytes)")
     _report_lost_figures(source, out_path, reference, log_fn,
                          prefix=f"paper {paper_num}: ")
+    _report_figure_layout(source, reference, log_fn, prefix=f"paper {paper_num}: ")
     return out_path
 
 
@@ -240,6 +242,28 @@ def _media_count(docx):
         return -1
 
 
+def text_width_in(reference_docx):
+    """The printable width of the venue's page, in inches: page width less margins.
+
+    Pandoc honours absolute image widths in a .docx and silently ignores percentages,
+    so the figure widths in the Markdown are in inches and have to fit inside this
+    number. Read from the reference document because it is the thing that decides the
+    page, and falling back to US Letter with 1.25in margins when it cannot be read —
+    a wrong answer, but a conventional one, and better than declining to check."""
+    if not reference_docx:
+        return figure_gate.DEFAULT_TEXT_WIDTH_IN
+    try:
+        with zipfile.ZipFile(Path(reference_docx)) as archive:
+            xml = archive.read("word/document.xml").decode("utf-8", "ignore")
+        width = int(re.search(r'<w:pgSz\b[^>]*\bw:w="(\d+)"', xml).group(1))
+        margins = re.search(r"<w:pgMar\b[^>]*>", xml).group(0)
+        left = int(re.search(r'w:left="(\d+)"', margins).group(1))
+        right = int(re.search(r'w:right="(\d+)"', margins).group(1))
+        return (width - left - right) / 1440.0          # twips to inches
+    except (OSError, AttributeError, ValueError, zipfile.BadZipFile):
+        return figure_gate.DEFAULT_TEXT_WIDTH_IN
+
+
 def figures_lost(source, built, reference_docx=None):
     """How many of a document's figures did not reach the built file.
 
@@ -270,6 +294,28 @@ def figures_lost(source, built, reference_docx=None):
         if template > 0:
             embedded -= template
     return max(0, referenced - embedded)
+
+
+def figure_layout_problems(source, reference_docx=None):
+    """Every way this document's figures will land on the page wrong.
+
+    Reported rather than blocking, because these are properties of the document a
+    person wrote and not of this conversion: a figure that has always been too wide
+    does not become a reason to refuse to rebuild the paper today. A caller that
+    wants it to block — a run made just before submitting — asks for that itself."""
+    try:
+        text = source.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return figure_gate.check(text, source.name, text_width_in(reference_docx))
+
+
+def _report_figure_layout(source, reference, log_fn, prefix=""):
+    problems = figure_layout_problems(source, reference)
+    if log_fn:
+        for problem in problems:
+            log_fn(f"{prefix}{problem}")
+    return problems
 
 
 def _report_lost_figures(source, built, reference, log_fn, prefix=""):
@@ -348,6 +394,7 @@ def convert_one(source, fmt, reference_docx=None, resource_roots=(), log_fn=None
     if log_fn:
         log_fn(f"built {out_path.name} ({out_path.stat().st_size:,} bytes)")
     _report_lost_figures(source, out_path, reference, log_fn)
+    _report_figure_layout(source, reference, log_fn)
     return out_path
 
 

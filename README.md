@@ -807,8 +807,8 @@ fi
 
 The definition lives in the repository rather than in the profile so it stays tracked,
 for the plain reason that a profile is the one file on a machine nobody has a copy of.
-Arguments pass straight through — `rebuild --all`, `rebuild --list`, `rebuild
-some/paper`, `rebuild path/to/one.md`.
+Arguments pass straight through — `rebuild --all`, `rebuild --list`, `rebuild --strict`,
+`rebuild some/paper`, `rebuild path/to/one.md`.
 
 **A function rather than an alias, and the default lives in the script.** An alias
 cannot both default to the current directory and pass a path through: `alias
@@ -901,6 +901,36 @@ to take on trust, because the failure mode is a warning and a zero exit status.
 the reference template brought along, and compares that to the distinct images the
 Markdown asks for. A document that came up short is named in the log with its count.
 `rebuild-docs.sh` fails the run on it, because you were about to ship it.
+
+It found two on its first full pass over a real repository — two reserve documents that
+had been committed carrying none of their nine figures between them, built at some point
+by something that gave pandoc neither a resource path nor a template. Nothing had ever
+said so.
+
+### The figure that fits on the page
+
+A figure can resolve, embed, and still ruin the page, and `gates/figures.py` measures the
+two ways. A figure with no `{width=...in}` is imported at full page width, because pandoc
+honours absolute widths in a `.docx` and silently ignores percentages. And a row of panels
+wider than the printable column is not refused by Word — it is shrunk, until the panels
+stop lining up with the labels above them, which is the failure the two-column table
+layout existed to prevent.
+
+The printable column is measured from the venue's own reference document rather than
+assumed: page width less margins, in twips, from its `document.xml`. US Letter at 1.25in
+margins is the fallback when that cannot be read, because checking against a conventional
+page beats declining to check.
+
+Both warn and neither blocks. They are properties of a document somebody wrote, not of
+today's conversion, and a figure that has always been too wide is not a reason to refuse
+to rebuild the paper. `rebuild-docs.sh --strict` is the run to make before submitting.
+
+This gate is a port. It came from `Research-Journey/tooling/build_docx.py`, which is
+where the failures were learned and which it replaced — everything else that tool did,
+`rebuild-docs.sh` already did better, and its own missing-file check resolved paths from
+the document's own directory and so reported 56 false alarms on a tree with none. The
+port catches one thing the original could not: a captioned figure with no width, which
+its pattern was blind to because it required the alt text to be empty.
 
 **Prerequisites**
 
@@ -1269,7 +1299,8 @@ paperwriter/
              papers.
   memory/    the three layers, their schemas, the merge gatekeeper, and the brief.
   gates/     the deterministic validators. Pure arithmetic and set logic.
-             `ladder.py` is the only one that can refuse correct work.
+             `ladder.py` is the only one that can refuse correct work;
+             `figures.py` is the only one about the page rather than the prose.
   models/    THE ONLY place an external model is reached.
   stages/    one module per stage. Propose, validate, apply atomically.
              `sweep.py` is the only one whose scope is the whole delivered packet.
