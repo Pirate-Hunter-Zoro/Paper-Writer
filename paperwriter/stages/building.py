@@ -28,6 +28,7 @@ except for one uncited reference should reach its author rather than sit in a qu
 on the journal record of every paper this harness has already built.
 """
 
+import os
 import re
 import subprocess
 
@@ -191,7 +192,29 @@ def convert(project_rec, paper_num, title, fmt, reference_docx=None, log_fn=None
     return out_path
 
 
-def convert_one(source, fmt, reference_docx=None, log_fn=None):
+def _resource_path(source, extra_roots):
+    """Where pandoc looks for a figure, nearest first: the document's own directory,
+    then whatever roots the caller added.
+
+    The second half exists because of the split parts. `parts/manuscript/05-results.md`
+    inherits `![](../results/roc.png)` verbatim from the manuscript it was cut out of,
+    and that path was written relative to the PAPER. With only the part's own directory
+    on the resource path pandoc resolves it to `parts/results/roc.png`, finds nothing,
+    warns on stderr, and writes a .docx with every figure missing and a zero exit
+    status. Nothing downstream can tell that document from one that had no figures.
+
+    So a caller that knows the root those paths were written against passes it, and the
+    part converts the way the whole does."""
+    seen, out = set(), []
+    for root in (source.parent, *extra_roots):
+        text = str(root)
+        if text not in seen:
+            seen.add(text)
+            out.append(text)
+    return os.pathsep.join(out)
+
+
+def convert_one(source, fmt, reference_docx=None, resource_roots=(), log_fn=None):
     """Convert one Markdown document to one format, beside its source.
 
     Returns the path, or None on any failure that is not the document's fault. The
@@ -204,7 +227,7 @@ def convert_one(source, fmt, reference_docx=None, log_fn=None):
 
     command = [config.PANDOC_BIN, str(source), "-o", str(out_path),
                "--from", "markdown", "--standalone",
-               "--resource-path", str(source.parent)]
+               "--resource-path", _resource_path(source, resource_roots)]
     reference = reference_docx or config.REFERENCE_DOCX
     if fmt == "docx" and reference:
         command += ["--reference-doc", str(reference)]
@@ -236,12 +259,15 @@ def convert_all(project_rec, paper_num, reference_docx=None, log_fn=None):
     report and anything else the pipeline wrote arrived as Markdown beside a .docx and
     read as an afterthought — which it was."""
     pid = project_rec["project_id"]
+    # The paper root goes on every document's resource path, because the parts carry
+    # the whole document's figure paths and those were written relative to the paper.
+    root = paths.paper_root(pid, paper_num)
     built = []
     for source in (list(paths.documents(pid, paper_num))
                    + list(paths.part_documents(pid, paper_num))):
         for fmt in config.BUILD_FORMATS:
             path = convert_one(source, fmt, reference_docx=reference_docx,
-                               log_fn=log_fn)
+                               resource_roots=(root,), log_fn=log_fn)
             if path:
                 built.append(path)
             elif config.BUILD_REQUIRED:

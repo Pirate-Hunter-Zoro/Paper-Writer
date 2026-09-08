@@ -789,22 +789,60 @@ first and unquestioned, then `PATH`, then the usual install locations, then
 machine this was written on it resolves inside the Anaconda tree, whose `condabin/` is
 on `PATH` and whose `bin/` is not.
 
-**To rebuild the documents of a paper by hand**, use the harness's own converter rather
-than a bare pandoc line, so the invocation matches what the pipeline produced:
+**To rebuild the documents of a paper by hand**, after editing the Markdown:
 
 ```bash
-python3 -c "
-import sys; sys.path.insert(0, '.')
-from pathlib import Path
-from paperwriter.stages import building
-for src in Path('~/Research-Journey/paper1-trd-prediction').expanduser().rglob('*.md'):
-    building.convert_one(src, 'docx', log_fn=print)
-"
+scripts/rebuild-docs.sh ~/Research-Journey            # or a paper, or one file
 ```
 
-`convert_one` sets `--resource-path` to the file's own directory, which is what lets a
-manuscript's `../results/*.png` figures resolve. A bare `pandoc x.md -o x.docx` drops
-every figure without saying so.
+With no path it walks `PAPER_DOCS_DIRS`, colon-separated, so one line in a shell
+profile makes it argument-free. That variable belongs to the script rather than to the
+harness, and is the only one below that `config.py` does not read.
+
+That is the loop the script exists for. Open a `.md`, cut the clause that was bothering
+you, run this, ship the repository. The Markdown is the source and the `.docx` is built
+from it, so editing the `.docx` instead is how the two stop agreeing.
+
+It walks the tree, builds every `.docx` that is missing or older than its `.md`, and
+leaves the rest alone — a `.docx` younger than its source is already the document, and
+rebuilding it churns a binary file in git for nothing. `--all` overrides that when a
+styles template changed and no timestamp can see it. `--list` says what it would do and
+does nothing.
+
+**What is not a paper is not built.** A `README.md` describes the folder it sits in and
+nobody submits it, so the script walks past it and its kin — the list is `SKIP_NAMES` at
+the top of the script, and it is meant to be edited. Everything else under the tree is
+paper prose. Every run says how many documents it walked past, because a policy nobody
+can see is a policy nobody can correct.
+
+The template and the figure paths are resolved against the enclosing **repository**,
+not against the path typed on the command line. Both are properties of the paper:
+`../results/roc.png`, in a section under `parts/manuscript/`, was written relative to
+the paper folder. Deriving either from the argument would make rebuilding one file
+produce a different document from rebuilding all of them, which is the one thing a
+rebuild script must not do.
+
+Conversion goes through `building.convert_one` rather than a bare pandoc line, so a
+document rebuilt by hand is the document the pipeline would have produced. That
+includes the resource path — see below, because it is the reason the parts used to
+build clean and arrive empty.
+
+### The figure that resolves in the whole and not in the part
+
+`convert_one` puts the document's own directory on pandoc's `--resource-path`, and for
+a while that was all it put there. It is right for a manuscript, whose
+`![](../results/roc.png)` is written relative to the folder the manuscript sits in. It
+is wrong for every section `stages/splitting` cuts out of that manuscript, because the
+part inherits the path verbatim and now sits one directory deeper. Pandoc resolved it
+to `parts/results/roc.png`, found nothing, **warned on stderr and exited 0**, and wrote
+a `.docx` with twenty figures missing.
+
+Nothing downstream could tell that document from a section that never had a figure. So
+a caller that knows the root those paths were written against now names it —
+`convert_all` passes the paper root, and `rebuild-docs.sh` passes the repository — and
+the part converts the way the whole does.
+
+A bare `pandoc x.md -o x.docx` has the same failure and no caller to fix it.
 
 **Prerequisites**
 
@@ -1175,6 +1213,7 @@ paperwriter/
   daemons/   the two entry points. Thin: a lock, a loop, a call into engine/.
 prompts/     the committed base prompts. Load-bearing non-code artifacts.
 service/     systemd units, the launcher, and the deployed configuration.
+scripts/     what a person runs by hand: rebuild the .docx of a tree, commit and push.
 tests/       200+ tests, standard library only, no network.
 ```
 

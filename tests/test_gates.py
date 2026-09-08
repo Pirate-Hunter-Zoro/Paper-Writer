@@ -11,7 +11,9 @@ import support                                                      # noqa: F401
 from unittest import mock                                           # noqa: E402
 import unittest                                                     # noqa: E402
 
-from paperwriter import config                                      # noqa: E402
+from pathlib import Path                                          # noqa: E402
+from paperwriter import config                                    # noqa: E402
+from paperwriter.stages import building                           # noqa: E402
 from paperwriter.gates import (citations, crossrefs, claims, coverage, ladder, venue,
                                procedures,
                                repetition,  # noqa: E402
@@ -2359,6 +2361,39 @@ class PandocResolutionTests(unittest.TestCase):
              mock.patch("shutil.which", return_value=None), \
              mock.patch.object(config, "_PANDOC_CANDIDATES", ()):
             self.assertEqual(config._find_pandoc(), "pandoc")
+
+
+class ResourcePathTests(unittest.TestCase):
+    """Where pandoc looks for a figure, and why the document's own directory is not
+    enough.
+
+    A split part inherits the whole document's figure paths verbatim, and those were
+    written relative to the paper. Get this wrong and pandoc warns on stderr, exits 0,
+    and writes a .docx with every figure missing — indistinguishable downstream from a
+    section that never had one."""
+
+    def test_the_documents_own_directory_comes_first(self):
+        path = building._resource_path(Path("/paper/parts/manuscript/05-results.md"),
+                                       (Path("/paper"),))
+        self.assertEqual(path.split(os.pathsep)[0], "/paper/parts/manuscript")
+
+    def test_the_roots_the_caller_named_follow_it(self):
+        path = building._resource_path(Path("/paper/parts/manuscript/05-results.md"),
+                                       (Path("/paper"), Path("/repo")))
+        self.assertEqual(path.split(os.pathsep), ["/paper/parts/manuscript",
+                                                  "/paper", "/repo"])
+
+    def test_a_root_that_is_already_the_documents_own_directory_is_not_repeated(self):
+        """The manuscript sits AT the paper root, so the caller's root and the
+        document's directory are the same path. Twice on the resource path is not
+        wrong, only noise, and noise in a command line is how a real difference
+        stops being visible."""
+        path = building._resource_path(Path("/paper/manuscript.md"), (Path("/paper"),))
+        self.assertEqual(path, "/paper")
+
+    def test_naming_no_roots_is_the_old_behaviour(self):
+        self.assertEqual(building._resource_path(Path("/paper/manuscript.md"), ()),
+                         "/paper")
 
 
 class ConfigBandTests(unittest.TestCase):
